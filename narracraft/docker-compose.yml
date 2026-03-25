@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ./data:/app/data
+      - narracraft-data:/app/backend/data
+    environment:
+      - DATABASE_URL=sqlite:///app/backend/data/shorts.db
+      - CONFIG_PATH=/app/data/config-schema.yaml
+      - FRANCHISE_REGISTRY_PATH=/app/data/franchise-registry.yaml
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  vectcut-api:
+    image: node:20-slim
+    ports:
+      - "9001:9001"
+    volumes:
+      - narracraft-data:/data
+    command: >
+      sh -c "echo 'VectCutAPI placeholder — replace with actual image when ready' &&
+             npx -y http-server /data -p 9001 --cors"
+    restart: unless-stopped
+
+volumes:
+  narracraft-data:

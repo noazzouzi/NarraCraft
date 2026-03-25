@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/*
+ * NarraCraft Theme System
+ * CSS custom properties are set dynamically by ThemeProvider.
+ * Default values below match the "Gothic Cathedral" theme.
+ */
+
+@theme {
+  --color-bg: var(--nc-bg);
+  --color-surface: var(--nc-surface);
+  --color-border: var(--nc-border);
+  --color-text: var(--nc-text);
+  --color-dim: var(--nc-dim);
+  --color-muted: var(--nc-muted);
+  --color-accent: var(--nc-accent);
+  --color-success: var(--nc-success);
+  --color-danger: var(--nc-danger);
+}
+
+:root {
+  /* Gothic Cathedral defaults */
+  --nc-bg: #0C0A08;
+  --nc-surface: #141210;
+  --nc-border: #2A2420;
+  --nc-text: #D4C8B8;
+  --nc-dim: #6B5F50;
+  --nc-muted: #3D352C;
+  --nc-accent: #C9A84C;
+  --nc-success: #7B9E4A;
+  --nc-danger: #8B3A3A;
+
+  --nc-font-display: "Cinzel", serif;
+  --nc-font-body: "Crimson Text", serif;
+  --nc-font-mono: "IBM Plex Mono", monospace;
+
+  --nc-card-radius: 2px;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: var(--nc-bg);
+  color: var(--nc-text);
+  font-family: var(--nc-font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+}
+
+/* Scrollbar theming */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--nc-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--nc-muted);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--nc-dim);
+}

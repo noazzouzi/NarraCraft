@@ -1,0 +1,865 @@
+# ============================================================================
+# YouTube Shorts Automation System — Configuration Schema
+# ============================================================================
+# This file defines the FULL configuration structure for the system.
+# To create a new channel/niche, copy and modify the `channel` section.
+# Pipeline and quality sections are shared defaults but can be overridden per channel.
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# CHANNEL CONFIG — One per channel/niche. This is what makes the system niche-agnostic.
+# ----------------------------------------------------------------------------
+channel:
+  # --- Identity ---
+  name: "my-channel-slug"                  # Internal identifier, used in file paths and logs
+  youtube_channel_id: ""                    # YouTube channel ID (for upload API)
+  language: "en"                            # Content language (ISO 639-1)
+
+  # --- Niche Definition ---
+  niche:
+    category: "facts"                       # High-level category (facts, motivation, horror, history, science, etc.)
+    description: >
+      Short, punchy videos revealing surprising facts about science, history, and the world.
+      Tone is curious, conversational, slightly mind-blown.
+    target_audience: "18-35, curious, casual learners, scroll-stoppers"
+    
+    # Topic configuration
+    topics:
+      sources:                              # Where to find topics for this niche
+        - type: "web_search"                # Options: web_search, rss, subreddit, manual_list, trending_api
+          query_templates:                  # Search query templates ({date}, {random_subtopic} are variables)
+            - "surprising facts 2026"
+            - "things most people don't know about {random_subtopic}"
+            - "mind-blowing {random_subtopic} facts"
+          
+        - type: "subreddit"
+          subreddits: ["todayilearned", "Damnthatsinteresting", "explainlikeimfive"]
+          sort: "top"
+          timeframe: "week"
+          
+        - type: "manual_list"
+          file: "topics/facts_backlog.txt"  # One topic per line
+      
+      subtopics:                            # Used in query templates and to ensure variety
+        - "space"
+        - "human body"
+        - "ancient history"
+        - "ocean"
+        - "psychology"
+        - "animals"
+        - "food"
+        - "geography"
+      
+      blacklist:                            # Topics to NEVER cover (advertiser-unfriendly, oversaturated, etc.)
+        - "conspiracy theories"
+        - "graphic medical conditions"
+        - "political controversy"
+        - "child-related sensitive topics"
+
+  # --- Script Style ---
+  script:
+    # The script is IN-CHARACTER dialogue, not neutral narration.
+    # The narrator speaks as themselves, about characters they know.
+    # Example (Jill narrating): "Did you know? Chris Redfield was not supposed to be this buffed."
+    tone: "in-character, conversational, reacting to lore from their own world"
+    perspective: "first person (narrator speaks as the character)"
+    hook_style: "question_or_shock"          # Options: question_or_shock, story_opening, bold_claim, contrast
+    
+    # Narrator personality affects script tone:
+    # - Jill: casual, amused, slightly sarcastic
+    # - Wesker: condescending, cold, superior
+    # - Each narrator archetype has personality notes in the franchise registry
+    
+    structure:
+      - section: "hook"
+        duration_seconds: 3-5
+        description: "Narrator faces camera. 'Did you know?' + surprising claim."
+        default_shot_type: "narrator_with_characters"  # Narrator + at least 1 other character
+      - section: "body"
+        duration_seconds: 35-45
+        description: "Mix of narrator explaining and cutaway scenes showing the action."
+        shot_types: "mixed"                   # Alternates between all three shot types
+      - section: "closer"
+        duration_seconds: 5-8
+        description: "Narrator reacts, delivers punchline or mind-blow moment + CTA"
+        default_shot_type: "narrator_alone"   # Or narrator_with_characters
+    
+    # Scene breakdown — the script must output this alongside the dialogue
+    scene_breakdown:
+      required_fields_per_scene:
+        - "scene_number"
+        - "dialogue"                          # What the narrator says in this segment
+        - "shot_type"                         # narrator_with_characters | narrator_alone | characters_only
+        - "narrator_expression"               # How the narrator looks (amused, shocked, gesturing)
+        - "action_characters"                 # Which other characters appear and what they do
+        - "environment"                       # Which approved environment to use
+        - "duration_seconds"                  # Estimated duration of this segment
+      
+      # Shot type rules:
+      # narrator_with_characters — narrator in foreground + others behind/beside
+      # narrator_alone — narrator close-up, speaking to camera
+      # characters_only — narrator NOT visible, voice-over action scene
+      #
+      # Rule: First scene MUST be narrator_with_characters (hook with full cast)
+      # Rule: Vary shot types throughout — never 3+ of the same type in a row
+    
+    target_duration_seconds: 45-55
+    words_per_second: 2.8
+    max_words: 155
+    min_words: 100
+    
+    # LLM configuration for script generation
+    llm:
+      provider: "gemini"
+      integration: "browser_automation"
+      url: "https://gemini.google.com"
+      system_prompt_file: "prompts/script_system.txt"
+      # The system prompt instructs the LLM to:
+      # 1. Write dialogue in-character as the narrator
+      # 2. Output structured JSON with scene breakdown and shot types
+      # 3. Specify narrator expressions and character actions per scene
+      # 4. USE character names freely in dialogue (fair use commentary)
+      # 5. USE franchise names in title/description (essential for SEO)
+      # NOTE: Name restrictions ONLY apply to AI image generation prompts,
+      #       NOT to scripts, titles, descriptions, or spoken dialogue.
+
+  # --- Voice ---
+  voice:
+    # User selects their preferred provider in the dashboard Settings page
+    active_provider: "elevenlabs"            # Options: chatterbox, elevenlabs
+    
+    # === OPTION A: Chatterbox (Local, Free, Needs GPU) ===
+    chatterbox:
+      integration: "local_python"            # Runs locally as Docker service
+      model: "chatterbox-turbo"              # Options: chatterbox, chatterbox-turbo, chatterbox-multilingual
+      paralinguistic_tags: true              # Enable [laugh], [cough], [chuckle] in scripts
+      gpu_required: true
+      # Emotion exaggeration and other settings are per-narrator (see franchise registry)
+      # Docker service exposes FastAPI REST API
+      # Endpoint: POST /tts with reference audio + text → streamed WAV output
+      #
+      # Voice cloning: from 5-10 seconds of reference audio
+      # Quality: very good (~94% of ElevenLabs in blind tests)
+      # Cost: FREE, unlimited generations
+      # Limitation: requires NVIDIA GPU with CUDA support
+      
+    # === OPTION B: ElevenLabs (Browser Automation or API, Best Quality) ===
+    elevenlabs:
+      integration: "browser_automation"      # Playwright → ElevenLabs web UI
+      url: "https://elevenlabs.io"
+      # Can also use API if user has a paid plan with API access:
+      # integration: "api"
+      # api_key: "${ELEVENLABS_API_KEY}"
+      #
+      # Free tier: 10,000 chars/month (~10 min audio, ~10 Shorts)
+      #   - No voice cloning, no commercial rights
+      #   - Uses pre-made library voices only
+      #   - Browser automation to generate via web UI
+      #
+      # Starter ($5/mo): 30,000 chars (~30 min, ~30 Shorts)
+      #   - Instant Voice Cloning (from 60s sample)
+      #   - Commercial rights included
+      #   - Enough for daily production
+      #
+      # Creator ($11/mo): 100,000 chars (~100 min)
+      #   - Professional Voice Cloning (from 10+ min sample)
+      #   - Best clone quality available
+      #
+      # Quality: best-in-class, unmatched naturalness
+      # Cost: free tier limited, $5-11/mo for production use
+      
+      # ElevenLabs-specific voice settings (per narrator, in franchise registry):
+      # stability: 0.0-1.0 (lower = more expressive, higher = more consistent)
+      # similarity_boost: 0.0-1.0 (how closely to match the cloned voice)
+      # style: 0.0-1.0 (style exaggeration)
+    
+    # Voice reference requirements (applies to BOTH providers):
+    # - Chatterbox: 5-15 seconds of clean solo speech
+    # - ElevenLabs (Instant Clone): 60+ seconds of clean solo speech
+    # - ElevenLabs (Pro Clone): 10+ minutes of clean speech
+    # - WAV format, 24kHz+ sample rate, mono channel
+    # - Extracted from game cutscenes or anime episodes
+    # - Cleaned with noise reduction (Audacity / UVR vocal isolation)
+    # - Stored permanently: assets/library/{franchise}/{archetype}/voice/reference.wav
+    #
+    # Voice references are PER NARRATOR CHARACTER.
+    # Each narrator has their own voice based on the game's voice actor.
+    # Jill sounds like Jill, Wesker sounds like Wesker, across every video.
+    
+    # Audio output settings (shared across providers)
+    output:
+      format: "wav"
+      sample_rate: 24000
+    
+    # Post-processing (shared across providers)
+    post_processing:
+      normalize_volume: true
+      trim_silence: true
+      add_trailing_silence_ms: 200
+
+  # --- Visuals ---
+  visuals:
+    style: "ai_character_driven"              # Primary: AI characters from franchise registry
+    aspect_ratio: "9:16"                      # Shorts = vertical
+    resolution: "1080x1920"                   # 1080p vertical
+    fps: 30
+    
+    # =================================================================
+    # VISUAL ASSET LIBRARY — Persistent, Reusable, Generate Once
+    # =================================================================
+    # ALL visual assets are permanent — generated once, approved once,
+    # reused forever. This applies to characters, environments, props,
+    # and franchise-specific UI elements.
+    #
+    # Before generating ANY visual for a scene, the system checks if
+    # an approved asset already exists. If yes → reuse. If no → generate.
+    # Assets are NEVER regenerated unless manually flagged for redesign.
+    # =================================================================
+    
+    asset_library:
+      base_path: "assets/library/"
+      source_refs_path: "assets/source_refs/"  # Official art (private, never published)
+      
+      # Storage structure:
+      # assets/library/{franchise_id}/
+      #   ├── characters/
+      #   │   ├── {archetype_id}/
+      #   │   │   ├── portrait.png          ← Face lock (primary reference)
+      #   │   │   ├── full_body.png         ← Outfit + proportions lock
+      #   │   │   ├── expressions/          ← How this face looks in different emotions
+      #   │   │   │   ├── neutral.png
+      #   │   │   │   ├── angry.png
+      #   │   │   │   ├── smiling.png
+      #   │   │   │   └── surprised.png
+      #   │   │   └── metadata.json         ← Status, creation date, prompt, approval
+      #   │   └── ...
+      #   ├── environments/
+      #   │   ├── mansion_foyer/
+      #   │   │   ├── wide_shot.png         ← Establishing shot
+      #   │   │   ├── close_up.png          ← Detail shot
+      #   │   │   ├── variations/           ← Different angles, lighting, times of day
+      #   │   │   └── metadata.json
+      #   │   ├── underground_lab/
+      #   │   ├── police_station/
+      #   │   └── ...
+      #   ├── props/
+      #   │   ├── green_herb/
+      #   │   │   ├── image.png
+      #   │   │   └── metadata.json
+      #   │   ├── typewriter/
+      #   │   └── ...
+      #   └── ui_elements/
+      #       ├── title_card.png            ← Franchise-specific "Did You Know?" card
+      #       ├── lower_third.png           ← Name/fact overlay style
+      #       └── metadata.json
+      
+      # Asset types and their generation rules
+      asset_types:
+        characters:
+          generation_phase: "pre_production"  # Phase 1 — before any videos
+          requires_approval: true             # Must be manually approved
+          reusable: true                      # Same asset used across all videos
+          lookup_key: "franchise_id + archetype_id"
+          
+        environments:
+          generation_phase: "pre_production"  # Phase 1 — generate key locations upfront
+          requires_approval: true
+          reusable: true                      # Same mansion foyer used in every RE mansion scene
+          lookup_key: "franchise_id + environment_id"
+          allow_variations: true              # Can have multiple angles/lighting of same location
+          
+        props:
+          generation_phase: "pre_production"  # Generate iconic items upfront
+          requires_approval: true
+          reusable: true
+          lookup_key: "franchise_id + prop_id"
+          
+        ui_elements:
+          generation_phase: "pre_production"  # Franchise-specific branding
+          requires_approval: true
+          reusable: true
+          lookup_key: "franchise_id + element_id"
+      
+      # Lookup logic (runs before every scene generation):
+      # 1. Parse scene breakdown → identify needed characters + environment + props
+      # 2. For each asset, check: does it exist in the library? Is status "approved"?
+      # 3. If ALL assets exist → compose scene using approved assets as anchors
+      # 4. If ANY asset missing → halt, prompt user to run Phase 1 for missing assets
+      # 5. Scene generation COMBINES approved character + approved environment + prompt
+      
+      # Generation tool (same for all asset types)
+      generation:
+        provider: "google_flow"
+        integration: "browser_automation"
+        url: "https://labs.google/flow"
+        model: "nano_banana_2"
+      
+      # Step 4: Scene generation (per video — Phase 2)
+      scene_generation:
+        provider: "google_flow"
+        integration: "browser_automation"
+        method: "reference_anchored"
+        # The system loads the APPROVED portrait.png and/or full_body.png
+        # as the visual anchor for every scene this character appears in.
+        # This is what guarantees Wesker looks the same in video #1 and video #50.
+        prompt_template: >
+          {character_bible}, {scene_action}, {franchise_visual_style},
+          {franchise_style_prompt_suffix}
+        # Image inputs uploaded to Flow per generation:
+        #   1. Character's approved portrait.png (ALWAYS — this is the face lock)
+        #   2. Character's approved full_body.png (when full body is in scene)
+        #   3. Environment/scene reference (optional)
+      
+      # Step 3: Image to video (animate the scene)
+      image_to_video:
+        provider: "kling"
+        integration: "browser_automation"    # Playwright → Kling web UI
+        url: "https://klingai.com"
+        model: "kling_3"                     # Latest model
+        mode: "standard"                     # standard = 10 credits, professional = 35 credits
+        clip_duration_seconds: 5             # 5s standard clips
+        daily_credit_budget: 60              # Keep within 66 daily free credits
+        max_clips_per_video: 6              # 6 clips × 10 credits = 60 credits
+        use_elements: true                   # Kling Elements: upload up to 4 ref images for consistency
+        preferred_motions:
+          - "slow_zoom_in"
+          - "subtle_head_turn"
+          - "expression_shift"
+          - "camera_pan"
+          - "hair_wind_movement"
+    
+    # Supplementary visual sources (for B-roll, environments, transitions)
+    supplementary_sources:
+      - type: "ai_environment"
+        provider: "google_flow"              # Environment shots without characters
+        integration: "browser_automation"
+        use_for: "establishing_shots, transitions, background_scenes"
+        
+      - type: "stock_video"
+        provider: "pexels"                   # Real footage for variety (free API)
+        integration: "api"                   # Pexels has a free API
+        search_strategy: "keyword_from_script"
+        use_for: "b_roll, atmosphere"
+    
+    # Visual composition rules
+    composition:
+      max_same_source_consecutive: 2        # Don't show 3+ AI images in a row — mix it up
+      transition_styles:                    # Pool of transitions to randomize
+        - "crossfade"
+        - "cut"
+        - "zoom_transition"
+        - "slide_left"
+        - "wipe"
+      caption_style:
+        enabled: true
+        position: "center"                  # Center of screen — highest retention for Shorts
+        animation: "word_highlight"         # Word-by-word highlight synced to voiceover timestamps
+        max_words_per_line: 4               # For readability on mobile (short lines, big text)
+        max_lines: 2                        # Maximum 2 lines visible at once
+        
+        # How word-by-word highlight works:
+        # 1. Voice module outputs word-level timestamps (word + start_time + end_time)
+        # 2. Assembly module creates timed text where each word highlights on its timestamp
+        # 3. Current word: bright accent color + slightly scaled up (105%)
+        # 4. Already spoken words: base color (white)
+        # 5. Words group into 3-5 word chunks that appear together, highlight individually
+        
+        # Default style (overridden by franchise-specific presets below)
+        default:
+          font: "Montserrat-ExtraBold"
+          font_size: 52                     # Large enough to read on phone
+          base_color: "#FFFFFF"             # White for already-spoken words
+          highlight_color: "#FFEB3B"        # Bright yellow for current word
+          stroke_color: "#000000"
+          stroke_width: 3
+          highlight_scale: 1.05             # Current word scales up 5%
+          background: "none"                # No background box
+        
+        # Franchise-specific caption presets (matched via audio_profile.music_mood)
+        presets:
+          dark_cinematic:                   # RE, Dark Souls, Silent Hill
+            font: "Montserrat-ExtraBold"
+            font_size: 50
+            base_color: "#FFFFFF"
+            highlight_color: "#E53935"      # Blood red
+            stroke_color: "#000000"
+            stroke_width: 3
+            highlight_scale: 1.05
+            # Alternate: "#42A5F5" (cold blue) — can randomize between red and blue
+            
+          epic_adventure:                   # Zelda, One Piece
+            font: "Nunito-ExtraBold"
+            font_size: 52
+            base_color: "#FFFFFF"
+            highlight_color: "#FFD700"      # Golden yellow
+            stroke_color: "#1A1A1A"
+            stroke_width: 3
+            highlight_scale: 1.08           # Slightly more bounce
+            
+          energetic_anime:                  # JJK, Naruto, AoT
+            font: "Montserrat-Black"
+            font_size: 54
+            base_color: "#FFFFFF"
+            highlight_color: "#FF6D00"      # Hot orange
+            stroke_color: "#000000"
+            stroke_width: 4                 # Thicker stroke for impact
+            highlight_scale: 1.10           # Punchier scale-up
+            # Alternate: "#AA00FF" (electric purple)
+
+  # --- Audio / Music / Sound Design ---
+  audio:
+    # Pre-built local library — downloaded and organized during initial setup.
+    # Pipeline selects tracks automatically based on franchise mood profile.
+    # Sources: YouTube Audio Library, Pixabay, Uppbeat, Mixkit, NCS, Bensound
+    # All tracks must be: royalty-free, no Content ID claims, commercial use OK.
+    
+    background_music:
+      enabled: true
+      library_path: "assets/audio/music/"
+      volume: 0.08                            # 8% of voiceover level — subtle, not distracting
+      fade_in_seconds: 1.0
+      fade_out_seconds: 2.0
+      
+      # Music is organized by mood category:
+      # assets/audio/music/dark_cinematic/     ← RE, Dark Souls, Silent Hill
+      # assets/audio/music/epic_adventure/     ← Zelda, One Piece
+      # assets/audio/music/mysterious_ambient/ ← Lore reveals, easter eggs
+      # assets/audio/music/energetic_anime/    ← JJK, Naruto, AoT
+      # assets/audio/music/neutral_curious/    ← Generic "Did You Know" mood
+      
+      # Selection logic:
+      # 1. Read franchise audio_profile.music_mood from registry
+      # 2. Pick a track from matching mood folder
+      # 3. Skip tracks used in last 10 videos (tracked in assets.db)
+      # 4. Randomize selection within the eligible pool
+      dedup_lookback: 10                      # Don't repeat same track within 10 videos
+    
+    sound_effects:
+      enabled: true
+      library_path: "assets/audio/sfx/"
+      
+      # SFX organized by function:
+      # assets/audio/sfx/transitions/   ← whoosh, swoosh, slide (between scenes)
+      # assets/audio/sfx/impacts/       ← hit, boom, bass_drop (hook moment)
+      # assets/audio/sfx/reveals/       ← ding, shimmer, dramatic_reveal (fact reveal)
+      # assets/audio/sfx/reactions/     ← gasp, record_scratch, comedy_boing (punchlines)
+      # assets/audio/sfx/ambient/       ← rain_loop, wind_loop, fire_crackle (atmosphere)
+      
+      # SFX placement is AUTOMATIC based on scene breakdown from script:
+      triggers:
+        - on: "hook"                          # First scene — scroll-stopping moment
+          sfx_category: "impacts"
+          timing: "on_first_word"             # Plays exactly when narrator starts speaking
+          
+        - on: "scene_transition"              # Between every scene change
+          sfx_category: "transitions"
+          timing: "on_cut"
+          randomize: true                     # Pick different transition SFX each time
+          
+        - on: "reveal"                        # Key fact reveal (tagged in scene breakdown)
+          sfx_category: "reveals"
+          timing: "on_keyword"                # Syncs with the reveal word/phrase
+          
+        - on: "closer"                        # Last scene — style-dependent
+          sfx_mapping:
+            style_punchline: "reactions"       # Comedy boing, record scratch
+            style_reveal: "reveals"            # Dramatic reveal
+            style_teaser: "transitions"        # Suspense riser
+            style_question: null               # No SFX — clean ending
+            style_cta: null                    # No SFX — clean ending
+    
+    # Ambient audio (optional, per-franchise)
+    ambient:
+      enabled: false                          # Can be enabled per franchise
+      library_path: "assets/audio/sfx/ambient/"
+      volume: 0.03                            # Very subtle — barely perceptible
+      # Franchise registry specifies which ambient loop to use (e.g., rain for RE, wind for Dark Souls)
+
+  # --- Assembly & Rendering ---
+  assembly:
+    # Primary renderer
+    renderer: "vectcutapi"                    # VectCutAPI → CapCut (only supported renderer)
+    
+    # VectCutAPI configuration (primary)
+    vectcutapi:
+      server_url: "http://localhost:9001"    # VectCutAPI HTTP server
+      capcut_drafts_path: ""                 # Path to CapCut/Jianying drafts directory
+                                             # macOS: ~/Movies/CapCut/User Data/Projects/com.lveditor.draft/
+                                             # Windows: C:\Users\<user>\AppData\Local\CapCut\User Data\Projects\com.lveditor.draft\
+      render_mode: "cloud"                   # Options: cloud (VectCut cloud render), local_draft (export to CapCut app)
+      project_settings:
+        width: 1080
+        height: 1920
+        fps: 30
+      
+      # Effect presets — pool of effects to randomize across videos
+      effects:
+        text_presets:                         # Rotating text styles for captions/titles
+          - name: "bold_center"
+            font_size: 48
+            font_color: "#FFFFFF"
+            shadow_enabled: true
+            shadow_color: "#000000"
+            background_alpha: 0.0
+          - name: "boxed_subtitle"
+            font_size: 36
+            font_color: "#FFFFFF"
+            background_color: "#000000"
+            background_alpha: 0.7
+            background_round_radius: 12
+          - name: "accent_highlight"
+            font_size: 42
+            font_color: "#FFD700"
+            shadow_enabled: true
+            shadow_color: "#1E1E1E"
+        
+        transition_presets:                  # CapCut transition effects to cycle through
+          - "fade_in"
+          - "slide_left"
+          - "zoom_in"
+          - "blur_transition"
+          - "flash"
+        
+        keyframe_presets:                    # Reusable animation patterns
+          - name: "slow_zoom"
+            property_types: ["scale_x", "scale_y"]
+            values_pattern: ["1.0", "1.15"]  # Subtle zoom over clip duration
+          - name: "fade_reveal"
+            property_types: ["alpha"]
+            values_pattern: ["0.0", "1.0"]
+          - name: "pan_right"
+            property_types: ["position_x"]
+            values_pattern: ["-0.05", "0.05"]
+
+  # --- Metadata ---
+  metadata:
+    title_template: "{hook_phrase}"          # Generated by script module, includes franchise + character names
+    description_template: |
+      {summary}
+      
+      {long_form_cta}
+      
+      #shorts #{franchise_hashtag} #{character_hashtag} #{topic_hashtag}
+    tags:                                   # Default tags for this channel
+      - "shorts"
+      - "didyouknow"
+      - "gaming"
+      - "anime"
+      - "lore"
+    hashtags_per_video: 3-5
+
+  # --- Multi-Platform Publishing ---
+  # The same video file is published to multiple platforms to maximize reach.
+  # Each platform has its own metadata format and upload method.
+  publishing:
+    platforms:
+      youtube:
+        enabled: true
+        integration: "api"                  # YouTube Data API v3 (Python SDK)
+        visibility: "public"
+        notify_subscribers: true
+        category: "20"                      # 20 = Gaming, 24 = Entertainment, 27 = Education
+        default_language: "en"
+        made_for_kids: false
+        # YouTube-specific: add pinned comment with long-form CTA
+        pinned_comment_template: "Want the FULL story? Deep dive on my channel → {long_form_url}"
+        
+      tiktok:
+        enabled: true
+        integration: "browser_automation"   # Playwright → TikTok web upload
+        url: "https://www.tiktok.com/upload"
+        # TikTok metadata is simpler: caption + hashtags + sound
+        caption_template: "{hook_phrase} #{franchise_hashtag} #didyouknow #gaming #lore #fyp"
+        
+      instagram_reels:
+        enabled: false                      # Enable when ready — requires Meta Business account
+        integration: "browser_automation"   # Playwright → Instagram web upload
+        caption_template: "{hook_phrase}\n\n{summary}\n\n#{franchise_hashtag} #didyouknow #reels"
+        
+      facebook_reels:
+        enabled: false                      # Enable when ready
+        integration: "browser_automation"
+        caption_template: "{hook_phrase} #{franchise_hashtag} #didyouknow"
+
+  # --- Monetization Strategy ---
+  # Shorts are the GROWTH ENGINE, not the primary revenue source.
+  # Revenue comes from stacking multiple streams.
+  monetization:
+    # Layer 1: Shorts ad revenue (automatic, low but passive)
+    shorts_ads:
+      enabled: true                         # Enabled once YPP is active
+      # Expected: $0.03-0.10 RPM → $50-300/month
+    
+    # Layer 2: Shorts → Long-Form Funnel (the real money)
+    # Each Short can drive viewers to a longer, higher-RPM video on the same topic.
+    long_form_funnel:
+      enabled: true
+      # When the script module generates a Short, it ALSO outputs:
+      # - A long-form video outline (10-15 min deep dive on the same topic)
+      # - A CTA line for the Short's closer or pinned comment
+      # - Suggested title and thumbnail concept for the long-form video
+      # The user produces long-form videos separately (manual or semi-automated).
+      # Long-form RPM: $2-12 → $500-2000/month with 2 long-form/week
+      outline_output_path: "data/long_form_outlines/"
+      cta_styles:
+        - "Full deep dive linked in my bio"
+        - "The complete story is on my channel"
+        - "Part 2 drops tomorrow — subscribe so you don't miss it"
+    
+    # Layer 3: Brand deals & sponsorships
+    brand_deals:
+      # Not automated — but the system tracks metrics that help pitch to brands:
+      # - Total views per franchise (proves audience interest)
+      # - Audience demographics from YouTube Analytics
+      # - Best-performing topics and formats
+      # The dashboard shows a "Brand Deal Kit" with these stats exportable as a PDF
+      tracking_enabled: true
+    
+    # Layer 4: Fan funding (Super Thanks, Memberships)
+    fan_funding:
+      # Available at 500 subs (lower YPP tier)
+      # Channel memberships with exclusive lore content, early access
+      enabled_after_subs: 500
+    
+    # Layer 5: Cross-platform revenue
+    cross_platform:
+      # TikTok Creator Fund, Instagram Bonuses, Facebook Reels Play
+      # Same content, additional revenue streams
+      # Expected: $50-150/month additional across platforms
+
+
+# ----------------------------------------------------------------------------
+# ANALYTICS & FEEDBACK LOOP — Learn from performance, improve over time.
+# ----------------------------------------------------------------------------
+analytics:
+  enabled: true
+  
+  # Data collection — pulls metrics from YouTube API periodically
+  collection:
+    youtube_api: true                         # Requires YouTube Data API access (same OAuth as upload)
+    pull_interval_hours: 12                   # How often to refresh metrics
+    metrics_snapshots:                        # Take performance snapshots at these intervals
+      - after_24h                             # First 24 hours (early signal)
+      - after_7d                              # 7-day performance (medium-term)
+      - after_30d                             # 30-day performance (final score)
+    
+    # Per-video metrics tracked:
+    # views, likes, comments, shares
+    # avg_view_duration_pct (retention — most important metric)
+    # click_through_rate (CTR)
+    # subscribers_gained
+    # traffic_sources (shorts_feed, search, suggested, external)
+  
+  # Derived scores — calculated from raw metrics
+  scoring:
+    virality_score:                           # How much the video spread
+      formula: "views_7d * share_ratio * velocity"
+    retention_score:                          # How well it held attention
+      formula: "avg_view_duration_pct / 100"
+    engagement_score:                         # How much people interacted
+      formula: "(likes + comments * 3) / views"
+    growth_score:                             # How well it converted to subscribers
+      formula: "subs_gained / views * 1000"
+  
+  # Feedback into the system — automatic adjustments based on data
+  feedback_loop:
+    
+    # Topic scoring boost — high-performing categories get higher scores
+    topic_scoring_adjustment:
+      enabled: true
+      # If "character facts" videos average 2x more views than "cut content",
+      # the topic scorer adds a bonus to "character facts" topics in future discovery.
+      # Recalculated weekly based on trailing 30-day performance data.
+      recalculate_interval: "weekly"
+    
+    # Franchise weighting — prioritize high-performing franchises
+    franchise_weighting:
+      enabled: true
+      # Instead of equal rotation, weight franchise selection by performance.
+      # A franchise averaging 100K views gets 2x the selection probability
+      # of one averaging 50K views. Still maintains minimum diversity rules.
+      min_franchise_frequency: 1              # Every franchise appears at least 1x per 2 weeks
+    
+    # Hook pattern learning — track which hook styles perform best
+    hook_analysis:
+      enabled: true
+      # Track retention rate in first 3 seconds by hook type
+      # (question, bold_claim, shock, story_opening)
+      # Surface recommendations: "Question hooks retain 12% better"
+    
+    # Posting time optimization — find the best upload windows
+    schedule_optimization:
+      enabled: true
+      # Analyze first-24h views by posting time
+      # Shift preferred upload times toward high-performing windows
+    
+    # Narrator performance — which narrators engage best
+    narrator_analysis:
+      enabled: true
+      # Compare retention and engagement across narrators within same franchise
+      # Surface: "Jill-narrated RE videos outperform Wesker-narrated by 18%"
+  
+  # Dashboard insights — auto-generated recommendations shown in the web UI
+  insights:
+    enabled: true
+    # The system generates actionable suggestions like:
+    # "Increase RE content from 2/week to 3/week (23% above avg views)"
+    # "Use question hooks more — 12% better retention than bold claims"
+    # "Shift upload time to 18:00 UTC — 23% better first-24h performance"
+    # "Wesker in thumbnails increases CTR by 18% — test as narrator"
+    refresh_interval: "weekly"
+
+
+# ----------------------------------------------------------------------------
+# PIPELINE CONFIG — How the automation runs. Shared across channels.
+# ----------------------------------------------------------------------------
+pipeline:
+  # --- Scheduling ---
+  schedule:
+    videos_per_day: 1                       # Max videos to publish per day per channel
+    videos_per_week: 5                      # Weekly cap
+    upload_times:                            # Preferred upload times (UTC)
+      - "14:00"
+      - "18:00"
+      - "21:00"
+    randomize_time: true                    # Add ±30min jitter to avoid robotic patterns
+    cooldown_hours: 6                       # Minimum hours between uploads on same channel
+    
+  # --- Batch Processing ---
+  batch:
+    generate_ahead: 7                       # Number of videos to pre-generate
+    storage_path: "output/{channel_name}/"  # Where generated videos are stored before publishing
+    
+  # --- Retry & Error Handling ---
+  retry:
+    max_retries_per_module: 3
+    retry_delay_seconds: 30
+    on_failure: "skip_and_log"              # Options: skip_and_log, halt_pipeline, retry_with_fallback
+
+  # --- Logging ---
+  logging:
+    level: "INFO"                           # DEBUG, INFO, WARNING, ERROR
+    log_file: "logs/{channel_name}.log"
+    log_api_calls: true                     # Log all LLM/API calls for debugging and cost tracking
+    cost_tracking: true                     # Track API costs per video
+
+
+# ----------------------------------------------------------------------------
+# QUALITY CONFIG — Compliance and quality gates. The guardrails.
+# ----------------------------------------------------------------------------
+quality:
+  # --- Script Compliance ---
+  script_compliance:
+    similarity_threshold: 0.70              # Block if new script is >70% similar to any previous script
+    similarity_method: "cosine_embedding"   # Options: cosine_embedding, jaccard, levenshtein
+    similarity_lookback: 100                # Compare against last N scripts
+    min_unique_words_ratio: 0.40            # At least 40% of words should be unique vs recent scripts
+    
+    # Advertiser-friendliness check
+    content_filter:
+      enabled: true
+      provider: "gemini"                     # Use same LLM as script generation
+      integration: "browser_automation"      # Same Playwright session, second prompt
+      block_on:                             # Topics that trigger automatic block
+        - "graphic_violence"
+        - "hate_speech"
+        - "sexual_content"
+        - "dangerous_acts"
+        - "misinformation"
+        - "child_safety"
+      warn_on:                              # Topics that trigger human review
+        - "mild_controversy"
+        - "health_claims"
+        - "political_reference"
+
+  # --- Visual Compliance ---
+  visual_compliance:
+    max_consecutive_same_template: 3        # Warn if visual structure repeats too much
+    require_visual_variety: true             # Enforce mixing AI images, stock footage, etc.
+    copyright_check:
+      enabled: true
+      reverse_image_search: false           # Optional: check generated images aren't too similar to existing content
+    
+  # --- Upload Pattern Safety ---
+  upload_safety:
+    max_uploads_24h: 3                      # Hard cap per channel per 24 hours
+    max_uploads_similar_structure_24h: 2    # Max videos with similar structure in same day
+    flag_if_bulk_pattern: true              # Alert if upload pattern looks bot-like
+    
+  # --- Pre-Publish Final Check ---
+  pre_publish:
+    enabled: true
+    checklist:                              # Every item must pass before publishing
+      - check: "script_is_original"
+        method: "similarity_check"
+      - check: "voiceover_present"
+        method: "audio_duration > 10s"
+      - check: "visuals_varied"
+        method: "template_variation_check"
+      - check: "no_copyrighted_material"
+        method: "asset_license_check"
+      - check: "advertiser_friendly"
+        method: "content_filter"
+      - check: "duration_valid"
+        method: "video_duration < 60s"
+      - check: "metadata_complete"
+        method: "title + description + tags present"
+    on_fail: "quarantine"                   # Options: quarantine, delete, flag_for_review
+
+
+# ----------------------------------------------------------------------------
+# STORAGE & STATE — Where things live and how history is tracked.
+# ----------------------------------------------------------------------------
+storage:
+  base_path: "./data"
+  structure:
+    scripts: "{base_path}/{channel}/scripts/"        # All generated scripts (for similarity checking)
+    audio: "{base_path}/{channel}/audio/"             # Generated voiceovers
+    visuals: "{base_path}/{channel}/visuals/"         # Visual assets per video
+    videos: "{base_path}/{channel}/videos/"           # Final assembled videos
+    quarantine: "{base_path}/{channel}/quarantine/"   # Videos that failed pre-publish
+    logs: "{base_path}/logs/"
+    
+  # Script history database (for deduplication)
+  script_db:
+    type: "sqlite"                          # Options: sqlite, postgresql
+    path: "{base_path}/scripts.db"
+    store_embeddings: true                  # Store text embeddings for fast similarity search
+
+  # Asset tracking
+  asset_db:
+    type: "sqlite"
+    path: "{base_path}/assets.db"           # Track which stock assets have been used to avoid repetition
+
+
+# ----------------------------------------------------------------------------
+# CREDENTIALS — API keys and browser automation accounts
+# ----------------------------------------------------------------------------
+
+# API keys (only for services with free APIs)
+api_keys:
+  pexels: "${PEXELS_API_KEY}"               # Free API — stock footage/images
+  youtube: "${YOUTUBE_OAUTH_JSON_PATH}"     # OAuth2 credentials for upload
+
+# Browser automation accounts
+# These are used by Playwright to log into free web UIs
+# Store credentials securely — never commit to version control
+browser_accounts:
+  google:                                    # Used for: Gemini (scripts), Google Flow (images)
+    email: "${GOOGLE_EMAIL}"
+    # Auth: use existing Chrome profile with saved session to avoid repeated login
+    chrome_profile_path: "${CHROME_PROFILE_PATH}"
+  
+  kling:                                     # Used for: Kling AI (image to video)
+    email: "${KLING_EMAIL}"
+    chrome_profile_path: "${CHROME_PROFILE_PATH}"  # Can share profile if using same browser
+
+# Browser automation settings
+browser_automation:
+  browser: "chromium"                        # Options: chromium, firefox
+  headless: false                            # false = visible browser (easier to debug)
+  slow_mo: 500                              # Milliseconds delay between actions (human-like)
+  screenshot_on_error: true                  # Capture screenshot if automation fails
+  max_retries: 3                             # Retry failed browser actions
+  timeout_seconds: 120                       # Max wait for generation results
+  user_data_dir: "./browser_data/"           # Persistent browser profile (stays logged in)

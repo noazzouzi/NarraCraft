@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Data (generated at runtime)
+backend/data/library/
+backend/data/source_refs/
+backend/data/audio/
+backend/data/output/
+backend/data/quarantine/
+backend/data/long_form_outlines/
+backend/data/browser_data/
+backend/data/shorts.db
+backend/data/*.db
+
+# Logs
+logs/
+*.log
+
+# Docker
+docker-compose.override.yml
+
+# Browser automation
+browser_data/
+screenshots/
