@@ -7,7 +7,7 @@ import {
   ArrowUpDown,
   Globe,
   MessageSquare,
-  Youtube,
+  Video,
   Sparkles,
   ChevronDown,
   Plus,
@@ -129,7 +129,7 @@ export default function TopicDiscovery() {
     switch (type) {
       case "wiki": return <Globe size={12} />;
       case "reddit": return <MessageSquare size={12} />;
-      case "youtube": return <Youtube size={12} />;
+      case "youtube": return <Video size={12} />;
       case "ai": return <Sparkles size={12} />;
       default: return <Search size={12} />;
     }
