@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies for Playwright and audio processing
+# Install system dependencies for Playwright, audio processing, ffmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
@@ -14,8 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers
+# Install Playwright Chromium (respects PLAYWRIGHT_BROWSERS_PATH env var at runtime)
 RUN playwright install chromium
+
+# Create directories for persistent data
+RUN mkdir -p /app/backend/data /app/browser-data/profiles /app/browser-data/browsers /app/data
 
 COPY backend/ ./backend/
 

@@ -50,10 +50,14 @@ class BrowserManager:
         if self._initialized:
             return
 
+        import os
+
         config = get_config()
         browser_config = config.get("browser_automation", {})
 
-        user_data_dir = Path(browser_config.get("user_data_dir", "./data/browser_data"))
+        # Prefer env var for Docker portability, fall back to config, then default
+        default_dir = browser_config.get("user_data_dir", "./data/browser_data")
+        user_data_dir = Path(os.environ.get("BROWSER_PROFILE_DIR", default_dir))
         user_data_dir.mkdir(parents=True, exist_ok=True)
 
         headless = browser_config.get("headless", False)

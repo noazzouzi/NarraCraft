@@ -1,28 +1,24 @@
-version: "3.8"
-
 services:
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app/backend
       - ./data:/app/data
-      - narracraft-data:/app/backend/data
+      - narracraft-db:/app/backend/data
+      - narracraft-browser:/app/browser-data
     environment:
       - DATABASE_URL=sqlite:///app/backend/data/shorts.db
       - CONFIG_PATH=/app/data/config-schema.yaml
       - FRANCHISE_REGISTRY_PATH=/app/data/franchise-registry.yaml
+      - YOUTUBE_OAUTH_JSON_PATH=${YOUTUBE_OAUTH_JSON_PATH:-/app/data/youtube_oauth.json}
+      - PLAYWRIGHT_BROWSERS_PATH=/app/browser-data/browsers
+      - BROWSER_PROFILE_DIR=/app/browser-data/profiles
       - PYTHONUNBUFFERED=1
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
   frontend:
@@ -30,12 +26,10 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    environment:
-      - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
     restart: unless-stopped
@@ -45,11 +39,12 @@ services:
     ports:
       - "9001:9001"
     volumes:
-      - narracraft-data:/data
+      - narracraft-db:/data
     command: >
       sh -c "echo 'VectCutAPI placeholder — replace with actual image when ready' &&
              npx -y http-server /data -p 9001 --cors"
     restart: unless-stopped
 
 volumes:
-  narracraft-data:
+  narracraft-db:
+  narracraft-browser:

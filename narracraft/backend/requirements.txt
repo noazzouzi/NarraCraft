@@ -7,3 +7,8 @@ aiosqlite==0.20.0
 websockets==14.1
 python-multipart==0.0.19
 httpx==0.28.1
+playwright==1.49.1
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0

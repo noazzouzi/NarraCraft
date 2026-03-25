@@ -198,7 +198,7 @@ franchises:
         source_references:
           - path: "assets/source_refs/resident_evil/chris_ref_01.jpg"
           - path: "assets/source_refs/resident_evil/chris_ref_02.jpg"
-          notes: "Use RE5/RE6 muscular version for the 'steroid meme' accuracy"
+            notes: "Use RE5/RE6 muscular version for the 'steroid meme' accuracy"
         
         # Character Bible — reusable identity block included in every prompt
         character_bible: >

@@ -43,7 +43,7 @@ async def list_assets(
         await db.close()
 
 
-@router.post("/{asset_id}/approve")
+@router.post("/{asset_id:path}/approve")
 async def approve_asset(asset_id: str):
     """Mark an asset as approved."""
     db = await get_db()
@@ -58,7 +58,7 @@ async def approve_asset(asset_id: str):
         await db.close()
 
 
-@router.post("/{asset_id}/reject")
+@router.post("/{asset_id:path}/reject")
 async def reject_asset(asset_id: str):
     """Mark an asset as rejected."""
     db = await get_db()

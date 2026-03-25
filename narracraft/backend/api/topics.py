@@ -213,6 +213,28 @@ async def discover_topics(req: DiscoverRequest):
     db = await get_db()
     saved_count = 0
     try:
+        # Ensure the franchise exists in DB (auto-create from registry if needed)
+        cursor = await db.execute(
+            "SELECT id FROM franchises WHERE id = ?", (req.franchise_id,)
+        )
+        if not await cursor.fetchone():
+            registry = get_franchise_registry()
+            entry = next(
+                (f for f in registry.get("franchises", []) if f.get("id") == req.franchise_id),
+                None,
+            )
+            await db.execute(
+                "INSERT OR IGNORE INTO franchises (id, name, franchise_group, category, config_json) VALUES (?, ?, ?, ?, ?)",
+                (
+                    req.franchise_id,
+                    entry.get("name", req.franchise_id) if entry else req.franchise_id,
+                    entry.get("category", "gaming") if entry else "gaming",
+                    entry.get("category", "gaming") if entry else "gaming",
+                    json.dumps(entry) if entry else "{}",
+                ),
+            )
+            await db.commit()
+
         for topic, score_result in scored_topics:
             topic_id = f"{req.franchise_id}/topic/{uuid.uuid4().hex[:12]}"
             await db.execute(

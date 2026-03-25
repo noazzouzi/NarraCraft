@@ -141,43 +141,98 @@ async def get_wiki_page(title: str, wiki_slug: str) -> WikiResult | None:
 async def discover_characters(wiki_slug: str, franchise_name: str) -> list[WikiCharacter]:
     """Discover character pages from a franchise's Fandom wiki.
 
-    Uses the category system to find character pages.
+    Uses multiple strategies:
+    1. Try specific character categories (subcategories on large wikis)
+    2. Fall back to search-based discovery for well-known characters
+    Filters out Template: and Category: pages.
     """
     characters: list[WikiCharacter] = []
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            url = FANDOM_SEARCH_URL.format(wiki=wiki_slug)
-            params = {
-                "action": "query",
-                "format": "json",
-                "list": "categorymembers",
-                "cmtitle": "Category:Characters",
-                "cmlimit": "50",
-                "cmtype": "page",
-            }
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+    seen_titles: set[str] = set()
 
-            members = data.get("query", {}).get("categorymembers", [])
-            for member in members[:30]:  # Limit to 30 characters
-                title = member.get("title", "")
-                page = await get_wiki_page(title, wiki_slug)
-                if page:
-                    characters.append(WikiCharacter(
-                        name=title,
-                        description=page.summary,
-                        page_url=page.url,
-                        image_urls=[
-                            f"https://{wiki_slug}.fandom.com/wiki/Special:FilePath/{img}"
-                            for img in page.images[:5]
-                        ],
-                        attributes=page.infobox,
-                    ))
-        except (httpx.HTTPError, ValueError):
-            pass
+    # Category names to try — wikis use different naming conventions
+    category_names = [
+        "Category:Characters",
+        "Category:Male characters",
+        "Category:Female characters",
+        "Category:Protagonists",
+        "Category:Antagonists",
+        "Category:Playable characters",
+        "Category:Main characters",
+    ]
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Strategy 1: Category-based discovery
+        for cat_name in category_names:
+            if len(characters) >= 20:
+                break
+            try:
+                url = FANDOM_SEARCH_URL.format(wiki=wiki_slug)
+                params = {
+                    "action": "query",
+                    "format": "json",
+                    "list": "categorymembers",
+                    "cmtitle": cat_name,
+                    "cmlimit": "50",
+                    "cmtype": "page",
+                }
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+
+                members = data.get("query", {}).get("categorymembers", [])
+                for member in members[:30]:
+                    title = member.get("title", "")
+                    # Skip templates, categories, lists, and disambiguation pages
+                    if _is_non_character_page(title) or title in seen_titles:
+                        continue
+                    seen_titles.add(title)
+                    page = await get_wiki_page(title, wiki_slug)
+                    if page and page.summary:
+                        characters.append(WikiCharacter(
+                            name=title,
+                            description=page.summary,
+                            page_url=page.url,
+                            image_urls=[
+                                f"https://{wiki_slug}.fandom.com/wiki/Special:FilePath/{img}"
+                                for img in page.images[:5]
+                            ],
+                            attributes=page.infobox,
+                        ))
+            except (httpx.HTTPError, ValueError):
+                continue
+
+        # Strategy 2: Search-based fallback if categories yielded few results
+        if len(characters) < 5:
+            try:
+                search_results = await search_wiki(f"{franchise_name} character", wiki_slug=wiki_slug)
+                for sr in search_results:
+                    if sr.title in seen_titles or _is_non_character_page(sr.title):
+                        continue
+                    seen_titles.add(sr.title)
+                    page = await get_wiki_page(sr.title, wiki_slug)
+                    if page and page.summary and page.infobox:
+                        characters.append(WikiCharacter(
+                            name=sr.title,
+                            description=page.summary,
+                            page_url=page.url,
+                            image_urls=[
+                                f"https://{wiki_slug}.fandom.com/wiki/Special:FilePath/{img}"
+                                for img in page.images[:5]
+                            ],
+                            attributes=page.infobox,
+                        ))
+                    if len(characters) >= 20:
+                        break
+            except (httpx.HTTPError, ValueError):
+                pass
 
     return characters
+
+
+def _is_non_character_page(title: str) -> bool:
+    """Check if a page title is a template, category, list, or other non-character page."""
+    prefixes = ("Template:", "Category:", "List of", "Module:")
+    return title.startswith(prefixes) or "/gallery" in title.lower() or "/quotes" in title.lower()
 
 
 async def discover_locations(wiki_slug: str) -> list[WikiLocation]:
