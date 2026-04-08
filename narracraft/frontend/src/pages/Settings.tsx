@@ -1,171 +1,146 @@
-import { useState } from "react";
-import { useTheme } from "@/components/ThemeProvider";
-import { themes, themeIds, type Theme } from "@/themes/themes";
-
-function ThemeCard({
-  theme: h,
-  isActive,
-  onClick,
-}: {
-  theme: Theme;
-  isActive: boolean;
-  onClick: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="cursor-pointer transition-all"
-      style={{
-        padding: 14,
-        background: isActive ? `${h.accent}12` : hovered ? "#ffffff08" : h.surface,
-        border: isActive ? `2px solid ${h.accent}` : `2px solid ${h.border}`,
-        borderRadius: 10,
-        transform: isActive ? "scale(1.02)" : hovered ? "scale(1.01)" : "scale(1)",
-        boxShadow: isActive ? `0 4px 20px ${h.accent}20` : "none",
-      }}
-    >
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <span className="text-xl">{h.emoji}</span>
-        <div>
-          <div
-            className="text-[13px] font-bold"
-            style={{ color: isActive ? h.accent : h.text }}
-          >
-            {h.name}
-          </div>
-          <div className="text-[10px]" style={{ color: h.dim }}>
-            {h.desc}
-          </div>
-        </div>
-      </div>
-      {/* Color preview strip */}
-      <div className="flex gap-1 h-[18px] rounded overflow-hidden">
-        <div className="flex-[3]" style={{ background: h.preview[0] }} />
-        <div className="flex-[1]" style={{ background: h.accent }} />
-        <div className="flex-[2]" style={{ background: h.preview[2] }} />
-        <div className="flex-[0.5]" style={{ background: h.success }} />
-      </div>
-    </div>
-  );
-}
+import { useEffect, useState } from "react";
+import { api, type LLMStatus } from "@/api/client";
+import { Save, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
 export default function Settings() {
-  const { theme, themeId, setThemeId } = useTheme();
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.getSettings().then(setSettings).catch(console.error);
+    api.llmStatus().then(setLlmStatus).catch(console.error);
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError("");
+    setSaved(false);
+    try {
+      await api.updateSettings(settings);
+      const status = await api.llmStatus();
+      setLlmStatus(status);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const update = (key: string, value: string) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
+  };
 
   return (
-    <div className="flex-1 p-5" style={{ fontFamily: theme.body }}>
-      <h1
-        className="m-0 mb-6"
-        style={{
-          fontSize: 22,
-          fontWeight: 700,
-          fontFamily: theme.font,
-          color: theme.text,
-        }}
-      >
-        Settings
-      </h1>
+    <div className="p-8 max-w-2xl">
+      <h2 className="text-2xl font-bold mb-8">Settings</h2>
 
-      {/* Theme Picker */}
+      {/* LLM Provider */}
       <section className="mb-8">
-        <h2
-          className="mb-4"
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "2px",
-            color: theme.dim,
-            fontFamily: theme.mono,
-          }}
-        >
-          THEME
-        </h2>
-        <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
-          {themeIds.map((id) => (
-            <ThemeCard
-              key={id}
-              theme={themes[id]}
-              isActive={themeId === id}
-              onClick={() => setThemeId(id)}
-            />
-          ))}
-        </div>
-      </section>
+        <h3 className="text-lg font-semibold mb-4">LLM Provider</h3>
 
-      {/* Voice Provider */}
-      <section className="mb-8">
-        <h2
-          className="mb-4"
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "2px",
-            color: theme.dim,
-            fontFamily: theme.mono,
-          }}
-        >
-          VOICE PROVIDER
-        </h2>
-        <div className="flex gap-3">
-          {[
-            { id: "chatterbox", name: "Chatterbox", desc: "Local \u00B7 Free \u00B7 Needs GPU" },
-            { id: "elevenlabs", name: "ElevenLabs", desc: "Browser automation \u00B7 Best quality" },
-          ].map((p) => (
-            <div
-              key={p.id}
-              className="p-4 cursor-pointer transition-all"
-              style={{
-                background: theme.surface,
-                border: `1px solid ${theme.border}`,
-                borderRadius: theme.card.borderRadius,
-                opacity: 0.6,
-              }}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Provider</label>
+            <select
+              value={settings.llm_provider || "gemini_flash"}
+              onChange={(e) => update("llm_provider", e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
             >
-              <div
-                className="text-sm font-bold mb-1"
-                style={{ color: theme.text }}
+              <option value="gemini_flash">Gemini 2.5 Flash (20 RPD free)</option>
+              <option value="gemini_flash_lite">Gemini 2.5 Flash-Lite (20 RPD free)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Gemini API Key</label>
+            <input
+              type="password"
+              value={settings.gemini_api_key || ""}
+              onChange={(e) => update("gemini_api_key", e.target.value)}
+              placeholder="Get key from aistudio.google.com"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Free — no credit card needed.{" "}
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:underline"
               >
-                {p.name}
-              </div>
-              <div className="text-xs" style={{ color: theme.dim }}>
-                {p.desc}
-              </div>
+                Get your key here
+              </a>
+            </p>
+          </div>
+
+          {/* Status indicator */}
+          {llmStatus && (
+            <div
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                llmStatus.configured
+                  ? "bg-green-900/30 text-green-400"
+                  : "bg-yellow-900/30 text-yellow-400"
+              }`}
+            >
+              {llmStatus.configured ? (
+                <>
+                  <CheckCircle size={16} />
+                  Connected — {llmStatus.model} ({llmStatus.rpd_limit} RPD free tier)
+                </>
+              ) : (
+                <>
+                  <AlertCircle size={16} />
+                  {llmStatus.message || "Not configured"}
+                </>
+              )}
             </div>
-          ))}
+          )}
         </div>
       </section>
 
-      {/* Browser Accounts placeholder */}
+      {/* Theme */}
       <section className="mb-8">
-        <h2
-          className="mb-4"
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "2px",
-            color: theme.dim,
-            fontFamily: theme.mono,
-          }}
-        >
-          BROWSER ACCOUNTS
-        </h2>
-        <div
-          className="p-4"
-          style={{
-            background: theme.surface,
-            border: `1px solid ${theme.border}`,
-            borderRadius: theme.card.borderRadius,
-          }}
-        >
-          <p className="text-sm" style={{ color: theme.dim }}>
-            Browser account configuration will be available in Phase 3.
-          </p>
+        <h3 className="text-lg font-semibold mb-4">Appearance</h3>
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Theme</label>
+          <select
+            value={settings.theme || "dark"}
+            onChange={(e) => update("theme", e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+          >
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
         </div>
       </section>
+
+      {/* Save */}
+      {error && (
+        <div className="mb-4 px-3 py-2 bg-red-900/30 text-red-400 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+      >
+        {saving ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : saved ? (
+          <CheckCircle size={16} />
+        ) : (
+          <Save size={16} />
+        )}
+        {saving ? "Saving..." : saved ? "Saved!" : "Save Settings"}
+      </button>
     </div>
   );
 }

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:support.google.com)",
+      "WebFetch(domain:www.knolli.ai)",
+      "WebFetch(domain:www.supertone.ai)",
+      "WebFetch(domain:blog.youtube)",
+      "WebFetch(domain:www.zebracat.ai)",
+      "WebFetch(domain:pollo.ai)",
+      "Bash(npm init:*)"
+    ]
+  }
+}

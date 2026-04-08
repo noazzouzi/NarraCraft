@@ -1,0 +1,14 @@
+Step 1 : Results do appear. No duplicates. Source badges display correctly. But we should only keep result from the "main" endpoint, for example: "https://residentevil.fandom.com/wiki/Resident_Evil_7:_Biohazard" and not "https://residentevil.fandom.com/wiki/Resident_Evil_7:_Biohazard/plot"
+
+Step 2: Loading spinner do appear. It takes around 30seconds to 1 minute. 
+Step 3: I can see characters and locations. There are lots of characters that are not part of the game. They're part of the whole Franchise "Resident Evil", but not part of the game "Resident Evil 7". Also, some important characters from the game are missing (Ethan Winters for example). When I checked the fandom wiki website of RE7, the characters appear under "Cast", in a table's column "Characters". For Locations, they do not at all match RE7, or even Resident Evil in general. Characters table appears clean and good. We can toggle on/off smoothly. We should include a feature to toggle on/off everything in one click.
+Step 4: Success message yes: Franchise saved successfully!. No redirection. When going back to /franchises I don't see it.
+Step 5: Badge update instantly. Filtering work good. Maybe we should be able to filter the assets by franchise ? If we start having 10-15 franchises, it will be too much information in /assets.
+Step 6: I don't see resident_evil_7 franchise in the dropdown. I tried with "Resident Evil" franchise that already exist, but no topic has been found from sources. I tried with "Dark Souls / Elden Ring" and it did find 23 topics. User should be able to click on a topic and be redirected to the source.
+Step 7: Category filters work correctly, CARD and LIST views also. Same for score sorting. Tier badges do show, and source icons also.  Issue when clicking on "Run Discovery" again, the results "concatenate", and such we have duplicate topics.
+Step 8: Adding to queue does not work. "detail: not found" error. 
+Step 9: I see topics in "Discovered" UI, in "DISCOVERED" section, but not in QUEUED section since /queue endpoint says "not found". Drag-and-drop works smoothly, but even moving topic from DISCOVERED to QUEUED do not update the status of topic.  SKIP also does not seem to work.
+Step 10:  No "DEPLOY" button. There is "PUBLISH" button though. Issue in backend when clicking on it : UnboundLocalError: cannot access local variable '_ws_connections' where it is not associated with a value
+Cannot do Steps 11, 12 and 13. 
+Step 14: Settings work fine for themes across all pages. Voice provider displays 2 options, but none of them is clickable. Browser account section says "Browser account configuration will be available in Phase 3."
+Cannot do Step 15 since no pipeline is running.

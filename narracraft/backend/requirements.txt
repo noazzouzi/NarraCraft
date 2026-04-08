@@ -1,14 +1,7 @@
 fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.1
-pyyaml==6.0.2
+uvicorn==0.34.0
 aiosqlite==0.20.0
-websockets==14.1
+pydantic==2.10.4
+python-dotenv==1.0.1
 python-multipart==0.0.19
-httpx==0.28.1
-playwright==1.49.1
-
-# Testing
-pytest==8.3.4
-pytest-asyncio==0.24.0
+google-genai>=1.0.0

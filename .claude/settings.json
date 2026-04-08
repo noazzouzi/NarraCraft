@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill //F //IM python.exe)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\t518371\\.claude\\projects\\c--Users-t518371-AppData-Local-afklairspace-git_clones-NarraCraft\\memory"
+    ]
+  }
+}

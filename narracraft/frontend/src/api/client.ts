@@ -1,295 +1,213 @@
-/**
- * Typed API client for all NarraCraft backend endpoints.
- */
+// --- Types ---
 
-const BASE = "/api";
+export interface Franchise {
+  id: string;
+  name: string;
+  category: string;
+  visual_aesthetic: string | null;
+  iconic_elements: string | null;
+  created_at: string | null;
+}
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+export interface FranchiseWithCharacters extends Franchise {
+  characters: Character[];
+}
+
+export interface Character {
+  id: string;
+  franchise_id: string;
+  name: string;
+  appearance: string | null;
+  outfit: string | null;
+  personality: string | null;
+  speech_style: string | null;
+  flow_prompt: string | null;
+  image_path: string | null;
+  flow_url: string | null;
+  created_at: string | null;
+}
+
+export interface ShortListItem {
+  id: number;
+  franchise_id: string;
+  franchise_name: string | null;
+  topic: string | null;
+  status: string;
+  current_step: number;
+  scene_count: number;
+  created_at: string | null;
+  published_at: string | null;
+}
+
+export interface Short {
+  id: number;
+  franchise_id: string;
+  franchise_name: string | null;
+  topic: string | null;
+  script_json: string | null;
+  status: string;
+  current_step: number;
+  upload_metadata_json: string | null;
+  created_at: string | null;
+  published_at: string | null;
+  scenes: Scene[];
+}
+
+export interface Scene {
+  id: number;
+  short_id: number;
+  scene_number: number;
+  character_id: string | null;
+  character_name: string | null;
+  dialogue: string | null;
+  expression: string | null;
+  environment: string | null;
+  veo3_prompt: string | null;
+  flow_url: string | null;
+  status: string;
+}
+
+export interface TopicSuggestion {
+  title: string;
+  hook: string;
+  characters: string[];
+  category: string;
+}
+
+export interface LLMStatus {
+  provider: string | null;
+  model?: string;
+  configured: boolean;
+  free_tier?: boolean;
+  rpd_limit?: number;
+  message?: string;
+  available_providers?: string[];
+}
+
+// --- API Helper ---
+
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
   if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${res.statusText}`);
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `API error: ${res.status}`);
   }
   return res.json();
 }
 
-// --- Onboarding ---
-export interface SearchResult {
-  source: string;
-  title: string;
-  url?: string;
-  summary?: string;
-  image_url?: string;
-  wiki_slug?: string;
-  igdb_id?: number;
-  mal_id?: number;
-  anilist_id?: number;
-  genres?: string[];
-  score?: number;
-  [key: string]: unknown;
-}
-export const searchFranchise = (q: string, category?: string) => {
-  const params = new URLSearchParams({ q });
-  if (category) params.set("category", category);
-  return request<{ query: string; results: SearchResult[]; total: number }>(
-    `/onboarding/search?${params}`,
-  );
+// --- Franchises ---
+
+export const api = {
+  // Franchises
+  listFranchises: () => request<Franchise[]>("/api/franchises/"),
+
+  createFranchise: (name: string, category: string) =>
+    request<Franchise>("/api/franchises/", {
+      method: "POST",
+      body: JSON.stringify({ name, category }),
+    }),
+
+  getFranchise: (id: string) =>
+    request<FranchiseWithCharacters>(`/api/franchises/${id}`),
+
+  updateFranchise: (id: string, data: Partial<Franchise>) =>
+    request<Franchise>(`/api/franchises/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteFranchise: (id: string) =>
+    request<{ deleted: string }>(`/api/franchises/${id}`, { method: "DELETE" }),
+
+  // Characters
+  addCharacter: (franchiseId: string, name: string) =>
+    request<Character>(`/api/franchises/${franchiseId}/characters`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+
+  updateCharacter: (id: string, data: Partial<Character>) =>
+    request<Character>(`/api/characters/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteCharacter: (id: string) =>
+    request<{ deleted: string }>(`/api/characters/${id}`, { method: "DELETE" }),
+
+  uploadCharacterImage: async (id: string, file: File): Promise<Character> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/characters/${id}/image`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) throw new Error("Upload failed");
+    return res.json();
+  },
+
+  // Shorts
+  listShorts: (params?: { franchise_id?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.franchise_id) query.set("franchise_id", params.franchise_id);
+    if (params?.status) query.set("status", params.status);
+    const qs = query.toString();
+    return request<ShortListItem[]>(`/api/shorts/${qs ? `?${qs}` : ""}`);
+  },
+
+  createShort: (franchise_id: string) =>
+    request<Short>("/api/shorts/", {
+      method: "POST",
+      body: JSON.stringify({ franchise_id }),
+    }),
+
+  getShort: (id: number) => request<Short>(`/api/shorts/${id}`),
+
+  updateShort: (id: number, data: Partial<Short>) =>
+    request<Short>(`/api/shorts/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteShort: (id: number) =>
+    request<{ deleted: number }>(`/api/shorts/${id}`, { method: "DELETE" }),
+
+  // Wizard
+  generateTopics: (shortId: number) =>
+    request<{ topics: TopicSuggestion[] }>(`/api/shorts/${shortId}/generate-topics`, {
+      method: "POST",
+    }),
+
+  generateScript: (shortId: number, topic: string, hook: string, characterNames: string[]) =>
+    request<Short>(`/api/shorts/${shortId}/generate-script`, {
+      method: "POST",
+      body: JSON.stringify({ topic, hook, character_names: characterNames }),
+    }),
+
+  generatePrompts: (shortId: number) =>
+    request<Short>(`/api/shorts/${shortId}/generate-prompts`, {
+      method: "POST",
+    }),
+
+  // Scenes
+  updateScene: (id: number, data: { status?: string; flow_url?: string }) =>
+    request<Scene>(`/api/scenes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  // Settings
+  getSettings: () => request<Record<string, string>>("/api/settings"),
+
+  updateSettings: (settings: Record<string, string>) =>
+    request<{ status: string }>("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify({ settings }),
+    }),
+
+  // LLM
+  llmStatus: () => request<LLMStatus>("/api/llm/status"),
 };
-
-export interface CharacterResult {
-  source: string;
-  name: string;
-  description?: string;
-  image_urls?: string[];
-  role?: string;
-  [key: string]: unknown;
-}
-export const discoverCharacters = (params: {
-  franchise_id: string;
-  wiki_slug?: string;
-  mal_id?: number;
-  anilist_id?: number;
-  igdb_id?: number;
-}) => {
-  const qs = new URLSearchParams();
-  qs.set("franchise_id", params.franchise_id);
-  if (params.wiki_slug) qs.set("wiki_slug", params.wiki_slug);
-  if (params.mal_id) qs.set("mal_id", String(params.mal_id));
-  if (params.anilist_id) qs.set("anilist_id", String(params.anilist_id));
-  if (params.igdb_id) qs.set("igdb_id", String(params.igdb_id));
-  return request<{ franchise_id: string; characters: CharacterResult[]; total: number }>(
-    `/onboarding/characters?${qs}`,
-  );
-};
-
-export const discoverLocations = (franchise_id: string, wiki_slug?: string) => {
-  const qs = new URLSearchParams({ franchise_id });
-  if (wiki_slug) qs.set("wiki_slug", wiki_slug);
-  return request<{ franchise_id: string; locations: { name: string; description: string; image_urls: string[]; page_url: string }[]; total: number }>(
-    `/onboarding/locations?${qs}`,
-  );
-};
-
-export const searchImages = (q: string, limit = 20) =>
-  request<{ query: string; images: { url: string; thumbnail_url: string; title: string; source_url: string }[] }>(
-    `/onboarding/images?q=${encodeURIComponent(q)}&limit=${limit}`,
-  );
-
-export const generateBible = (data: { character_name: string; wiki_summary?: string; infobox?: Record<string, string> }) =>
-  request<{ archetype_id: string; visual_description: string; character_bible: Record<string, string>; source_character_name: string }>(
-    "/onboarding/generate-bible",
-    { method: "POST", body: JSON.stringify(data) },
-  );
-
-export const saveFranchise = (data: {
-  id: string;
-  name: string;
-  franchise_group: string;
-  category: string;
-  characters?: Record<string, unknown>[];
-  environments?: Record<string, unknown>[];
-  topic_seeds?: string[];
-}) =>
-  request<{ status: string; franchise_id: string }>("/onboarding/save", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-// --- Topic Discovery ---
-export const discoverTopics = (data: {
-  franchise_id: string;
-  sources?: string[];
-}) =>
-  request<{
-    franchise_id: string;
-    raw_count: number;
-    deduped_count: number;
-    discovered: number;
-    errors: string[] | null;
-    top_topics: { title: string; score: number; tier: string; sources: number; confidence: string; category: string }[];
-  }>("/topics/discover", { method: "POST", body: JSON.stringify(data) });
-
-// --- Health ---
-export const health = () => request<{ status: string; version: string }>("/health");
-
-// --- Config ---
-export interface ConfigSummary {
-  channel_name: string;
-  voice_provider: string;
-  franchises: {
-    id: string;
-    name: string;
-    category: string;
-    active: boolean;
-    character_count: number;
-    topic_seed_count: number;
-  }[];
-  pipeline: { videos_per_day: number; videos_per_week: number };
-}
-export const getConfig = () => request<ConfigSummary>("/config");
-
-// --- Settings ---
-export interface SettingsResponse {
-  settings: Record<string, string>;
-}
-export const getSettings = () => request<SettingsResponse>("/settings");
-export const updateSettings = (updates: Record<string, string>) =>
-  request<SettingsResponse>("/settings", {
-    method: "PUT",
-    body: JSON.stringify(updates),
-  });
-
-// --- Topics ---
-export interface TopicListResponse {
-  topics: Record<string, unknown>[];
-  total: number;
-}
-export const listTopics = (params?: Record<string, string>) => {
-  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
-  return request<TopicListResponse>(`/topics${qs}`);
-};
-export const queueTopic = (id: string) =>
-  request(`/topics/${id}/queue`, { method: "PUT" });
-export const skipTopic = (id: string) =>
-  request(`/topics/${id}/skip`, { method: "PUT" });
-
-// --- Assets ---
-export interface AssetListResponse {
-  assets: Record<string, unknown>[];
-  total: number;
-}
-export const listAssets = (params?: Record<string, string>) => {
-  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
-  return request<AssetListResponse>(`/assets${qs}`);
-};
-export const approveAsset = (id: string) =>
-  request(`/assets/${id}/approve`, { method: "POST" });
-export const rejectAsset = (id: string) =>
-  request(`/assets/${id}/reject`, { method: "POST" });
-
-// --- Pipeline ---
-export interface StepLog {
-  step: string;
-  status: string;
-  duration: number;
-  message?: string;
-  error?: string;
-}
-export interface PipelineStatusResponse {
-  is_running: boolean;
-  current: {
-    run_id: number;
-    topic_id: string;
-    franchise_id: string;
-    status: string;
-    current_step: string;
-    steps_log: StepLog[];
-  };
-  steps: { id: string; label: string }[];
-  runs: Record<string, unknown>[];
-}
-export const runPipeline = () =>
-  request<{ status: string; message: string }>("/pipeline/run", { method: "POST" });
-export const stopPipeline = () =>
-  request<{ status: string; message: string }>("/pipeline/stop", { method: "POST" });
-export const pipelineStatus = () =>
-  request<PipelineStatusResponse>("/pipeline/status");
-
-// --- Analytics ---
-export interface DashboardAnalytics {
-  total_videos: number;
-  total_views: number;
-  videos_this_week: number;
-  queued_topics: number;
-  total_subscribers_gained: number;
-  views_change_pct: number;
-}
-export const getDashboardAnalytics = () =>
-  request<DashboardAnalytics>("/analytics/dashboard");
-
-export interface Insight {
-  tag: string;
-  type: string;
-  priority: string;
-  text: string;
-  franchise_id?: string;
-  metric?: number;
-}
-export const getInsights = () =>
-  request<{ insights: Insight[]; message?: string }>("/analytics/insights");
-export const refreshInsights = () =>
-  request<{ insights: Insight[]; count: number }>("/analytics/insights/refresh", { method: "POST" });
-
-export interface FranchiseAnalytics {
-  franchise_id: string;
-  name: string;
-  category: string;
-  video_count: number;
-  total_views: number;
-  avg_views: number;
-  avg_retention: number;
-  subs_gained: number;
-  weight: number;
-}
-export const getAllFranchiseAnalytics = () =>
-  request<{ franchises: FranchiseAnalytics[] }>("/analytics/franchises");
-
-export interface FranchiseDetail {
-  franchise_id: string;
-  total_videos: number;
-  total_views: number;
-  avg_views: number;
-  avg_retention: number;
-  total_subscribers_gained: number;
-  videos: VideoAnalytics[];
-}
-export const getFranchiseAnalytics = (id: string) =>
-  request<FranchiseDetail>(`/analytics/franchise/${id}`);
-
-export interface VideoAnalytics {
-  video_id?: number;
-  id?: number;
-  title: string;
-  franchise_id: string;
-  narrator_archetype?: string;
-  closer_style?: string;
-  published_at?: string;
-  youtube_video_id?: string;
-  snapshot_type?: string;
-  views?: number;
-  likes?: number;
-  comments?: number;
-  shares?: number;
-  avg_view_duration_pct?: number;
-  click_through_rate?: number;
-  subscribers_gained?: number;
-}
-export const getVideoAnalyticsList = () =>
-  request<{ videos: VideoAnalytics[]; total: number }>("/analytics/videos");
-export const getVideoAnalyticsDetail = (id: number) =>
-  request<{ video: Record<string, unknown>; snapshots: Record<string, unknown>[] }>(`/analytics/videos/${id}`);
-
-export interface ScoredVideo {
-  id: number;
-  title: string;
-  franchise_id: string;
-  narrator_archetype?: string;
-  views: number;
-  likes: number;
-  comments: number;
-  engagement_score: number;
-  growth_score: number;
-  virality_score: number;
-  retention_score: number;
-}
-export const getDerivedScores = () =>
-  request<{ videos: ScoredVideo[] }>("/analytics/scores");
-
-export const triggerAnalyticsCollection = () =>
-  request<{ status: string; collected: number; errors?: string[] }>("/analytics/collect", { method: "POST" });
-export const triggerFeedbackLoop = () =>
-  request<{ status: string; results: Record<string, unknown> }>("/analytics/feedback", { method: "POST" });
-export const getFeedbackResults = () =>
-  request<{ results: Record<string, unknown> }>("/analytics/feedback");
