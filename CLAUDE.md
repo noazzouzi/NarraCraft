@@ -31,14 +31,35 @@ dans ce genre de pipeline.
 
 Il n'y a **pas de clé API Anthropic** dans ce projet. Claude Code *est* le
 runtime LLM : les étapes de jugement sont des Skills exécutées dans la
-session. Les seules APIs payantes appelées par du code sont ElevenLabs (voix)
-et Gemini (images).
+session. La seule API payante systématiquement appelée par du code est
+Gemini (images) ; la voix tourne en local par défaut (Kokoro), ElevenLabs
+n'étant qu'une option de finition.
 
 Conséquence à garder en tête pour toute évolution : chaque étape LLM doit
 produire un **fichier au format stable et documenté**. Le jour où l'on veut
 du batch non-supervisé, il suffira d'écrire un runner API qui produit les
 mêmes fichiers. Ne jamais coupler une étape LLM à la suivante autrement que
 par son fichier de sortie.
+
+## Voix et alignement
+
+La voix et l'alignement mot-à-mot sont **deux étapes distinctes**, et c'est
+délibéré.
+
+Le moteur TTS produit un fichier audio par beat. Un **aligneur forcé**
+distinct réaligne ensuite le texte du script — qu'on connaît déjà
+exactement — sur l'audio produit, pour écrire `alignment.json`.
+
+Deux raisons, et elles comptent :
+
+1. **C'est plus précis.** On ne devine pas la transcription, on possède la
+   vérité terrain du texte. On ne fait que chercher où chaque mot tombe.
+2. **Ça rend les moteurs interchangeables.** Kokoro en local pour itérer
+   gratuitement, ElevenLabs pour la finition — sans qu'une seule ligne du
+   montage en aval ne change.
+
+Règle qui en découle : **ne jamais consommer les timestamps renvoyés par un
+moteur TTS.** La seule source de vérité temporelle est `alignment.json`.
 
 ## Anatomie d'un projet
 
@@ -48,7 +69,7 @@ projects/<slug>/
 ├── 01-research.md    faits sourcés + pistes d'archives
 ├── 02-script.md      narration découpée en beats          ← CHECKPOINT 1
 ├── 03-shots.json     plan visuel par beat                 ← CHECKPOINT 2
-├── 04-audio/         voix.mp3 + alignment.json (mot-à-mot)
+├── 04-audio/         beats/B001.wav… + alignment.json (mot-à-mot)
 ├── 05-visuals/       images + assets.json (licences)
 ├── 06-timeline.json  source de vérité du montage
 ├── 07-out/           video.mp4, thumbnail.png, captions.srt

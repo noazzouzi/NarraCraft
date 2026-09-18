@@ -21,10 +21,13 @@ dans un état invisible.
 cp .env.example .env   # puis renseigner les clés
 ```
 
-Deux clés suffisent : **ElevenLabs** (voix) et **Gemini** (images). Il n'y a
-volontairement pas de clé Anthropic : Claude Code est lui-même le runtime LLM
-du projet. Le script, la recherche et le montage ne coûtent donc rien de plus
-que ton abonnement.
+Une seule clé est nécessaire : **Gemini**, pour les images. La voix tourne en
+local avec Kokoro, gratuitement et sans limite. **ElevenLabs** est optionnel,
+pour la finition d'une vidéo qu'on publie.
+
+Il n'y a volontairement pas de clé Anthropic : Claude Code est lui-même le
+runtime LLM du projet. Le script, la recherche et le montage ne coûtent donc
+rien de plus que ton abonnement.
 
 ## Utilisation
 
@@ -42,8 +45,8 @@ Entre ces deux points et jusqu'au fichier final, rien ne t'interrompt.
 
 ## Coût
 
-Environ **3 à 5 € par documentaire de quinze minutes**, dominé par la
-génération d'images. Le pipeline cherche d'abord dans les archives libres
+Environ **2,50 à 4 € par documentaire de quinze minutes**, presque
+entièrement en génération d'images — la voix locale ne coûte rien. Le pipeline cherche d'abord dans les archives libres
 (Wikimedia Commons, Archive.org, Gallica, Library of Congress) et ne génère
 que ce qui manque réellement. Un plafond de sécurité est défini dans
 `fresque.config.yaml`.
@@ -59,7 +62,7 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 |---|---|---|
 | 1 | Structure, configuration, conventions | fait |
 | 2 | Écriture : brief → recherche → script | fait |
-| 3 | Voix off et alignement mot-à-mot | à venir |
+| 3 | Voix off (Kokoro / ElevenLabs) et alignement forcé | à venir |
 | 4 | Plan visuel, archives, génération d'images | à venir |
 | 5 | Timeline et rendu Remotion | à venir |
 | 6 | Motion graphics : cartes, unes de journaux, archives | à venir |

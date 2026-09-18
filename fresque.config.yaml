@@ -26,14 +26,43 @@ structure:
   hook_s: 20
 
 voix:
-  provider: elevenlabs
-  voice_id: ""                 # à renseigner : voix FR grave, débit posé
-  model: eleven_multilingual_v2
-  stability: 0.45              # bas = plus expressif, haut = plus monotone
-  similarity_boost: 0.8
-  speed: 0.95                  # légèrement ralenti pour le registre documentaire
-  # Indispensable : c'est l'alignement mot-à-mot qui synchronise tout le montage.
-  with_timestamps: true
+  # Deux moteurs, interchangeables. L'alignement est découplé (voir plus bas),
+  # donc changer de provider n'impacte rien en aval du montage.
+  #   kokoro     — local, gratuit, illimité. Pour tout le travail d'itération.
+  #   elevenlabs — payant. Pour la finition d'une vidéo qu'on publie.
+  provider: kokoro
+
+  # Un fichier audio par beat du script. Permet de régénérer un seul beat
+  # sans refaire les quinze minutes, et correspond au calibre pour lequel
+  # Kokoro est conçu (segments courts, pas de long format d'un bloc).
+  decoupage: par_beat
+
+  kokoro:
+    # ff_siwis est l'UNIQUE voix française de Kokoro v1.0 : féminine,
+    # notée B-, moins de 11 h de données d'entraînement. Il n'y a pas
+    # d'alternative dans ce modèle. Sur du long format, la prosodie se
+    # répète — c'est le compromis assumé du mode itération.
+    voice: ff_siwis
+    lang_code: f
+    speed: 0.92
+
+  elevenlabs:
+    voice_id: ""               # à renseigner : voix FR grave, débit posé
+    model: eleven_multilingual_v2
+    stability: 0.45            # bas = plus expressif, haut = plus monotone
+    similarity_boost: 0.8
+    speed: 0.95
+
+alignement:
+  # Découplé du TTS, volontairement. On réaligne le texte QU'ON CONNAÎT DÉJÀ
+  # sur l'audio produit, au lieu de faire confiance aux timestamps du moteur.
+  # Plus précis (vérité terrain du texte), et rend les providers
+  # interchangeables. Le français a un modèle d'alignement par défaut.
+  moteur: whisperx
+  langue: fr
+  # Aucune transcription n'est nécessaire : on fait de l'alignement forcé,
+  # le texte est déjà connu. Seul le modèle d'alignement est chargé.
+  mode: forced
 
 visuels:
   # Ordre de préférence des sources. On ne génère que ce qu'on n'a pas trouvé.
