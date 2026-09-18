@@ -208,6 +208,33 @@ def cmd_render(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from . import doctor as doctor_mod
+
+    print("Diagnostic Fresque\n")
+    essentials_ok, blocked = doctor_mod.run()
+
+    if not blocked:
+        print("\n✓ Tout est joignable.")
+        return 0
+
+    print(f"\n{len(blocked)} hôte(s) injoignable(s).")
+    print(
+        "\nSi tu es dans une session Claude Code cloud, c'est le niveau d'accès\n"
+        "réseau de l'environnement. Ouvre le sélecteur d'environnement sur\n"
+        "claude.ai/code (l'icône nuage au-dessus de la zone de message), édite\n"
+        "l'environnement, passe « Network access » sur **Custom**, coche\n"
+        "« Also include default list of common package managers », et colle :\n"
+    )
+    for line in doctor_mod.allowlist(blocked).splitlines():
+        print(f"    {line}")
+    print(
+        "\nLe changement ne s'applique qu'aux sessions démarrées ensuite :\n"
+        "il faut en ouvrir une nouvelle."
+    )
+    return 0 if essentials_ok else 1
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     project = Project.open(args.slug)
     steps = [
@@ -256,6 +283,12 @@ def main(argv: list[str] | None = None) -> int:
         help="chemin d'un Chromium existant (évite un téléchargement)",
     )
     add("status", "État d'avancement du projet", cmd_status)
+
+    # No slug: doctor checks the installation, not a project.
+    doctor_cmd = sub.add_parser(
+        "doctor", help="Vérifier accès réseau, modèles et dépendances"
+    )
+    doctor_cmd.set_defaults(handler=cmd_doctor)
 
     args = parser.parse_args(argv)
     try:

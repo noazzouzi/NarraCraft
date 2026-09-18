@@ -1,0 +1,165 @@
+"""Check what this machine can actually reach and run.
+
+The pipeline depends on hosts that a restricted network may block, and on
+models that may not be downloaded yet. Finding that out beat by beat, halfway
+through a render, is expensive. This tells you up front, and prints the exact
+allowlist to paste when something is blocked.
+"""
+from __future__ import annotations
+
+import os
+import socket
+import ssl
+from dataclasses import dataclass, field
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from . import config
+
+TIMEOUT = 8.0
+
+
+@dataclass
+class Host:
+    name: str
+    why: str
+    required_by: str
+
+
+@dataclass
+class Group:
+    label: str
+    hosts: list[Host]
+    optional: bool = False
+    results: dict[str, str] = field(default_factory=dict)
+
+
+# Hosts grouped the way the network allowlist wants them: an archive provider
+# is only usable when both its API host and its file host are reachable.
+GROUPS = [
+    Group("Archives — Wikimedia Commons", [
+        Host("commons.wikimedia.org", "recherche d'images", "fetch"),
+        Host("upload.wikimedia.org", "téléchargement des fichiers", "fetch"),
+    ]),
+    Group("Archives — Internet Archive", [
+        Host("archive.org", "recherche", "fetch"),
+        Host("ia800000.us.archive.org", "téléchargement (sous-domaines ia*)", "fetch"),
+    ], optional=True),
+    Group("Archives — Gallica (BnF)", [
+        Host("gallica.bnf.fr", "fonds français", "fetch"),
+    ], optional=True),
+    Group("Archives — Library of Congress", [
+        Host("www.loc.gov", "recherche", "fetch"),
+        Host("tile.loc.gov", "téléchargement", "fetch"),
+    ], optional=True),
+    Group("Banque d'images et vidéos — Pexels", [
+        Host("api.pexels.com", "recherche", "fetch"),
+        Host("images.pexels.com", "photos", "fetch"),
+        Host("videos.pexels.com", "rushes vidéo", "fetch"),
+    ], optional=True),
+    Group("Génération d'images — Gemini", [
+        Host("generativelanguage.googleapis.com", "génération", "images"),
+    ]),
+    Group("Voix de finition — ElevenLabs", [
+        Host("api.elevenlabs.io", "voix payante", "voice --provider elevenlabs"),
+    ], optional=True),
+]
+
+
+def probe(hostname: str) -> str:
+    """Return 'ok', 'bloqué', or a short failure description."""
+    url = f"https://{hostname}/"
+    request = Request(url, headers={"User-Agent": "Fresque/0.1 (doctor)"})
+    try:
+        with urlopen(request, timeout=TIMEOUT):
+            return "ok"
+    except HTTPError:
+        # Any HTTP status means the connection itself succeeded.
+        return "ok"
+    except URLError as error:
+        reason = str(error.reason)
+        if "403" in reason or "Forbidden" in reason or "Tunnel" in reason:
+            return "bloqué"
+        if isinstance(error.reason, (socket.timeout, TimeoutError)):
+            return "délai dépassé"
+        if isinstance(error.reason, ssl.SSLError):
+            return "erreur TLS"
+        return f"injoignable ({reason[:40]})"
+    except (socket.timeout, TimeoutError):
+        return "délai dépassé"
+    except OSError as error:  # pragma: no cover - environment dependent
+        return f"erreur réseau ({error})"
+
+
+def check_local() -> list[tuple[str, bool, str]]:
+    """Things that must exist on disk, independent of the network."""
+    root = config.repo_root()
+    model = root / str(config.get("voix", "kokoro", "model", default="models/kokoro-v1.0.onnx"))
+    voices = root / str(config.get("voix", "kokoro", "voices", default="models/voices-v1.0.bin"))
+
+    checks: list[tuple[str, bool, str]] = [
+        ("modèle Kokoro", model.is_file(), str(model.relative_to(root))),
+        ("voix Kokoro", voices.is_file(), str(voices.relative_to(root))),
+        ("Remotion installé", (root / "remotion" / "node_modules").is_dir(), "remotion/node_modules"),
+    ]
+
+    try:
+        import kokoro_onnx  # noqa: F401
+        checks.append(("paquet kokoro-onnx", True, "importable"))
+    except ImportError:
+        checks.append(("paquet kokoro-onnx", False, "pip install kokoro-onnx soundfile"))
+
+    for key, needed_for in (
+        ("GEMINI_API_KEY", "génération d'images"),
+        ("ELEVENLABS_API_KEY", "voix de finition (optionnel)"),
+        ("PEXELS_API_KEY", "banque d'images (optionnel)"),
+    ):
+        checks.append((f"clé {key}", bool(os.environ.get(key)), needed_for))
+
+    return checks
+
+
+def run(report=print) -> tuple[bool, list[str]]:
+    """Probe everything. Returns (essentials_ok, hosts to add to the allowlist)."""
+    blocked: list[str] = []
+    essentials_ok = True
+
+    report("Réseau")
+    for group in GROUPS:
+        statuses = []
+        for host in group.hosts:
+            status = probe(host.name)
+            group.results[host.name] = status
+            statuses.append(status)
+            mark = "✓" if status == "ok" else "✗"
+            suffix = "" if status == "ok" else f"  ({status})"
+            report(f"  {mark} {host.name:<38} {host.why}{suffix}")
+            if status != "ok":
+                blocked.append(host.name)
+        usable = all(s == "ok" for s in statuses)
+        if not usable and not group.optional:
+            essentials_ok = False
+        report(f"    → {group.label} : "
+               + ("utilisable" if usable else
+                  "INUTILISABLE" + (" (optionnel)" if group.optional else "")))
+
+    report("")
+    report("Local")
+    for label, present, detail in check_local():
+        report(f"  {'✓' if present else '·'} {label:<24} {detail}")
+
+    return essentials_ok, blocked
+
+
+def allowlist(blocked: list[str]) -> str:
+    """The lines to paste into the environment's Custom allowed-domains field."""
+    wildcards = {
+        "ia800000.us.archive.org": "*.us.archive.org",
+    }
+    seen: list[str] = []
+    for host in blocked:
+        entry = wildcards.get(host, host)
+        if entry not in seen:
+            seen.append(entry)
+    return "\n".join(seen)

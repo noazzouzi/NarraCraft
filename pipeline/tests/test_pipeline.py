@@ -234,3 +234,29 @@ def test_credit_line_names_work_author_and_licence():
 def test_thumbnail_is_preferred_over_the_original():
     """The originals run to tens of megabytes; the 1920px rendering is enough."""
     assert _candidates()[0].file_url.endswith("1920px.jpg")
+
+
+# --- Diagnostic --------------------------------------------------------------
+
+from fresque.doctor import GROUPS, allowlist  # noqa: E402
+
+
+def test_allowlist_collapses_download_subdomains():
+    """archive.org serves files from ia######.us.archive.org, never one fixed
+    host, so the allowlist has to carry the wildcard rather than the probe."""
+    lines = allowlist(["archive.org", "ia800000.us.archive.org"]).splitlines()
+    assert lines == ["archive.org", "*.us.archive.org"]
+
+
+def test_allowlist_deduplicates():
+    assert allowlist(["a.example", "a.example", "b.example"]).splitlines() == [
+        "a.example", "b.example",
+    ]
+
+
+def test_every_archive_group_lists_its_file_host():
+    """A provider whose API is allowed but whose file host is not looks healthy
+    and then fails at download time. Both must be probed."""
+    for group in GROUPS:
+        if "Archives" in group.label and len(group.hosts) == 1:
+            assert "gallica" in group.label.lower(), group.label
