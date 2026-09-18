@@ -1,0 +1,76 @@
+# Fresque — réglages de production
+# Toute valeur ajustable du pipeline vit ici. Rien en dur dans le code.
+
+production:
+  langue: fr
+  duree_cible_min: 15          # minutes de montage final visé
+  tolerance_duree_pct: 15      # ±15% acceptable avant re-découpe du script
+
+narration:
+  # Débit de lecture d'une voix off documentaire française.
+  # Plus lent que l'anglais et plus lent que la parole courante : le silence
+  # fait partie du format. Sert à convertir mots <-> durée dans le script.
+  mots_par_minute: 140
+  # Respiration insérée entre deux actes, en secondes. Compte dans la durée.
+  pause_entre_actes_s: 1.2
+  pause_entre_beats_s: 0.4
+
+structure:
+  # Découpage narratif par défaut. Le skill script peut s'en écarter s'il
+  # justifie pourquoi dans le brief.
+  actes: 4
+  # Une relance de rétention (question ouverte, révélation, changement de
+  # rythme) au moins tous les N secondes.
+  relance_retention_s: 90
+  # Durée cible du hook d'ouverture, avant le premier respire.
+  hook_s: 20
+
+voix:
+  provider: elevenlabs
+  voice_id: ""                 # à renseigner : voix FR grave, débit posé
+  model: eleven_multilingual_v2
+  stability: 0.45              # bas = plus expressif, haut = plus monotone
+  similarity_boost: 0.8
+  speed: 0.95                  # légèrement ralenti pour le registre documentaire
+  # Indispensable : c'est l'alignement mot-à-mot qui synchronise tout le montage.
+  with_timestamps: true
+
+visuels:
+  # Ordre de préférence des sources. On ne génère que ce qu'on n'a pas trouvé.
+  strategie: archives_d_abord
+  sources_archives:
+    - wikimedia_commons
+    - archive_org
+    - gallica                  # BnF — excellent sur les sujets français
+    - loc                      # Library of Congress
+    - pexels
+  generation:
+    provider: gemini
+    model: gemini-2.5-flash-image
+    ratio: "16:9"
+    # Plafond de sécurité : au-delà, le pipeline s'arrête et demande.
+    max_images_par_projet: 120
+  # Nombre de visuels visé par minute de montage.
+  plans_par_minute: 8
+
+montage:
+  resolution: [1920, 1080]
+  fps: 30
+  # Mouvement appliqué aux images fixes. Le soin mis ici fait toute la
+  # différence entre un zoom moche et un mouvement crédible.
+  ken_burns:
+    zoom_min: 1.04
+    zoom_max: 1.18
+    easing: easeInOutCubic
+    derive_max_pct: 6          # translation max, en % de la largeur
+    micro_rotation_deg: 0.4
+  traitement:
+    grain: 0.06
+    vignette: 0.25
+  sous_titres:
+    actifs: true
+    mots_par_ligne: 7
+
+budget:
+  # Le pipeline refuse de continuer au-delà, et demande confirmation.
+  max_eur_par_projet: 8.0
