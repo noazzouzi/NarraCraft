@@ -179,3 +179,58 @@ def test_free_licence_detection():
     assert not is_free_licence("Fair use")
     assert not is_free_licence("All rights reserved")
     assert not is_free_licence(None)
+
+
+# --- Archive sourcing --------------------------------------------------------
+#
+# The live API is unreachable from the environment this was written in, so the
+# parsing and filtering are pinned against a recorded response instead. These
+# cover the decisions that actually matter: what gets refused, and why.
+
+import json  # noqa: E402
+
+from fresque.sources.wikimedia import _to_candidates  # noqa: E402
+
+FIXTURE = Path(__file__).with_name("fixtures_wikimedia.json")
+
+
+def _candidates(limit: int = 10, min_width: int = 1280):
+    pages = json.loads(FIXTURE.read_text(encoding="utf-8"))["query"]["pages"]
+    return _to_candidates(pages, limit=limit, min_width=min_width)
+
+
+def test_only_the_usable_candidate_survives():
+    found = _candidates()
+    assert [c.title for c in found] == ["RMS Titanic 3.jpg"]
+
+
+def test_non_free_licence_is_refused():
+    assert all("poster" not in c.title for c in _candidates())
+
+
+def test_low_resolution_is_refused():
+    assert all(c.width >= 1280 for c in _candidates())
+    assert all("Tiny" not in c.title for c in _candidates())
+
+
+def test_unsupported_format_is_refused():
+    assert all(not c.title.endswith(".svg") for c in _candidates())
+
+
+def test_metadata_is_stripped_of_markup():
+    best = _candidates()[0]
+    assert best.author == "F. G. O. Stuart"
+    assert "<" not in best.credit()
+    assert "RMS Titanic departing Southampton" in best.extra["description"]
+
+
+def test_credit_line_names_work_author_and_licence():
+    credit = _candidates()[0].credit()
+    assert "RMS Titanic 3.jpg" in credit
+    assert "F. G. O. Stuart" in credit
+    assert "Public domain" in credit
+
+
+def test_thumbnail_is_preferred_over_the_original():
+    """The originals run to tens of megabytes; the 1920px rendering is enough."""
+    assert _candidates()[0].file_url.endswith("1920px.jpg")

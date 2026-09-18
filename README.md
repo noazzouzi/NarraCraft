@@ -21,6 +21,11 @@ dans un état invisible.
 cp .env.example .env              # puis renseigner les clés
 pip install -r pipeline/requirements.txt
 npm install --prefix remotion     # moteur de rendu
+
+# Voix locale : modèle Kokoro (~340 Mo, une fois pour toutes)
+mkdir -p models && cd models
+curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
 ```
 
 Une seule clé est nécessaire : **Gemini**, pour les images. La voix tourne en
@@ -48,12 +53,18 @@ Entre ces deux points et jusqu'au fichier final, rien ne t'interrompt.
 Les étapes mécaniques s'appellent aussi à la main, sur n'importe quel projet :
 
 ```bash
-python -m fresque align  <slug>   # timings depuis le script
+python -m fresque align  <slug>   # timings estimés, sans audio
 python -m fresque shots  <slug>   # valider le plan visuel
+python -m fresque voice  <slug>   # voix Kokoro + timings réels
+python -m fresque fetch  <slug>   # sourcer les archives libres
 python -m fresque timeline <slug> # construire le montage
 python -m fresque render <slug>   # produire le mp4
 python -m fresque status <slug>   # où en est le projet
 ```
+
+`fetch --dry-run` cherche et affiche les archives trouvées sans rien
+télécharger — utile pour juger la qualité des requêtes avant de remplir le
+disque.
 
 `python -m fresque placeholders <slug>` fabrique des visuels de substitution :
 tu peux regarder le montage, juger le rythme et le découpage **avant** d'avoir
@@ -80,18 +91,26 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 2 | Écriture : brief → recherche → script | fait |
 | 5 | Timeline et rendu Remotion | fait |
 | 4a | Plan visuel (skill) et validation | fait |
-| 4b | Sourcing Wikimedia Commons | écrit, non testé |
+| 3a | Voix off Kokoro, durées réelles | fait |
+| 4b | Sourcing Wikimedia Commons | écrit, non exécuté ici |
 | 4c | Génération d'images Gemini | à venir |
-| 3 | Voix off (Kokoro / ElevenLabs) et alignement forcé | à venir |
+| 3b | Alignement forcé mot-à-mot | à venir |
 | 6 | Motion graphics : cartes, unes de journaux, archives | à venir |
 | 7 | Page de validation, miniature, export vers éditeur | à venir |
 
-En attendant la voix, les timings sont **estimés** à partir du compte de mots.
-Le format est identique à celui de l'alignement forcé, donc brancher la voix
-plus tard ne changera pas une ligne du montage.
+Les durées de beat sont désormais **mesurées sur l'audio Kokoro**, donc les
+coupes tombent exactement là où la narration change. Seule la position d'un
+mot à l'intérieur d'un beat reste estimée, ce qui n'affecte que les
+sous-titres.
 
-Le sourcing Wikimedia est écrit mais n'a pas pu être exercé contre l'API :
-elle est bloquée depuis l'environnement où il a été développé.
+Le sourcing Wikimedia est écrit et couvert par des tests sur réponse
+enregistrée, mais n'a jamais été exercé contre l'API réelle : elle était
+bloquée depuis l'environnement de développement. À valider en premier.
+
+**Temps de rendu** : mesuré à 0,053 s par frame sur 4 cœurs, soit environ
+1,6× la durée de la vidéo. Remotion plafonne la concurrence au nombre de
+cœurs, donc le temps décroît proportionnellement : sur 8 cœurs, un
+documentaire de 15 min se rend en une douzaine de minutes.
 
 Tests : `PYTHONPATH=pipeline python3 -m pytest pipeline/tests -q`
 

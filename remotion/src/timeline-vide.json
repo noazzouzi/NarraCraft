@@ -6,6 +6,7 @@
   "duree_frames": 60,
   "duree_s": 2,
   "source_timings": "vide",
+  "audio": null,
   "traitement": { "grain": 0.06, "vignette": 0.25 },
   "clips": [],
   "sous_titres": [],

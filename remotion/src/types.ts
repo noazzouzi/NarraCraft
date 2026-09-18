@@ -37,6 +37,7 @@ export type Timeline = {
   duree_frames: number;
   duree_s: number;
   source_timings: string;
+  audio: string | null;
   traitement: { grain?: number; vignette?: number };
   clips: Clip[];
   sous_titres: SousTitre[];

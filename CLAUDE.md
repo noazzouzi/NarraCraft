@@ -59,7 +59,19 @@ Deux raisons, et elles comptent :
    montage en aval ne change.
 
 Règle qui en découle : **ne jamais consommer les timestamps renvoyés par un
-moteur TTS.** La seule source de vérité temporelle est `alignment.json`.
+moteur TTS.** La seule source de vérité temporelle est `alignment.json`, dont
+le champ `source` dit toujours d'où viennent les nombres :
+
+| `source` | Bornes de beat | Position des mots | Coût |
+|---|---|---|---|
+| `estimate` | estimées | estimées | nul, sans audio |
+| `kokoro` | **mesurées sur l'audio** | estimées par syllabes | nul, local |
+| `forced` | mesurées | mesurées | alignement forcé |
+
+`kokoro` mesure la longueur réelle de la forme d'onde produite — ce n'est pas
+un timestamp rapporté par le moteur. Les coupes du montage tombent donc au bon
+endroit dès maintenant ; seule la position d'un mot *à l'intérieur* d'un beat
+reste approchée, ce qui n'affecte que les sous-titres.
 
 ## Anatomie d'un projet
 

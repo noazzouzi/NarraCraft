@@ -119,6 +119,7 @@ def build(
     alignment: dict[str, Any],
     shots: list[Shot],
     assets: dict[str, dict[str, Any]],
+    audio: str | None = None,
 ) -> dict[str, Any]:
     fps = int(config.get("montage", "fps", default=30))
     width, height = config.get("montage", "resolution", default=[1920, 1080])
@@ -180,6 +181,7 @@ def build(
         "duree_frames": duration_frames,
         "duree_s": round(duration_frames / fps, 3),
         "source_timings": alignment.get("source", "inconnu"),
+        "audio": audio,
         "traitement": config.get("montage", "traitement", default={}),
         "clips": clips,
         "sous_titres": subtitles,

@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Sequence } from "remotion";
+import { AbsoluteFill, Audio, Sequence, staticFile } from "remotion";
 import { Plan } from "./Plan";
 import { SousTitre } from "./SousTitre";
 import { Traitement } from "./Traitement";
@@ -9,10 +9,12 @@ import type { Timeline } from "./types";
  *  move and every subtitle window was decided by the Python pipeline from the
  *  real word timings. See CLAUDE.md. */
 export const Documentaire: React.FC<Timeline> = (timeline) => {
-  const { clips, sous_titres, traitement } = timeline;
+  const { clips, sous_titres, traitement, audio } = timeline;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
+      {audio ? <Audio src={staticFile(audio)} /> : null}
+
       {clips.map((clip) => (
         <Sequence
           key={clip.id}

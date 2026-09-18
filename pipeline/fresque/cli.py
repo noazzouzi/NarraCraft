@@ -37,6 +37,32 @@ def cmd_align(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_voice(args: argparse.Namespace) -> int:
+    from . import align as align_mod, voice as voice_mod
+
+    project = Project.open(args.slug)
+    script = script_parser.parse(project.script)
+
+    def progress(done: int, total: int, seconds: float) -> None:
+        print(f"\r  {done}/{total} beats · {align.format_duration(seconds)}",
+              end="", flush=True)
+
+    try:
+        alignment = voice_mod.synthesize(script, project.audio_dir, progress)
+    except voice_mod.VoiceError as error:
+        print()
+        return _fail(str(error))
+
+    print()
+    align_mod.write(alignment, project.alignment)
+    print(f"✓ {project.audio_dir.name}/voix.wav")
+    print(f"  {alignment['nb_beats']} beats · "
+          f"{align.format_duration(alignment['duree_totale_s'])}")
+    print(f"  voix {alignment['voix']['voice']} · vitesse {alignment['voix']['speed']}")
+    print("  durées de beat mesurées sur l'audio réel")
+    return 0
+
+
 def cmd_shots(args: argparse.Namespace) -> int:
     project = Project.open(args.slug)
     script = script_parser.parse(project.script)
@@ -47,6 +73,39 @@ def cmd_shots(args: argparse.Namespace) -> int:
     print(f"✓ {len(plan)} plans sur {len(script.beats)} beats")
     for kind, count in sorted(kinds.items()):
         print(f"  {kind:<10} {count}")
+    return 0
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    from . import fetch as fetch_mod
+
+    project = Project.open(args.slug)
+    script = script_parser.parse(project.script)
+    plan = shots_mod.load(project.shots, [b.id for b in script.beats])
+
+    archives = [s for s in plan if s.type == "archive"]
+    generated = [s for s in plan if s.type == "generated"]
+    print(f"→ {len(archives)} plans d'archive, {len(generated)} à générer")
+
+    try:
+        assets, unsourced = fetch_mod.fetch_archives(
+            archives, project.visuals_dir, report=print, dry_run=args.dry_run
+        )
+    except fetch_mod.FetchError as error:
+        return _fail(str(error))
+
+    if not args.dry_run:
+        merged = fetch_mod.merge_assets(project.assets, assets)
+        fetch_mod.write_assets(merged, project.assets)
+        print(f"✓ {len(assets)} archives → {project.assets.name}")
+    else:
+        print(f"(simulation) {len(assets)} archives trouvées, rien téléchargé")
+
+    if unsourced:
+        print(f"  ⚠ {len(unsourced)} plan(s) sans archive : {', '.join(unsourced)}")
+        print("    → reformuler la requête, ou basculer le plan en `generated`")
+    if generated:
+        print(f"  · {len(generated)} plan(s) `generated` en attente du jalon 4c")
     return 0
 
 
@@ -62,7 +121,7 @@ def cmd_placeholders(args: argparse.Namespace) -> int:
         name = f"{shot.id}.jpg"
         card(shot, project.visuals_dir / name)
         assets[shot.id] = {
-            "fichier": name,
+            "fichier": f"05-visuals/{name}",
             "source": "placeholder",
             "licence": "n/a",
             "credit": None,
@@ -88,7 +147,11 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     if project.assets.is_file():
         assets = json.loads(project.assets.read_text(encoding="utf-8")).get("assets", {})
 
-    timeline = timeline_mod.build(alignment, plan, assets)
+    voix = project.audio_dir / "voix.wav"
+    timeline = timeline_mod.build(
+        alignment, plan, assets,
+        audio="04-audio/voix.wav" if voix.is_file() else None,
+    )
     timeline_mod.write(timeline, project.timeline)
 
     problems = timeline_mod.check(timeline)
@@ -97,6 +160,7 @@ def cmd_timeline(args: argparse.Namespace) -> int:
           f"{len(timeline['sous_titres'])} lignes de sous-titres")
     print(f"  {timeline['duree_frames']} frames à {timeline['fps']} fps "
           f"= {align.format_duration(timeline['duree_s'])}")
+    print(f"  audio : {timeline['audio'] or 'aucun (muet)'}")
     if timeline["source_timings"] == "estimate":
         print("  ⚠ construit sur des timings estimés")
     if problems:
@@ -129,7 +193,7 @@ def cmd_render(args: argparse.Namespace) -> int:
     command = [
         "npx", "remotion", "render", "Documentaire", str(output),
         f"--props={project.timeline}",
-        f"--public-dir={project.visuals_dir}",
+        f"--public-dir={project.root}",
         f"--concurrency={args.concurrency}",
     ]
     if args.browser:
@@ -177,6 +241,12 @@ def main(argv: list[str] | None = None) -> int:
     align_cmd = add("align", "Estimer les timings depuis le script", cmd_align)
     align_cmd.add_argument("--target", type=float, help="durée cible en minutes")
     add("shots", "Valider le plan visuel", cmd_shots)
+    add("voice", "Synthétiser la voix off (Kokoro)", cmd_voice)
+    fetch_cmd = add("fetch", "Sourcer les archives libres", cmd_fetch)
+    fetch_cmd.add_argument(
+        "--dry-run", action="store_true",
+        help="chercher et afficher sans rien télécharger",
+    )
     add("placeholders", "Générer des visuels de substitution", cmd_placeholders)
     add("timeline", "Construire 06-timeline.json", cmd_timeline)
     render_cmd = add("render", "Rendre la vidéo avec Remotion", cmd_render)

@@ -46,8 +46,13 @@ voix:
     # d'alternative dans ce modèle. Sur du long format, la prosodie se
     # répète — c'est le compromis assumé du mode itération.
     voice: ff_siwis
-    lang_code: f
-    speed: 0.92
+    lang: fr-fr
+    # Mesuré : 0.82 donne ~140 mots/min, le débit documentaire visé.
+    # À 1.0 la voix monte à ~170, ce qui sonne comme un reportage télé.
+    speed: 0.82
+    # Téléchargés depuis les releases GitHub de kokoro-onnx (voir README).
+    model: models/kokoro-v1.0.onnx
+    voices: models/voices-v1.0.bin
 
   elevenlabs:
     voice_id: ""               # à renseigner : voix FR grave, débit posé
