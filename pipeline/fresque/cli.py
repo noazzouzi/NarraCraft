@@ -109,6 +109,43 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_images(args: argparse.Namespace) -> int:
+    from . import fetch as fetch_mod, images as images_mod
+
+    project = Project.open(args.slug)
+
+    if args.list_models:
+        try:
+            names = images_mod.image_models()
+        except (images_mod.ImageError, Exception) as error:  # noqa: BLE001
+            return _fail(str(error))
+        print("Modèles d'image servis par l'API :")
+        for name in names:
+            print(f"  {name}")
+        return 0
+
+    script = script_parser.parse(project.script)
+    plan = shots_mod.load(project.shots, [b.id for b in script.beats])
+    todo = [s for s in plan if s.type == "generated"]
+    if not todo:
+        print("Aucun plan `generated` — rien à produire.")
+        return 0
+
+    print(f"→ {len(todo)} image(s) à générer")
+    try:
+        assets, failures = images_mod.generate_all(todo, project.visuals_dir, report=print)
+    except images_mod.ImageError as error:
+        return _fail(str(error))
+
+    merged = fetch_mod.merge_assets(project.assets, assets)
+    fetch_mod.write_assets(merged, project.assets)
+    print(f"✓ {len(assets)} image(s) → {project.assets.name}")
+    if failures:
+        print(f"  ✗ {len(failures)} échec(s) : {', '.join(s for s, _ in failures)}")
+        return 1
+    return 0
+
+
 def cmd_placeholders(args: argparse.Namespace) -> int:
     from .placeholders import card
 
@@ -273,6 +310,11 @@ def main(argv: list[str] | None = None) -> int:
     fetch_cmd.add_argument(
         "--dry-run", action="store_true",
         help="chercher et afficher sans rien télécharger",
+    )
+    images_cmd = add("images", "Générer les images manquantes (Gemini)", cmd_images)
+    images_cmd.add_argument(
+        "--list-models", action="store_true",
+        help="interroger l'API pour connaître les modèles d'image disponibles",
     )
     add("placeholders", "Générer des visuels de substitution", cmd_placeholders)
     add("timeline", "Construire 06-timeline.json", cmd_timeline)

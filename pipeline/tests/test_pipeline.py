@@ -260,3 +260,71 @@ def test_every_archive_group_lists_its_file_host():
     for group in GROUPS:
         if "Archives" in group.label and len(group.hosts) == 1:
             assert "gallica" in group.label.lower(), group.label
+
+
+# --- Génération d'images -----------------------------------------------------
+
+import base64 as _b64  # noqa: E402
+
+from fresque import images as images_mod  # noqa: E402
+from fresque.images import ImageError, _extract_image, build_prompt  # noqa: E402
+
+
+def test_prompt_carries_the_art_direction():
+    """One art direction across the whole video matters more than any single
+    image, so it is prefixed mechanically rather than trusted to the skill."""
+    shot = Shot(index=0, beat="B001", type="generated", prompt="Un couloir inondé")
+    prompt = build_prompt(shot)
+    assert "Un couloir inondé" in prompt
+    assert "documentaire" in prompt.lower()
+    assert prompt.endswith(".")
+
+
+def test_image_is_extracted_from_inline_data():
+    payload = {"candidates": [{"content": {"parts": [
+        {"text": "voici"},
+        {"inlineData": {"mimeType": "image/png", "data": _b64.b64encode(b"PNGDATA").decode()}},
+    ]}}]}
+    data, extension = _extract_image(payload)
+    assert data == b"PNGDATA"
+    assert extension == ".png"
+
+
+def test_snake_case_inline_data_is_also_accepted():
+    payload = {"candidates": [{"content": {"parts": [
+        {"inline_data": {"mime_type": "image/jpeg", "data": _b64.b64encode(b"JPG").decode()}},
+    ]}}]}
+    assert _extract_image(payload)[1] == ".jpg"
+
+
+def test_a_refusal_reports_the_api_reason():
+    """A silent empty image is the worst failure mode: it looks like a bug in
+    our code when the API actually refused the prompt."""
+    payload = {"candidates": [{"finishReason": "SAFETY", "content": {"parts": []}}]}
+    with pytest.raises(ImageError, match="SAFETY"):
+        _extract_image(payload)
+
+
+def test_block_reason_is_reported_when_there_is_no_candidate():
+    payload = {"candidates": [], "promptFeedback": {"blockReason": "PROHIBITED_CONTENT"}}
+    with pytest.raises(ImageError, match="PROHIBITED_CONTENT"):
+        _extract_image(payload)
+
+
+def test_missing_key_names_both_ways_to_supply_it(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(ImageError, match="API credential"):
+        images_mod.api_key()
+
+
+def test_generation_refuses_to_exceed_the_budget_cap(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    monkeypatch.setattr(
+        images_mod.config, "get",
+        lambda *keys, default=None: 2 if keys[-1] == "max_images_par_projet" else default,
+    )
+    shots = [
+        Shot(index=i, beat=f"B{i:03d}", type="generated", prompt="p") for i in range(3)
+    ]
+    with pytest.raises(ImageError, match="plafond"):
+        images_mod.generate_all(shots, tmp_path)

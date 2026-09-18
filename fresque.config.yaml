@@ -85,6 +85,13 @@ visuels:
     provider: gemini
     model: gemini-2.5-flash-image
     ratio: "16:9"
+    # Préfixée à chaque prompt. Une direction artistique unique pour toute la
+    # vidéo compte plus que la qualité d'une image isolée : cinq styles
+    # différents détruisent l'illusion, une image moyenne non.
+    direction_artistique: >-
+      Photographie documentaire d'archive, grain argentique fin,
+      lumière naturelle contrastée, palette désaturée, sans texte
+      ni inscription visible
     # Plafond de sécurité : au-delà, le pipeline s'arrête et demande.
     max_images_par_projet: 120
   # Nombre de visuels visé par minute de montage.
