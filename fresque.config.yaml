@@ -14,6 +14,9 @@ narration:
   # Respiration insérée entre deux actes, en secondes. Compte dans la durée.
   pause_entre_actes_s: 1.2
   pause_entre_beats_s: 0.4
+  # Respirations internes à un beat, déduites de la ponctuation.
+  pause_phrase_s: 0.45      # après . ! ? …
+  pause_virgule_s: 0.18     # après , ; :
 
 structure:
   # Découpage narratif par défaut. Le skill script peut s'en écarter s'il

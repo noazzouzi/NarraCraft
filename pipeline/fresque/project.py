@@ -1,0 +1,61 @@
+"""Project paths. A project is a directory of files, nothing more."""
+from __future__ import annotations
+
+import unicodedata
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+from . import config
+
+
+def slugify(text: str) -> str:
+    """kebab-case, ASCII only — see CLAUDE.md conventions."""
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
+    return re.sub(r"-{2,}", "-", slug)
+
+
+@dataclass(frozen=True)
+class Project:
+    slug: str
+    root: Path
+
+    @classmethod
+    def open(cls, slug: str) -> "Project":
+        root = config.repo_root() / "projects" / slug
+        if not root.is_dir():
+            raise FileNotFoundError(f"Projet introuvable : {root}")
+        return cls(slug=slug, root=root)
+
+    @classmethod
+    def create(cls, title: str) -> "Project":
+        slug = slugify(title)
+        root = config.repo_root() / "projects" / slug
+        (root / "04-audio" / "beats").mkdir(parents=True, exist_ok=True)
+        (root / "05-visuals").mkdir(parents=True, exist_ok=True)
+        (root / "07-out").mkdir(parents=True, exist_ok=True)
+        return cls(slug=slug, root=root)
+
+    # Numbered files are read in order; a step never reads what follows it.
+    @property
+    def brief(self) -> Path: return self.root / "00-brief.md"
+    @property
+    def research(self) -> Path: return self.root / "01-research.md"
+    @property
+    def script(self) -> Path: return self.root / "02-script.md"
+    @property
+    def shots(self) -> Path: return self.root / "03-shots.json"
+    @property
+    def audio_dir(self) -> Path: return self.root / "04-audio"
+    @property
+    def alignment(self) -> Path: return self.root / "04-audio" / "alignment.json"
+    @property
+    def visuals_dir(self) -> Path: return self.root / "05-visuals"
+    @property
+    def assets(self) -> Path: return self.root / "05-visuals" / "assets.json"
+    @property
+    def timeline(self) -> Path: return self.root / "06-timeline.json"
+    @property
+    def out_dir(self) -> Path: return self.root / "07-out"

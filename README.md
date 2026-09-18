@@ -18,7 +18,9 @@ dans un état invisible.
 ## Installation
 
 ```bash
-cp .env.example .env   # puis renseigner les clés
+cp .env.example .env              # puis renseigner les clés
+pip install -r pipeline/requirements.txt
+npm install --prefix remotion     # moteur de rendu
 ```
 
 Une seule clé est nécessaire : **Gemini**, pour les images. La voix tourne en
@@ -43,6 +45,20 @@ Le pipeline s'arrête à deux endroits, et deux seulement :
 
 Entre ces deux points et jusqu'au fichier final, rien ne t'interrompt.
 
+Les étapes mécaniques s'appellent aussi à la main, sur n'importe quel projet :
+
+```bash
+python -m fresque align  <slug>   # timings depuis le script
+python -m fresque shots  <slug>   # valider le plan visuel
+python -m fresque timeline <slug> # construire le montage
+python -m fresque render <slug>   # produire le mp4
+python -m fresque status <slug>   # où en est le projet
+```
+
+`python -m fresque placeholders <slug>` fabrique des visuels de substitution :
+tu peux regarder le montage, juger le rythme et le découpage **avant** d'avoir
+sourcé ou généré la moindre image.
+
 ## Coût
 
 Environ **2,50 à 4 € par documentaire de quinze minutes**, presque
@@ -62,14 +78,22 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 |---|---|---|
 | 1 | Structure, configuration, conventions | fait |
 | 2 | Écriture : brief → recherche → script | fait |
+| 5 | Timeline et rendu Remotion | fait |
+| 4a | Plan visuel (skill) et validation | fait |
+| 4b | Sourcing Wikimedia Commons | écrit, non testé |
+| 4c | Génération d'images Gemini | à venir |
 | 3 | Voix off (Kokoro / ElevenLabs) et alignement forcé | à venir |
-| 4 | Plan visuel, archives, génération d'images | à venir |
-| 5 | Timeline et rendu Remotion | à venir |
 | 6 | Motion graphics : cartes, unes de journaux, archives | à venir |
 | 7 | Page de validation, miniature, export vers éditeur | à venir |
 
-Le jalon 2 est utilisable seul et ne coûte rien : on peut écrire et itérer
-sur autant de scripts qu'on veut avant de brancher la moindre API payante.
+En attendant la voix, les timings sont **estimés** à partir du compte de mots.
+Le format est identique à celui de l'alignement forcé, donc brancher la voix
+plus tard ne changera pas une ligne du montage.
+
+Le sourcing Wikimedia est écrit mais n'a pas pu être exercé contre l'API :
+elle est bloquée depuis l'environnement où il a été développé.
+
+Tests : `PYTHONPATH=pipeline python3 -m pytest pipeline/tests -q`
 
 ---
 
