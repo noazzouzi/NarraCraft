@@ -83,7 +83,7 @@ visuels:
     - pexels
   generation:
     provider: gemini
-    model: gemini-2.5-flash-image
+    model: gemini-3.1-flash-image
     ratio: "16:9"
     # Préfixée à chaque prompt. Une direction artistique unique pour toute la
     # vidéo compte plus que la qualité d'une image isolée : cinq styles

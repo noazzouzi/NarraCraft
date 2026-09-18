@@ -25,6 +25,9 @@ TIMEOUT = 120.0
 
 IMAGE_MIMES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
 
+MINUTE_QUOTA_RETRIES = 3
+BACKOFF_S = 20.0
+
 
 class ImageError(RuntimeError):
     pass
@@ -74,6 +77,46 @@ def build_prompt(shot: Shot) -> str:
     return ". ".join(p.strip().rstrip(".") for p in parts if p.strip()) + "."
 
 
+def quota_kind(payload: dict[str, Any]) -> tuple[str, str]:
+    """Classify a 429 body as ('minute'|'day'|'inconnu', quota id).
+
+    The distinction decides what to do, so it is worth reading properly:
+    a per-minute quota clears on its own and deserves a backoff, a per-day
+    quota does not and must fail loudly instead of retrying for an hour.
+    """
+    for detail in payload.get("error", {}).get("details", []) or []:
+        if not isinstance(detail, dict):
+            continue
+        for violation in detail.get("violations", []) or []:
+            quota_id = violation.get("quotaId", "")
+            if "PerDay" in quota_id:
+                return "day", quota_id
+            if "PerMinute" in quota_id:
+                return "minute", quota_id
+            if quota_id:
+                return "inconnu", quota_id
+    return "inconnu", ""
+
+
+class QuotaExhausted(ImageError):
+    """A quota that will not clear by waiting a few seconds."""
+
+
+def _raise_for_quota(payload: dict[str, Any], model: str) -> None:
+    kind, quota_id = quota_kind(payload)
+    free_tier = "FreeTier" in quota_id
+    if kind == "day":
+        raise QuotaExhausted(
+            f"{model} : quota journalier épuisé ({quota_id}).\n"
+            + ("  Le palier gratuit ne suffit pas pour la génération d'images. "
+               "Activer la facturation sur le projet Google Cloud de la clé, "
+               "ou attendre la remise à zéro quotidienne."
+               if free_tier else
+               "  Attendre la remise à zéro, ou relever le quota du projet.")
+        )
+    raise ImageError(f"{model} : quota atteint ({quota_id or 'non précisé'})")
+
+
 def _extract_image(payload: dict[str, Any]) -> tuple[bytes, str]:
     candidates = payload.get("candidates") or []
     for candidate in candidates:
@@ -105,18 +148,29 @@ def generate(
     )
     prompt = build_prompt(shot)
 
-    response = http.post(
-        f"{API_ROOT}/models/{model}:generateContent",
-        params={"key": api_key()},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseModalities": ["IMAGE"]},
-        },
-        timeout=TIMEOUT,
-    )
-    if response.status_code >= 400:
-        message = response.text[:300]
-        raise ImageError(f"{model} a répondu {response.status_code} : {message}")
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseModalities": ["IMAGE"]},
+    }
+    url = f"{API_ROOT}/models/{model}:generateContent"
+
+    # A per-minute quota clears on its own; anything else is pointless to retry.
+    for attempt in range(MINUTE_QUOTA_RETRIES + 1):
+        response = http.post(
+            url, params={"key": api_key()}, json=body, timeout=TIMEOUT
+        )
+        if response.status_code == 429:
+            payload = response.json() if response.content else {}
+            kind, _ = quota_kind(payload)
+            if kind == "minute" and attempt < MINUTE_QUOTA_RETRIES:
+                time.sleep(BACKOFF_S * (2 ** attempt))
+                continue
+            _raise_for_quota(payload, model)
+        if response.status_code >= 400:
+            raise ImageError(
+                f"{model} a répondu {response.status_code} : {response.text[:300]}"
+            )
+        break
 
     data, extension = _extract_image(response.json())
     destination_dir.mkdir(parents=True, exist_ok=True)
@@ -164,6 +218,15 @@ def generate_all(
         try:
             assets[shot.id] = generate(shot, destination_dir, session=http)
             say(f"  ✓ {shot.id} ({index}/{len(todo)})")
+        except QuotaExhausted as error:
+            # Nothing will succeed today — stop rather than burn through the
+            # remaining shots collecting the same error.
+            say(f"  ✗ {shot.id} : {error}")
+            failures.append((shot.id, str(error)))
+            remaining = len(todo) - index
+            if remaining:
+                say(f"  · {remaining} plan(s) non tentés : quota épuisé")
+            break
         except (ImageError, requests.RequestException) as error:
             say(f"  ✗ {shot.id} : {error}")
             failures.append((shot.id, str(error)))

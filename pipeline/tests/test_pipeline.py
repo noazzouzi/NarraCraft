@@ -328,3 +328,72 @@ def test_generation_refuses_to_exceed_the_budget_cap(monkeypatch, tmp_path):
     ]
     with pytest.raises(ImageError, match="plafond"):
         images_mod.generate_all(shots, tmp_path)
+
+
+# --- Quotas ------------------------------------------------------------------
+#
+# Pinned against the real 429 bodies the API returned on 2026-09-18. The
+# minute/day distinction decides whether waiting helps, so it has to be read
+# from the payload rather than guessed from the status code.
+
+from fresque.images import QuotaExhausted, _raise_for_quota, quota_kind  # noqa: E402
+
+DAY_QUOTA = {"error": {"code": 429, "details": [
+    {"violations": [{
+        "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+        "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+    }]},
+]}}
+
+MINUTE_QUOTA = {"error": {"code": 429, "details": [
+    {"violations": [{
+        "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_input_token_count",
+        "quotaId": "GenerateContentInputTokensPerModelPerMinute-FreeTier",
+    }]},
+]}}
+
+
+def test_daily_quota_is_recognised():
+    kind, quota_id = quota_kind(DAY_QUOTA)
+    assert kind == "day"
+    assert "PerDay" in quota_id
+
+
+def test_per_minute_quota_is_recognised():
+    assert quota_kind(MINUTE_QUOTA)[0] == "minute"
+
+
+def test_daily_quota_raises_the_non_retryable_error_and_names_the_fix():
+    with pytest.raises(QuotaExhausted, match="facturation"):
+        _raise_for_quota(DAY_QUOTA, "gemini-3.1-flash-image")
+
+
+def test_per_minute_quota_is_not_treated_as_exhausted():
+    """It clears on its own, so it must stay a plain ImageError the caller retries."""
+    with pytest.raises(ImageError) as caught:
+        _raise_for_quota(MINUTE_QUOTA, "m")
+    assert not isinstance(caught.value, QuotaExhausted)
+
+
+def test_unparseable_quota_body_does_not_crash():
+    assert quota_kind({}) == ("inconnu", "")
+    assert quota_kind({"error": {"details": [None, {"violations": []}]}}) == ("inconnu", "")
+
+
+def test_exhausted_quota_stops_the_whole_run(monkeypatch, tmp_path):
+    """Burning through ninety more shots to collect the same error wastes
+    minutes and tells the user nothing new."""
+    attempts = []
+
+    def boom(shot, destination_dir, model=None, session=None):
+        attempts.append(shot.id)
+        raise QuotaExhausted("quota journalier épuisé")
+
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    monkeypatch.setattr(images_mod, "generate", boom)
+    shots = [Shot(index=i, beat=f"B{i:03d}", type="generated", prompt="p") for i in range(5)]
+
+    assets, failures = images_mod.generate_all(shots, tmp_path, pause=0)
+    assert assets == {}
+    assert len(attempts) == 1
+    assert len(failures) == 1
