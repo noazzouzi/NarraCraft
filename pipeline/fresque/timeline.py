@@ -170,6 +170,7 @@ def build(
     assets: dict[str, dict[str, Any]],
     audio: str | None = None,
     sons_dir: str | None = None,
+    musique: str | None = None,
 ) -> dict[str, Any]:
     fps = int(config.get("montage", "fps", default=30))
     width, height = config.get("montage", "resolution", default=[1920, 1080])
@@ -291,8 +292,30 @@ def build(
             "typographie": config.get("montage", "typographie", default={}),
             "traitement": config.get("montage", "traitement", default={}),
             "motion": config.get("montage", "motion", default={}),
+            # Le moteur dessine les transitions, il n'en choisit ni la force
+            # ni la couleur : un flash à pleine puissance sur une façade en
+            # plein soleil blanchit l'écran, et c'est au template de dire
+            # jusqu'où il va.
+            "transitions": {
+                "flash_opacite": float(config.get(
+                    "montage", "transitions", "flash_opacite", default=0.35)),
+                "glisse_pct": float(config.get(
+                    "montage", "transitions", "glisse_pct", default=9)),
+                "punch_pct": float(config.get(
+                    "montage", "transitions", "punch_pct", default=5)),
+            },
         },
         "clips": clips,
+        # Le lit sonore. Le moteur le boucle : il n'a pas à savoir combien de
+        # fois, seulement à quel volume et sur quelle durée de fondu.
+        "musique": {
+            "fichier": musique,
+            "gain": float(config.get("montage", "musique", "gain", default=0.07)),
+            "fondu_frames": round(
+                float(config.get("montage", "musique", "fondu_s", default=3.0)) * fps
+            ),
+        } if musique and config.get("montage", "musique", "actif", default=True)
+        else None,
         "sons": sound_track,
         "sous_titres": subtitles,
         "credits": [

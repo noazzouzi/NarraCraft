@@ -1412,3 +1412,69 @@ def test_two_shots_of_the_same_beat_never_share_an_image(tmp_path):
 
     assert list(assets) == ["S000"]
     assert absents == ["S001"]
+
+
+def test_the_music_loop_joins_seamlessly():
+    """La boucle tourne pendant un quart d'heure : un raccord audible
+    deviendrait le seul événement de la bande."""
+    import numpy as np
+
+    from fresque import sons as sons_mod
+
+    for mode in sons_mod.MODES:
+        piste = sons_mod.musique(6.0, 55.0, mode)
+        # Le raccord se mesure à la marche entre la dernière et la première
+        # valeur : au-delà d'un millième de la pleine échelle, ça claque.
+        assert abs(piste[0] - piste[-1]) < 0.01, mode
+        assert np.abs(piste).max() <= 1.0
+
+
+def test_each_mode_lands_on_its_own_interval():
+    """Le mode est ce qui fait qu'un template ne sonne pas comme un autre."""
+    import numpy as np
+
+    from fresque import sons as sons_mod
+
+    def pics(mode):
+        x = sons_mod.musique(8.0, 55.0, mode)
+        f = np.fft.rfftfreq(len(x), 1 / sons_mod.RATE)
+        m = np.abs(np.fft.rfft(x))
+        return {round(p) for p in f[np.argsort(m)[-6:]]}
+
+    # Tierce mineure à 65 Hz pour « sombre », majeure à 69 pour « clair ».
+    assert 65 in pics("sombre")
+    assert 69 in pics("clair")
+    assert 65 not in pics("sobre") and 69 not in pics("sobre")
+
+
+def test_an_unknown_musical_mode_is_refused():
+    from fresque import sons as sons_mod
+
+    with pytest.raises(ValueError, match="mode musical"):
+        sons_mod.musique(1.0, 55.0, "disco")
+
+
+def test_template_overview_says_where_each_value_comes_from():
+    """Un template dit ce qui change, jamais ce que ça donne. C'est
+    précisément ce que cette vue répare."""
+    from fresque import apercu as apercu_mod
+
+    donnees = apercu_mod.resume("documentaire-historique")
+    plat = {chemin: source
+            for _, lignes in donnees["axes"] for chemin, _, source in lignes}
+
+    assert plat["narration.mots_par_minute"] == "template"
+    assert plat["montage.musique.mode"] == "template"
+    # Hérité : le template ne parle ni de résolution ni de fréquence d'images.
+    assert plat["montage.fps"] == "base"
+
+
+def test_template_page_is_static_and_self_contained(tmp_path):
+    from fresque import apercu as apercu_mod
+
+    sortie = apercu_mod.page("documentaire-historique", tmp_path / "t.html")
+    page = sortie.read_text(encoding="utf-8")
+    assert "<script" not in page, "la page doit être statique"
+    assert "http://" not in page and "https://" not in page
+    # Les couleurs du template y figurent comme pastilles.
+    assert "#c9a227" in page

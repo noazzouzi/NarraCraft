@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
-import type { Entree as EntreeSpec } from "./types";
+import type { Entree as EntreeSpec, StyleTransitions } from "./types";
 
 const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
 
@@ -18,6 +18,7 @@ const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
 export const enveloppe = (
   entree: EntreeSpec | undefined,
   frame: number,
+  style: StyleTransitions,
 ): React.CSSProperties => {
   if (!entree) return {};
   const n = Math.max(entree.duree_frames, 1);
@@ -31,12 +32,12 @@ export const enveloppe = (
     case "flash":
       // A small punch outwards that settles. Under a quarter of a second it
       // is felt as impact rather than seen as a zoom.
-      return { transform: `scale(${1 + (1 - t) * 0.05})` };
+      return { transform: `scale(${1 + (1 - t) * style.punch_pct / 100})` };
     case "glisse":
       // The incoming frame slides in and the blur sells the speed. Without
       // the blur it reads as a slideshow control, with it as a whip pan.
       return {
-        transform: `translateX(${(1 - t) * 9}%)`,
+        transform: `translateX(${(1 - t) * style.glisse_pct}%)`,
         filter: `blur(${(1 - t) * 14}px)`,
       };
     default:
@@ -45,7 +46,10 @@ export const enveloppe = (
 };
 
 /** The part that sits on top of the image. */
-export const Entree: React.FC<{ entree?: EntreeSpec }> = ({ entree }) => {
+export const Entree: React.FC<{
+  entree?: EntreeSpec;
+  style: StyleTransitions;
+}> = ({ entree, style }) => {
   const frame = useCurrentFrame();
   if (!entree || entree.type === "coupe" || entree.type === "glisse") {
     return null;
@@ -56,7 +60,7 @@ export const Entree: React.FC<{ entree?: EntreeSpec }> = ({ entree }) => {
   if (entree.type === "flash") {
     // Decays much faster than the transition's nominal length: a flash you
     // can watch is a fault, not an edit.
-    const opacity = interpolate(frame, [0, n * 0.45], [0.55, 0], {
+    const opacity = interpolate(frame, [0, n * 0.45], [style.flash_opacite, 0], {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
     });

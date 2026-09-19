@@ -264,6 +264,16 @@ montage:
     # les changements de beat et d'acte en portent un.
     sons: true
 
+    # Force des effets, appliquée par le moteur qui n'en décide rien.
+    # Mesuré : à 0,55 un flash sur une façade en plein soleil blanchit
+    # franchement l'écran. 0,35 se sent comme une impulsion sans se voir
+    # comme un défaut.
+    flash_opacite: 0.35
+    # Translation d'entrée d'un glissement, en % de la largeur.
+    glisse_pct: 9
+    # Sur-échelle d'un flash, en %. Au-delà de 8 on voit un zoom.
+    punch_pct: 5
+
   # Direction artistique. Transportée par la timeline jusqu'au moteur de
   # rendu, qui ne fait que l'appliquer. Un template la redéfinit — c'est ce
   # qui fera qu'un documentaire criminel et un documentaire historique ne se
@@ -293,6 +303,30 @@ montage:
     famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
     # Secondes pendant lesquelles chaque élément apparaît, en cascade.
     cascade_s: 0.45
+
+  # Lit sonore de fond. Ni rythme ni mélodie : tout ce qui en a entre en
+  # concurrence avec la voix off, et le spectateur suit l'un ou l'autre,
+  # jamais les deux. On cherche l'inverse — quelque chose qu'on ne remarque
+  # qu'en l'enlevant.
+  #
+  # Synthétisé par `fresque.sons`, comme les transitions, et pour les mêmes
+  # raisons : aucune licence à suivre, aucun hôte qui disparaît, un fichier
+  # identique d'une machine à l'autre. C'est un bloc que chaque template
+  # redéfinit — c'est ce qui fait qu'un documentaire criminel et un
+  # documentaire historique ne sonnent pas pareil.
+  musique:
+    actif: true
+    # Relatif à la voix. Au-delà de 0,12 on l'entend comme de la musique.
+    gain: 0.07
+    # Montée au début, descente à la fin. Un lit qui démarre sec s'entend.
+    fondu_s: 3.0
+    # Longueur de la boucle. Elle est sans couture par construction, pas
+    # par fondu croisé : chaque partiel compte un nombre entier de cycles.
+    boucle_s: 40
+    # La ou G1. Assez grave pour ne jamais croiser la voix.
+    tonique_hz: 55
+    # sobre · sombre · tendu · clair — voir `sons.MODES`.
+    mode: sobre
 
   sous_titres:
     actifs: true

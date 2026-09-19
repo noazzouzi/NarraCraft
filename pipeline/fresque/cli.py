@@ -287,11 +287,22 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     sons_dir = "04-audio/sons"
     sons_mod.build(project.root / sons_dir)
 
+    musique = None
+    if config.get("montage", "musique", "actif", default=True):
+        musique = f"{sons_dir}/musique.wav"
+        sons_mod.build_musique(
+            project.root / musique,
+            duree_s=float(config.get("montage", "musique", "boucle_s", default=40)),
+            tonique_hz=float(config.get("montage", "musique", "tonique_hz", default=55)),
+            mode=str(config.get("montage", "musique", "mode", default="sobre")),
+        )
+
     voix = project.audio_dir / "voix.wav"
     timeline = timeline_mod.build(
         alignment, plan, assets,
         audio="04-audio/voix.wav" if voix.is_file() else None,
         sons_dir=sons_dir,
+        musique=musique,
     )
     timeline_mod.write(timeline, project.timeline)
 
@@ -400,6 +411,8 @@ def _stage_public_dir(project: Project) -> Path:
         wanted.add(timeline["audio"])
     for son in timeline.get("sons", []):
         wanted.add(son["fichier"])
+    if (timeline.get("musique") or {}).get("fichier"):
+        wanted.add(timeline["musique"]["fichier"])
 
     staging = project.root / ".render"
     if staging.exists():
@@ -416,6 +429,43 @@ def _stage_public_dir(project: Project) -> Path:
     total = sum(f.stat().st_size for f in staging.rglob("*") if f.is_file())
     print(f"  {len(wanted)} fichier(s) exposés au rendu · {total / 1_048_576:.1f} Mo")
     return staging
+
+
+def cmd_template(args: argparse.Namespace) -> int:
+    from . import apercu as apercu_mod
+
+    connus = config.available_templates()
+    if not args.nom:
+        print(f"{len(connus)} template(s) :")
+        for nom in connus:
+            resume = apercu_mod.resume(nom)
+            meta = resume["meta"]
+            print(f"  {nom:<28} {meta.get('nom', '')} "
+                  f"· {resume['nb_propres']} réglages propres")
+        print("\n`fresque template <nom>` pour le détail, `--html` pour la page.")
+        return 0
+
+    try:
+        if args.html:
+            # La boucle sonore n'existe qu'une fois un projet monté ; on la
+            # copie à côté de la page pour qu'elle soit écoutable.
+            sortie = Path(args.html)
+            musique = None
+            if args.projet:
+                project = Project.open(args.projet)
+                source = project.root / "04-audio/sons/musique.wav"
+                if source.is_file():
+                    import shutil
+                    sortie.parent.mkdir(parents=True, exist_ok=True)
+                    musique = sortie.parent / "musique.wav"
+                    shutil.copy2(source, musique)
+            apercu_mod.page(args.nom, sortie, musique)
+            print(f"✓ {sortie}")
+            return 0
+        print(apercu_mod.texte(args.nom, tout=args.tout))
+    except config.TemplateError as error:
+        return _fail(str(error))
+    return 0
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -520,11 +570,29 @@ def main(argv: list[str] | None = None) -> int:
     )
     add("status", "État d'avancement du projet", cmd_status)
 
-    # No slug: doctor checks the installation, not a project.
+    # No slug: these two describe the installation, not a project.
     doctor_cmd = sub.add_parser(
         "doctor", help="Vérifier accès réseau, modèles et dépendances"
     )
     doctor_cmd.set_defaults(handler=cmd_doctor)
+
+    template_cmd = sub.add_parser(
+        "template", help="Voir ce qu'un template contient, et d'où vient chaque valeur"
+    )
+    template_cmd.set_defaults(handler=cmd_template)
+    template_cmd.add_argument("nom", nargs="?", help="sans nom : liste les templates")
+    template_cmd.add_argument(
+        "--tout", action="store_true",
+        help="afficher aussi les valeurs héritées de la config de base",
+    )
+    template_cmd.add_argument(
+        "--html", metavar="FICHIER", default=None,
+        help="écrire une page statique montrant la direction artistique",
+    )
+    template_cmd.add_argument(
+        "--projet", default=None,
+        help="slug d'un projet monté, pour joindre sa boucle sonore à la page",
+    )
 
     args = parser.parse_args(argv)
     try:

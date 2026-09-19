@@ -3,7 +3,7 @@ import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, staticFile, use
 import { Entree, enveloppe } from "./Entree";
 import { MotionGraphic } from "./Motion";
 import { Traitement } from "./Traitement";
-import type { Clip, MotionStyle, Palette } from "./types";
+import type { Clip, MotionStyle, Palette, StyleTransitions } from "./types";
 
 const EASINGS: Record<string, (t: number) => number> = {
   easeInOutCubic: Easing.bezier(0.65, 0, 0.35, 1),
@@ -21,6 +21,7 @@ type PlanProps = {
   palette: Palette;
   motionStyle: MotionStyle;
   traitement: { grain?: number; vignette?: number };
+  transitions: StyleTransitions;
 };
 
 /** One shot, with the way it arrives wrapped around it.
@@ -32,10 +33,10 @@ export const Plan: React.FC<PlanProps> = (props) => {
   const frame = useCurrentFrame();
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
-      <AbsoluteFill style={enveloppe(props.clip.entree, frame)}>
+      <AbsoluteFill style={enveloppe(props.clip.entree, frame, props.transitions)}>
         <Contenu {...props} />
       </AbsoluteFill>
-      <Entree entree={props.clip.entree} />
+      <Entree entree={props.clip.entree} style={props.transitions} />
     </AbsoluteFill>
   );
 };

@@ -75,11 +75,20 @@ export type MotionStyle = {
   cascade_s: number;
 };
 
+/** How hard the transitions hit. Set by the template, applied by the
+ *  renderer, decided by neither. */
+export type StyleTransitions = {
+  flash_opacite: number;
+  glisse_pct: number;
+  punch_pct: number;
+};
+
 export type Style = {
   palette: Palette;
   typographie: Typographie;
   traitement: { grain?: number; vignette?: number };
   motion: MotionStyle;
+  transitions: StyleTransitions;
 };
 
 export type Timeline = {
@@ -97,6 +106,9 @@ export type Timeline = {
   /** Transition sounds, synthesised locally by `fresque.sons`. They lead
    *  their cut rather than landing on it. */
   sons: { fichier: string; debut_frame: number; gain: number }[];
+  /** The background bed, looped for the whole film. Null when the template
+   *  turns it off. */
+  musique: { fichier: string; gain: number; fondu_frames: number } | null;
   sous_titres: SousTitre[];
   credits: { asset: string; credit: string; url: string; licence: string }[];
 };

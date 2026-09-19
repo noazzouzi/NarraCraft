@@ -159,3 +159,100 @@ def build(directory: Path, force: bool = False) -> dict[str, str]:
             _write(path, make(), np)
         produced[name] = path.name
     return produced
+
+
+# --- Musique de fond ---------------------------------------------------------
+#
+# Un lit sonore, pas une musique. Il n'a ni rythme ni mélodie, parce que tout
+# ce qui en a entre en concurrence avec la voix off : le spectateur suit l'un
+# ou l'autre, jamais les deux. Ce qu'on cherche est l'inverse — quelque chose
+# qu'on ne remarque qu'en l'enlevant.
+#
+# Synthétisée ici pour les mêmes raisons que les transitions : aucune licence
+# à suivre, aucun hôte qui disparaît, un fichier identique d'une machine à
+# l'autre. Une piste téléchargée « libre de droit » demande de vérifier sa
+# licence, de la stocker, et de la re-vérifier à chaque publication.
+
+#: Intervalles en demi-tons, depuis la tonique. Le mode change le caractère
+#: du lit sans rien changer au code — c'est ce qui permet à un template de
+#: sonner autrement qu'un autre.
+MODES = {
+    # Mineur sans tierce : grave, ouvert, ne raconte rien de lui-même.
+    "sobre": (0, 7, 12, 19),
+    # Tierce mineure ajoutée : nettement plus sombre.
+    "sombre": (0, 3, 7, 12, 15),
+    # Quarte et quinte : tendu, sans être triste.
+    "tendu": (0, 5, 7, 12, 17),
+    # Tierce majeure : ouvert, presque serein.
+    "clair": (0, 4, 7, 12, 16),
+}
+
+
+def musique(duree_s: float = 40.0, tonique_hz: float = 55.0,
+            mode: str = "sobre") -> "np.ndarray":
+    """Un bourdon bouclable, de `duree_s` secondes.
+
+    La boucle est sans couture par construction : chaque partiel et chaque
+    oscillation lente compte un nombre **entier** de cycles sur la durée
+    totale. Un fondu croisé aux extrémités marcherait aussi, mais il laisse
+    une respiration audible toutes les quarante secondes, et sur un quart
+    d'heure elle devient le seul événement de la bande.
+    """
+    import numpy as np
+
+    if mode not in MODES:
+        raise ValueError(
+            f"mode musical {mode!r} inconnu (attendu : {', '.join(MODES)})"
+        )
+
+    n = int(RATE * duree_s)
+    t = np.arange(n, dtype="float64") / RATE
+    base = 1.0 / duree_s  # fréquence dont toutes les autres sont multiples
+
+    melange = np.zeros(n)
+    for rang, demi_tons in enumerate(MODES[mode]):
+        cible = tonique_hz * 2 ** (demi_tons / 12)
+        # Ramenée au multiple entier le plus proche de la fondamentale de la
+        # boucle : c'est ce qui rend le raccord inaudible.
+        freq = max(round(cible / base), 1) * base
+
+        # Les partiels aigus s'effacent : un bourdon dont les harmoniques
+        # tiennent le même niveau que la fondamentale devient un bourdonnement.
+        poids = 1.0 / (1.0 + rang * 1.4)
+
+        # Deux voix légèrement désaccordées par partiel. Le battement lent
+        # qui en résulte est ce qui empêche le lit de sonner comme une
+        # tonalité de test.
+        voix = np.zeros(n)
+        for ecart in (-1.0, 1.0):
+            detune = max(round((freq + ecart * base) / base), 1) * base
+            voix += np.sin(2.0 * np.pi * detune * t + rang * 1.7)
+
+        # Chaque partiel respire à son propre rythme, en cycles entiers lui
+        # aussi. Décalés, ils font que l'accord ne se présente jamais deux
+        # fois dans le même équilibre.
+        cycles = 1 + rang
+        respiration = 0.72 + 0.28 * np.sin(2.0 * np.pi * cycles * base * t + rang)
+        melange += poids * voix * respiration
+
+    # Enveloppe d'ensemble : une houle très lente, deux cycles par boucle.
+    houle = 0.82 + 0.18 * np.sin(2.0 * np.pi * 2 * base * t)
+    melange *= houle
+
+    # Un plancher de bruit filtré très bas, pour l'air. Sans lui le bourdon
+    # sonne synthétique ; avec, il a une pièce autour de lui.
+    air = _sweep(_noise(n, np), 220.0, 220.0, np)
+    melange += 0.05 * air / (np.abs(air).max() or 1.0)
+
+    return melange / (np.abs(melange).max() or 1.0)
+
+
+def build_musique(destination: Path, duree_s: float = 40.0,
+                  tonique_hz: float = 55.0, mode: str = "sobre",
+                  force: bool = False) -> Path:
+    """Écrit la boucle si elle n'existe pas déjà."""
+    import numpy as np
+
+    if force or not destination.is_file():
+        _write(destination, musique(duree_s, tonique_hz, mode), np)
+    return destination

@@ -133,6 +133,36 @@ montage:
     grain: 0.06
     vignette: 0.25
 
+  # Lit sonore. Sol grave plutôt que la, et tierce mineure : sur un sujet
+  # judiciaire, le lit doit peser sans commenter. Le gain reste sous le
+  # seuil où l'on entend « de la musique » — à ce niveau on ne le remarque
+  # qu'en l'enlevant, et c'est le but.
+  musique:
+    mode: sombre
+    tonique_hz: 49
+    gain: 0.06
+    fondu_s: 4.0
+
+  # Comment un plan arrive. Le format supporte des flashs, mais moins
+  # appuyés qu'ailleurs : sur une façade en plein soleil, un flash à pleine
+  # force blanchit l'écran.
+  transitions:
+    duree_s: 0.3
+    fondu_noir_s: 0.6
+    amorce_s: 0.12
+    gain: 0.20
+
+  # Panneaux graphiques. Un or vieilli sur un fond d'encre : c'est la
+  # couleur du document officiel, et elle distingue immédiatement ce
+  # template d'un documentaire criminel ou d'un portrait d'entreprise.
+  motion:
+    fond: "#0b0d11"
+    texte: "#f2f4f8"
+    accent: "#c9a227"
+    attenue: "#7c8698"
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    cascade_s: 0.4
+
   palette:
     fond: "#000000"
     sous_titre: "#f4f6fa"
