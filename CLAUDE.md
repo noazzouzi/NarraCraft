@@ -142,6 +142,23 @@ Ne pas ajouter de checkpoint sans raison explicite de l'utilisateur.
 (Les skills des jalons suivants — plan visuel, voix, visuels, montage — sont
 à venir. Voir `README.md` pour l'état d'avancement.)
 
+## Style de réponse
+
+Répondre court. L'utilisateur suit une discussion longue, pas un rapport.
+
+- Phrases simples, une idée par phrase.
+- Puces plutôt que paragraphes.
+- Ne dire que ce qui change quelque chose pour lui : un résultat, une
+  décision, un blocage, une question.
+- Pas de récapitulatif de ce qu'il vient de lire. Pas de justification d'un
+  choix qu'il n'a pas contesté. Pas de reformulation de sa demande.
+- Un tableau seulement quand il remplace du texte, jamais quand il s'ajoute.
+- Signaler les échecs et les réserves, brièvement, sans les développer tant
+  qu'on ne les creuse pas.
+
+Le détail va dans les fichiers du dépôt et les messages de commit, pas dans
+la réponse.
+
 ## Conventions
 
 - **Langue de production : français.** Les scripts, briefs et recherches sont
