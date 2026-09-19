@@ -55,8 +55,22 @@ noté l'accroche de huit mots qui l'accompagnera à l'écran : s'y tenir.
 **4. Placer les relances.** Tous les `relance_retention_s` secondes au
 maximum — c'est-à-dire tous les ~`relance_retention_s × mots_par_minute / 60`
 mots — il faut un changement d'état : une révélation, une question ouverte,
-un changement de rythme, un changement de lieu ou d'échelle. Les marquer
-dans la colonne de contrôle en fin de fichier.
+un changement de rythme, un changement de lieu ou d'échelle.
+
+**Les déclarer dans le beat**, avec une ligne `> relance:` juste après
+l'intention :
+
+```markdown
+### B038
+> intention: une vue de Beyrouth, toits et mer
+> relance: révélation : le témoin meurt deux jours avant le verdict
+Le 23 septembre 2025, Ziad Takieddine meurt à Beyrouth.
+```
+
+Une relance ne se reconnaît pas au texte : une révélation et une explication
+sont les mêmes mots pour une machine. C'est donc toi qui la déclares, et le
+lint ne vérifie que l'espacement. Un beat de fin d'acte compte déjà comme un
+changement d'état, la ligne y est facultative.
 
 **5. Lancer `python -m fresque lint <slug>`** et corriger jusqu'à ce qu'il ne
 reste aucune violation bloquante. Ce n'est pas optionnel : les règles de ce
@@ -89,6 +103,7 @@ Tel qu'il sera prononcé, mot pour mot.
 
 ### B002
 > intention: <...>
+> relance: <facultatif — la nature du changement d'état>
 ...
 ```
 
@@ -101,6 +116,8 @@ Règles de format, strictes :
   montage devient haché.
 - La ligne `> intention:` est obligatoire et fait **une seule ligne**. Elle
   décrit ce que le spectateur voit, pas ce qu'il entend.
+- La ligne `> relance:` est facultative, et fait une seule ligne aussi. Elle
+  dit la nature du changement d'état, et rien de plus.
 - Le corps du beat ne contient **que le texte prononcé**. Aucune didascalie,
   aucun crochet, aucune indication de mise en scène — tout cela partirait
   tel quel dans la synthèse vocale.
@@ -185,6 +202,7 @@ un fait plutôt qu'une question, chaque acte se termine sur une question
 ouverte, le pivot est présent et audible, aucune phrase ne demande de
 reprendre son souffle en cours de route.
 
-Terminer `02-script.md` par une section `## Contrôle` avec ces points-là,
-plus un tableau des relances (numéro de beat et nature). L'utilisateur doit
-pouvoir vérifier le travail sans relire le script en entier.
+Terminer `02-script.md` par une section `## Contrôle` avec ces points-là.
+L'utilisateur doit pouvoir vérifier le travail sans relire le script en
+entier. Pas de tableau des relances : elles sont déclarées dans les beats,
+et le lint en vérifie l'espacement.

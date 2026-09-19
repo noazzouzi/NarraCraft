@@ -483,6 +483,20 @@ def _rules_hit(violations) -> set[str]:
     return {v.rule for v in violations}
 
 
+def test_retention_counts_from_the_last_declared_relance(tmp_path):
+    """Une relance ne se reconnaît pas au texte : elle se déclare."""
+    long = _beat("B001", "mot " * 160) + _beat("B002", "mot " * 160)
+    assert "rétention" in _rules_hit(lint_mod.check(_script_from(long, tmp_path)))
+
+    # Le même texte, coupé par une relance déclarée, ne déclenche plus rien.
+    coupe = (
+        _beat("B001", "mot " * 160)
+        + "### B002\n> intention: x\n> relance: révélation\n"
+        + "mot " * 160 + "\n"
+    )
+    assert "rétention" not in _rules_hit(lint_mod.check(_script_from(coupe, tmp_path)))
+
+
 def test_a_hook_that_opens_on_a_question_is_caught(tmp_path):
     script = _script_from(
         _beat("B001", "Que se passe-t-il quand un président entre en prison ? "

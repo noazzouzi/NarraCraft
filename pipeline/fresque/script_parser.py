@@ -14,6 +14,10 @@ from pathlib import Path
 ACT_RE = re.compile(r"^##\s+Acte\s+([IVXLC\d]+)\s*[—–-]\s*(.+?)\s*$")
 BEAT_RE = re.compile(r"^###\s+(B\d{3})\s*$")
 INTENT_RE = re.compile(r"^>\s*intention\s*:\s*(.+?)\s*$", re.IGNORECASE)
+#: Optional. Marks a beat as a change of state — a revelation, an open
+#: question, a change of scale. Nothing in the spoken text lets a machine
+#: recognise one, so the writer declares it and the lint checks the spacing.
+RELANCE_RE = re.compile(r"^>\s*relance\s*:\s*(.+?)\s*$", re.IGNORECASE)
 HEADING_RE = re.compile(r"^#{1,6}\s")
 
 # Stage directions that must never reach the speech synthesiser.
@@ -32,6 +36,9 @@ class Beat:
     intention: str
     text: str
     line: int = 0
+    #: Non-empty when this beat is declared a retention beat, and saying what
+    #: kind. See RELANCE_RE.
+    relance: str = ""
 
     @property
     def word_count(self) -> int:
@@ -110,6 +117,11 @@ def parse(path: Path) -> Script:
                     "(une seule, sur une seule ligne)."
                 )
             current.intention = intent_match.group(1)
+            continue
+
+        relance_match = RELANCE_RE.match(line)
+        if relance_match:
+            current.relance = relance_match.group(1)
             continue
 
         if line.strip() == "---":

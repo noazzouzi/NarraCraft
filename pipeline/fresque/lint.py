@@ -146,29 +146,38 @@ def rule_word_budget(script: Script) -> Iterator[Violation]:
 
 
 def rule_retention(script: Script) -> Iterator[Violation]:
-    """A stretch with no change of state is where viewers leave."""
+    """A stretch with no change of state is where viewers leave.
+
+    A relance cannot be recognised from the text: a revelation and a piece of
+    exposition are the same words to a machine. So the writer declares one
+    with a `> relance:` line, and this rule only checks the spacing between
+    them. A script that declares none is measured act by act, which is the
+    weakest useful reading of the rule rather than a silent pass.
+    """
     wpm = float(config.get("narration", "mots_par_minute", default=140))
     every_s = float(config.get("structure", "relance_retention_s", default=90))
     limit_words = every_s * wpm / 60
 
     run = 0.0
     start: Beat | None = None
-    for beat in script.beats:
+    for index, beat in enumerate(script.beats):
         if start is None:
             start = beat
         run += beat.word_count
-        # An act boundary is itself a change of state.
-        if beat is not script.beats[-1]:
-            following = script.beats[script.beats.index(beat) + 1]
-            if following.act != beat.act:
-                run, start = 0.0, None
-                continue
+
+        # A declared relance, or an act boundary, is a change of state.
+        suivant = script.beats[index + 1] if index + 1 < len(script.beats) else None
+        if beat.relance or (suivant is not None and suivant.act != beat.act):
+            run, start = 0.0, None
+            continue
+
         if run > limit_words:
             yield Violation(
                 start.id if start else beat.id, "rétention",
-                f"{run:.0f} mots depuis la dernière relance "
+                f"{run:.0f} mots sans relance déclarée "
                 f"({run / wpm * 60:.0f} s, limite {every_s:.0f} s) — "
-                "révélation, question ouverte ou changement d'échelle attendu.",
+                "marquer le beat qui change l'état du récit avec une ligne "
+                "`> relance: <nature>`, ou en écrire un.",
                 blocking=False,
             )
             run, start = 0.0, None
