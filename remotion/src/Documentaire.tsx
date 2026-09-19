@@ -5,6 +5,36 @@ import { Plan } from "./Plan";
 import { SousTitre } from "./SousTitre";
 import type { Timeline } from "./types";
 
+/** Le lit sonore et sa courbe de volume.
+ *
+ *  Sorti en composant parce que la courbe n'a pas toujours le même nombre
+ *  de points : une entrée nulle en supprime un, et `interpolate` exige une
+ *  plage strictement croissante — `[0, 0, …]` lève une erreur au premier
+ *  frame rendu. */
+const MusiqueDeFond: React.FC<{
+  musique: NonNullable<Timeline["musique"]>;
+  duree: number;
+}> = ({ musique, duree }) => {
+  const entree = Math.max(musique.fondu_entree_frames, 0);
+  const sortie = Math.max(duree - musique.fondu_sortie_frames, entree + 1);
+  const bornes = entree > 0 ? [0, entree, sortie, duree] : [0, sortie, duree];
+  const niveaux = entree > 0 ? [0, 1, 1, 0] : [1, 1, 0];
+
+  return (
+    <Audio
+      src={staticFile(musique.fichier)}
+      loop
+      volume={(frame) =>
+        musique.gain *
+        interpolate(frame, bornes, niveaux, {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        })
+      }
+    />
+  );
+};
+
 /** Plays back 06-timeline.json. It computes nothing: every cut, every camera
  *  move and every subtitle window was decided by the Python pipeline from the
  *  real word timings. See CLAUDE.md. */
@@ -23,27 +53,7 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
           la sortie reste longue, parce qu'une coupe nette à la fin
           s'entend comme une panne. */}
       {musique ? (
-        <Audio
-          src={staticFile(musique.fichier)}
-          loop
-          volume={(frame) =>
-            musique.gain *
-            interpolate(
-              frame,
-              [
-                0,
-                Math.max(musique.fondu_entree_frames, 0),
-                Math.max(
-                  duree_frames - musique.fondu_sortie_frames,
-                  musique.fondu_entree_frames + 1,
-                ),
-                duree_frames,
-              ],
-              [musique.fondu_entree_frames > 0 ? 0 : 1, 1, 1, 0],
-              { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-            )
-          }
-        />
+        <MusiqueDeFond musique={musique} duree={duree_frames} />
       ) : null}
 
       {/* Transition sounds. Each one starts slightly before its cut — the
