@@ -451,3 +451,91 @@ def test_variants_go_from_specific_to_loose():
     assert steps[0] == ("Titanic boiler room stokers 1912", 1920)
     assert steps[-1][1] == 800
     assert len(steps) == len(set(steps))
+
+
+# --- Lint du script ----------------------------------------------------------
+#
+# Chaque règle correspond à une consigne qui vivait en prose dans un skill,
+# où rien ne la vérifiait. Le test prouve qu'elle est désormais contraignante.
+
+from fresque import lint as lint_mod  # noqa: E402
+
+
+def _script_from(body: str, tmp_path: Path) -> script_parser.Script:
+    path = tmp_path / "02-script.md"
+    path.write_text(f"# T\n\n## Acte I — A\n\n{body}\n", encoding="utf-8")
+    return script_parser.parse(path)
+
+
+def _beat(identifier: str, text: str) -> str:
+    return f"### {identifier}\n> intention: x\n{text}\n"
+
+
+def _rules_hit(violations) -> set[str]:
+    return {v.rule for v in violations}
+
+
+def test_hour_written_in_digits_is_caught(tmp_path):
+    script = _script_from(_beat("B001", "Il est 01h23 et " + "mot " * 30), tmp_path)
+    assert "synthèse-heure" in _rules_hit(lint_mod.check(script))
+
+
+def test_percent_sign_is_caught(tmp_path):
+    script = _script_from(_beat("B001", "Environ 12% du navire. " + "mot " * 30), tmp_path)
+    assert "synthèse-pourcentage" in _rules_hit(lint_mod.check(script))
+
+
+def test_ellipsis_and_em_dash_are_caught(tmp_path):
+    script = _script_from(_beat("B001", "Et puis... plus rien. " + "mot " * 30), tmp_path)
+    assert "synthèse-suspension" in _rules_hit(lint_mod.check(script))
+
+
+def test_unpunctuated_acronym_is_caught(tmp_path):
+    script = _script_from(_beat("B001", "L'URSS a nié. " + "mot " * 30), tmp_path)
+    hits = [v for v in lint_mod.check(script) if v.rule == "synthèse-acronyme"]
+    assert hits and "URSS" in hits[0].message
+
+
+def test_spoken_acronym_is_allowed(tmp_path):
+    script = _script_from(_beat("B001", "L'OTAN a nié. " + "mot " * 30), tmp_path)
+    assert "synthèse-acronyme" not in _rules_hit(lint_mod.check(script))
+
+
+def test_channel_boilerplate_is_caught(tmp_path):
+    script = _script_from(_beat("B001", "Abonnez-vous maintenant. " + "mot " * 30), tmp_path)
+    assert "interdit" in _rules_hit(lint_mod.check(script))
+
+
+def test_overlong_sentence_is_caught_with_its_excerpt(tmp_path):
+    long_sentence = " ".join(f"mot{i}" for i in range(32)) + "."
+    script = _script_from(_beat("B001", long_sentence), tmp_path)
+    hits = [v for v in lint_mod.check(script) if v.rule == "longueur-phrase"]
+    assert hits and hits[0].excerpt
+
+
+def test_beat_too_long_is_caught(tmp_path):
+    script = _script_from(_beat("B001", "mot " * 80), tmp_path)
+    hits = [v for v in lint_mod.check(script) if v.rule == "longueur-beat"]
+    assert hits and "maximum" in hits[0].message
+
+
+def test_budget_is_a_warning_not_a_blocker(tmp_path):
+    """La longueur est un arbitrage humain : on le signale, on ne bloque pas."""
+    script = _script_from(_beat("B001", "mot " * 40), tmp_path)
+    budget = [v for v in lint_mod.check(script) if v.rule == "budget"]
+    assert budget and not budget[0].blocking
+
+
+def test_a_clean_beat_raises_nothing_blocking(tmp_path):
+    text = ("La coque s'ouvre sur trois cents pieds. Personne, sur la "
+            "passerelle, ne comprend encore ce qui vient de se passer. "
+            "Six ponts plus bas, les hommes continuent de pelleter.")
+    script = _script_from(_beat("B001", text), tmp_path)
+    blocking = [v for v in lint_mod.check(script) if v.blocking]
+    assert blocking == [], blocking
+
+
+def test_blocking_violations_are_listed_first(tmp_path):
+    script = _script_from(_beat("B001", "Il est 01h23. " + "mot " * 30), tmp_path)
+    found = lint_mod.check(script)
+    assert found[0].blocking and not found[-1].blocking

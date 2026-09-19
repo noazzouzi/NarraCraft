@@ -44,7 +44,10 @@ mots — il faut un changement d'état : une révélation, une question ouverte,
 un changement de rythme, un changement de lieu ou d'échelle. Les marquer
 dans la colonne de contrôle en fin de fichier.
 
-**5. Passer le contrôle** (section « Contrôle » plus bas) avant de présenter.
+**5. Lancer `python -m fresque lint <slug>`** et corriger jusqu'à ce qu'il ne
+reste aucune violation bloquante. Ce n'est pas optionnel : les règles de ce
+skill y sont vérifiées mécaniquement, et l'utilisateur ne doit relire qu'un
+script qui passe déjà cette barre. Recommencer autant de fois que nécessaire.
 
 **6. Présenter à l'utilisateur** : le compte de mots réel vs cible, les
 points où l'on s'est écarté du brief et pourquoi, et les deux ou trois
@@ -157,7 +160,17 @@ tête**, et vérifier :
 - [ ] Le compte de mots est dans la tolérance de `fresque.config.yaml`.
 - [ ] Tout beat fait entre 25 et 60 mots.
 
-Terminer `02-script.md` par une section `## Contrôle` reprenant cette liste
-avec les cases réellement cochées, plus un tableau des relances (numéro de
-beat et nature). L'utilisateur doit pouvoir vérifier le travail sans relire
-le script en entier.
+Les points de cette liste qui peuvent l'être sont vérifiés par
+`python -m fresque lint` : longueur des beats et des phrases, pièges de
+synthèse vocale, formules proscrites, budget de mots, espacement des
+relances. **Lancer le lint plutôt que de les vérifier à l'œil** — il ne
+passe rien.
+
+Le reste ne se vérifie pas mécaniquement et reste ton travail : le hook pose
+un fait plutôt qu'une question, chaque acte se termine sur une question
+ouverte, le pivot est présent et audible, aucune phrase ne demande de
+reprendre son souffle en cours de route.
+
+Terminer `02-script.md` par une section `## Contrôle` avec ces points-là,
+plus un tableau des relances (numéro de beat et nature). L'utilisateur doit
+pouvoir vérifier le travail sans relire le script en entier.

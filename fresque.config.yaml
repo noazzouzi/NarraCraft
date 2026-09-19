@@ -18,6 +18,39 @@ narration:
   pause_phrase_s: 0.45      # après . ! ? …
   pause_virgule_s: 0.18     # après , ; :
 
+controle:
+  # Ce que `fresque lint` fait respecter. Ces règles vivaient jusqu'ici en
+  # prose dans les skills, où elles n'étaient que des suggestions : rien ne
+  # vérifiait qu'elles étaient suivies, et une seule fuite s'entend dans la
+  # voix off finale.
+  mots_par_beat: [25, 60]
+  mots_par_phrase_max: 25
+
+  # Acronymes lus comme un mot. Tous les autres doivent être ponctués
+  # (U.R.S.S., F.B.I.) sinon la synthèse tranche au hasard.
+  acronymes_prononces:
+    - OTAN
+    - SIDA
+    - NASA
+    - UNESCO
+    - OVNI
+    - RADAR
+    - LASER
+
+  # Formules de chaîne YouTube et superlatifs creux. La signature sonore du
+  # contenu générique.
+  interdits:
+    - abonnez-vous
+    - dans cette vidéo
+    - dans cet article
+    - mais avant ça
+    - et si je vous disais
+    - vous n'allez pas croire
+    - incroyable
+    - choquant
+    - personne ne sait
+    - restez jusqu'à la fin
+
 structure:
   # Découpage narratif par défaut. Le skill script peut s'en écarter s'il
   # justifie pourquoi dans le brief.

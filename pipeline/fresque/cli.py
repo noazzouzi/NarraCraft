@@ -63,6 +63,32 @@ def cmd_voice(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_lint(args: argparse.Namespace) -> int:
+    from . import lint as lint_mod
+
+    project = Project.open(args.slug)
+    script = script_parser.parse(project.script)
+    violations = lint_mod.check(script)
+
+    blocking = [v for v in violations if v.blocking]
+    warnings = [v for v in violations if not v.blocking]
+
+    if not violations:
+        print(f"✓ {script.word_count} mots · {len(script.beats)} beats · "
+              "aucune violation")
+        return 0
+
+    for violation in violations:
+        mark = "✗" if violation.blocking else "·"
+        print(f"{mark} {violation.beat:<5} [{violation.rule}] {violation.message}")
+        if violation.excerpt:
+            print(f"        « {violation.excerpt} »")
+
+    print()
+    print(f"{len(blocking)} bloquante(s), {len(warnings)} avertissement(s)")
+    return 1 if blocking else 0
+
+
 def cmd_shots(args: argparse.Namespace) -> int:
     project = Project.open(args.slug)
     script = script_parser.parse(project.script)
@@ -341,6 +367,7 @@ def main(argv: list[str] | None = None) -> int:
 
     align_cmd = add("align", "Estimer les timings depuis le script", cmd_align)
     align_cmd.add_argument("--target", type=float, help="durée cible en minutes")
+    add("lint", "Vérifier le script contre les règles d'écriture", cmd_lint)
     add("shots", "Valider le plan visuel", cmd_shots)
     add("voice", "Synthétiser la voix off (Kokoro)", cmd_voice)
     fetch_cmd = add("fetch", "Sourcer les archives libres", cmd_fetch)
