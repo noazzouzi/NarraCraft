@@ -381,12 +381,10 @@ def _vignette(dossier: Path) -> str | None:
 
 # --- Pages -------------------------------------------------------------------
 
-_CHROME = """
-:root { color-scheme: dark; }
-* { box-sizing: border-box; }
-body { margin:0; background:#0b0d11; color:#e8eaee;
-       font-family:'Inter','Helvetica Neue',Arial,sans-serif; }
-a { color:inherit; text-decoration:none; }
+#: Le bandeau seul. Séparé du reste parce que l'export le greffe sur des
+#: pages qui ont déjà leur propre feuille — `review.html` et l'aperçu d'un
+#: template — et qu'y verser toute la nôtre réécrirait leur mise en page.
+_BARRE = """
 .barre { display:flex; align-items:center; gap:16px; padding:0 22px; height:52px;
          border-bottom:1px solid #1b1f28; background:#0e1117; position:sticky;
          top:0; z-index:5; }
@@ -396,6 +394,15 @@ a { color:inherit; text-decoration:none; }
 .barre nav a:hover { background:#161a23; color:#e8eaee; }
 .barre nav a.actif { background:#1d2735; color:#7fa8e0; }
 .barre .fin { margin-left:auto; color:#5f6775; font-size:12px; }
+.barre a { color:inherit; text-decoration:none; }
+"""
+
+_CHROME = _BARRE + """
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin:0; background:#0b0d11; color:#e8eaee;
+       font-family:'Inter','Helvetica Neue',Arial,sans-serif; }
+a { color:inherit; text-decoration:none; }
 h2 { font-size:13px; letter-spacing:.18em; text-transform:uppercase;
      color:#8b93a1; margin:38px 0 14px; font-weight:600; }
 .pied { color:#5f6775; font-size:12px; margin-top:44px; line-height:1.7;
@@ -437,17 +444,36 @@ main { max-width:1360px; margin:0 auto; padding:34px 26px 90px; }
 """
 
 
-def _entete(actif: str, fin: str = "") -> str:
-    onglets = (("/", "Atelier"), ("/templates", "Templates"))
-    liens = "".join(
-        f'<a href="{href}" class="{"actif" if href == actif else ""}">{nom}</a>'
+@dataclass(frozen=True)
+class Liens:
+    """Où pointent les liens d'une page.
+
+    Servies, les pages s'adressent à des routes ; exportées, à des fichiers
+    voisins. Le seul écart entre les deux tient dans ces quatre fonctions,
+    ce qui évite de réécrire du HTML déjà produit — une manœuvre qui marche
+    jusqu'au jour où un titre de projet contient la chaîne cherchée.
+    """
+    accueil: str = "/"
+    projet: Any = staticmethod(lambda slug: f"/p/{urllib.parse.quote(slug)}/")
+    fichier: Any = staticmethod(
+        lambda slug, rel: f"/p/{urllib.parse.quote(slug)}/{urllib.parse.quote(rel)}")
+    template: Any = staticmethod(lambda nom: f"/t/{urllib.parse.quote(nom)}/")
+
+
+SERVIS = Liens()
+
+
+def _entete(actif: str, liens: Liens, fin: str = "") -> str:
+    onglets = ((liens.accueil, "Atelier"), (liens.accueil, "Templates"))
+    rendus = "".join(
+        f'<a href="{href}" class="{"actif" if nom == actif else ""}">{nom}</a>'
         for href, nom in onglets
     )
     return (f'<div class="barre"><span class="marque">Fresque</span>'
-            f'<nav>{liens}</nav><span class="fin">{html.escape(fin)}</span></div>')
+            f'<nav>{rendus}</nav><span class="fin">{html.escape(fin)}</span></div>')
 
 
-def page_atelier() -> str:
+def page_atelier(liens: Liens = SERVIS) -> str:
     liste = projets()
     cartes = []
     for projet in liste:
@@ -461,11 +487,10 @@ def page_atelier() -> str:
         )
         image = (
             f'<img class="image" loading="lazy" '
-            f'src="/p/{urllib.parse.quote(projet["slug"])}/'
-            f'{urllib.parse.quote(projet["vignette"])}" alt="">'
+            f'src="{liens.fichier(projet["slug"], projet["vignette"])}" alt="">'
             if projet["vignette"] else '<div class="vide">pas encore d\'image</div>'
         )
-        cartes.append(f"""<a class="carte" href="/p/{urllib.parse.quote(projet['slug'])}/">
+        cartes.append(f"""<a class="carte" href="{liens.projet(projet['slug'])}">
   {image}
   <div class="corps">
     <h3>{html.escape(projet['titre'])}</h3>
@@ -483,7 +508,7 @@ def page_atelier() -> str:
             meta = apercu.resume(nom)
         except config.TemplateError:
             continue
-        tuiles.append(f"""<a class="tuile" href="/t/{urllib.parse.quote(nom)}/">
+        tuiles.append(f"""<a class="tuile" href="{liens.template(nom)}">
   <h3>{html.escape(meta['meta'].get('nom', nom))}</h3>
   <p>{html.escape(str(meta['meta'].get('description', ''))[:150])}</p>
   <p style="margin-top:8px;color:#5f6775">{meta['nb_propres']} réglages propres</p>
@@ -494,7 +519,7 @@ def page_atelier() -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fresque — atelier</title>
 <style>{_CHROME}{_ATELIER}</style></head><body>
-{_entete("/", f"{len(liste)} projet(s)")}
+{_entete("Atelier", liens, f"{len(liste)} projet(s)")}
 <main>
 <h2>Projets</h2>
 <div class="cartes">{''.join(cartes) or
@@ -708,7 +733,7 @@ def page_projet(slug: str) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(slug)} — Fresque</title>
 <style>{_CHROME}{_PILOTE}</style></head><body>
-{_entete("", slug)}
+{_entete("", SERVIS, slug)}
 <div class="ecran">
   <aside class="pilote">
     <h2>Étapes</h2>
@@ -923,7 +948,7 @@ class Handler(BaseHTTPRequestHandler):
             corps = destination.read_text(encoding="utf-8")
         # L'aperçu est écrit pour s'ouvrir en `file://` : son lecteur audio
         # pointe sur un nom de fichier voisin. Servi, il lui faut une URL.
-        corps = corps.replace('<body>', f'<body>{_entete("/templates", nom)}')
+        corps = corps.replace('<body>', f'<body>{_entete("Templates", SERVIS, nom)}')
         return self._html(corps)
 
 

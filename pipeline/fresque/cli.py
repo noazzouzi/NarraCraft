@@ -479,6 +479,21 @@ def cmd_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    from . import export as export_mod
+
+    destination = Path(args.destination)
+    bilan = export_mod.exporter(
+        destination, args.videos,
+        args.largeur or export_mod.LARGEUR_VIGNETTE)
+    print(f"✓ {destination} — {bilan.projets} projet(s), {bilan.fichiers} image(s)"
+          + (f", {bilan.videos} vidéo(s)" if bilan.videos else ""))
+    print(f"  {bilan.octets_source / 1e6:.0f} Mo de visuels ramenés à "
+          f"{bilan.octets_export / 1e6:.0f} Mo ({bilan.gain:.0f}× plus léger)")
+    print(f"  ouvrir : file://{destination.resolve()}/index.html")
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     from . import serveur as serveur_mod
 
@@ -625,6 +640,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     add("status", "État d'avancement du projet", cmd_status)
     add("review", "Construire la page de validation du projet", cmd_review)
+
+    export_cmd = sub.add_parser(
+        "export", help="Figer l'atelier dans un dossier ouvrable sans serveur"
+    )
+    export_cmd.set_defaults(handler=cmd_export)
+    export_cmd.add_argument("destination")
+    export_cmd.add_argument(
+        "--videos", action="store_true",
+        help="inclure une copie de visionnage par projet (lourd)",
+    )
+    export_cmd.add_argument(
+        "--largeur", type=int, default=None,
+        help="largeur des images en pixels (défaut : celle de la planche)",
+    )
 
     serve_cmd = sub.add_parser(
         "serve", help="Ouvrir l'atelier dans un navigateur (aucun état gardé)"

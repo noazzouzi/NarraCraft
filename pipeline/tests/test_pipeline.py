@@ -1830,3 +1830,55 @@ def test_the_workshop_page_holds_no_state_of_its_own():
     for projet in serveur.projets():
         assert not projet["slug"].startswith("."), \
             "un dossier caché n'est pas un projet"
+
+
+def test_an_export_carries_no_path_off_the_machine_that_made_it(tmp_path):
+    """Un export s'ouvre ailleurs, des années plus tard, hors ligne. Un
+    chemin absolu ou une ressource distante l'en empêche."""
+    import re
+
+    from fresque import export as export_mod
+
+    bilan = export_mod.exporter(tmp_path / "atelier")
+    assert bilan.projets > 0 and bilan.fichiers > 0
+
+    for page in (tmp_path / "atelier").rglob("*.html"):
+        texte = page.read_text(encoding="utf-8")
+        # On cherche ce qui est *chargé*, pas ce qui est *écrit* : une page
+        # de template affiche l'URL de licence de sa musique en toutes
+        # lettres, et cette attribution est obligatoire.
+        for attribut in ('src="', 'href="'):
+            for cible in re.findall(re.escape(attribut) + r'([^"]*)', texte):
+                assert not cible.startswith(("http://", "https://", "file://")), \
+                    f"{page.name} charge {cible} depuis l'extérieur"
+                assert not cible.startswith("/"), \
+                    f"{page.name} garde le chemin absolu {cible}"
+
+
+def test_an_export_without_videos_says_so_rather_than_showing_a_broken_player(tmp_path):
+    """Retirer le fichier sans retirer la balise laisserait un lecteur
+    cassé, qu'on prendrait pour une panne plutôt que pour un choix."""
+    from fresque import export as export_mod
+
+    export_mod.exporter(tmp_path / "atelier", videos=False)
+    page = (tmp_path / "atelier" / "p" / "sarkozy-essai-2min" / "review.html")
+    texte = page.read_text(encoding="utf-8")
+
+    assert "<video" not in texte
+    assert "pas incluse" in texte
+
+
+def test_export_images_are_reduced_to_the_width_they_are_shown_at(tmp_path):
+    """Un projet de quinze minutes pèse 99 Mo de visuels pour une planche
+    qui les affiche à 228 px. Les envoyer en pleine définition rendrait
+    l'export inutilisable."""
+    from PIL import Image
+
+    from fresque import export as export_mod
+
+    bilan = export_mod.exporter(tmp_path / "atelier", largeur=320)
+    assert bilan.octets_export < bilan.octets_source
+
+    for image in (tmp_path / "atelier").rglob("05-visuals/*.jpg"):
+        with Image.open(image) as ouverte:
+            assert ouverte.width <= 320, f"{image.name} n'a pas été réduite"
