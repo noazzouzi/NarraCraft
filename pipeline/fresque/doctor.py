@@ -46,17 +46,19 @@ GROUPS = [
         Host("archive.org", "recherche", "fetch"),
         Host("ia800000.us.archive.org", "téléchargement (sous-domaines ia*)", "fetch"),
     ], optional=True),
-    Group("Archives — Gallica (BnF)", [
-        Host("gallica.bnf.fr", "fonds français", "fetch"),
+    Group("Archives — Openverse (52 fonds agrégés)", [
+        Host("api.openverse.org", "recherche multi-fonds", "fetch"),
+    ]),
+    Group("Archives — Smithsonian Open Access", [
+        Host("api.si.edu", "recherche", "fetch"),
+        Host("ids.si.edu", "téléchargement et IIIF", "fetch"),
     ], optional=True),
-    Group("Archives — Library of Congress", [
+    Group("Archives — Library of Congress (vidéo 1080p)", [
         Host("www.loc.gov", "recherche", "fetch"),
-        Host("tile.loc.gov", "téléchargement", "fetch"),
-    ], optional=True),
-    Group("Banque d'images et vidéos — Pexels", [
-        Host("api.pexels.com", "recherche", "fetch"),
-        Host("images.pexels.com", "photos", "fetch"),
-        Host("videos.pexels.com", "rushes vidéo", "fetch"),
+        Host("tile.loc.gov", "téléchargement des MP4", "fetch"),
+    ]),
+    Group("B-roll générique — Pixabay", [
+        Host("pixabay.com", "recherche et fichiers", "fetch"),
     ], optional=True),
     Group("Génération d'images — Gemini", [
         Host("generativelanguage.googleapis.com", "génération", "images"),

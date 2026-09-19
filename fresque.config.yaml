@@ -108,12 +108,50 @@ alignement:
 visuels:
   # Ordre de préférence des sources. On ne génère que ce qu'on n'a pas trouvé.
   strategie: archives_d_abord
+  # Ordre de préférence. On ne génère que ce qu'aucune n'a fourni.
   sources_archives:
-    - wikimedia_commons
-    - archive_org
-    - gallica                  # BnF — excellent sur les sujets français
-    - loc                      # Library of Congress
-    - pexels
+    - wikimedia_commons        # implémenté
+    - openverse                # 52 fonds d'un coup, filtre commercial côté serveur
+    - loc                      # seule source gratuite de vrai métrage 1080p
+    - archive_org              # gros volume filmé, mais intrinsèquement 640x480
+    - smithsonian              # CC0 net, IIIF haute résolution, couverture US
+    - pixabay                  # B-roll générique moderne, en dernier recours
+
+  # Écartées, avec le motif. Ne pas les réintroduire sans relire ceci.
+  sources_exclues:
+    gallica: >-
+      Réutilisation COMMERCIALE payante et sous licence BnF, y compris pour
+      des œuvres du domaine public (loi n° 78-753). L'API IIIF est pourtant
+      excellente — inutilisable pour une chaîne monétisée.
+    ina: >-
+      Aucune API publique, fonds sous droits gérés, licence commerciale au
+      clip. Incompatible avec un pipeline automatisé.
+    mixkit: >-
+      Deux licences distinctes selon l'item, non exposées dans les
+      métadonnées : impossible d'arbitrer par programme.
+    europeana_video: >-
+      edmIsShownBy renvoie souvent des pages Vimeo plutôt que des fichiers.
+      Europeana reste envisageable en source d'images.
+    archive_org_newsandpublicaffairs: >-
+      La TV News Archive est consultable mais ni téléchargeable ni
+      réutilisable. À exclure explicitement des requêtes mediatype:movies.
+
+  # Sources dont l'API n'expose aucun champ de licence exploitable. Leur
+  # statut vient d'une politique de collection, pas de l'item. La confiance
+  # est donc déclarée ici, dans un fichier versionné, jamais devinée en code.
+  collections_domaine_public:
+    loc:
+      - national-screening-room
+      - fsa-owi-black-and-white-negatives
+      - detroit-publishing-company
+      - bain
+      - national-photo-company
+      - chronicling-america
+    archive_org:
+      - prelinger
+      - FedFlix
+      - universal_newsreels
+      - nasa
   generation:
     provider: gemini
     model: gemini-3.1-flash-image
