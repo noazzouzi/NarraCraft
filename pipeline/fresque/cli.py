@@ -213,11 +213,12 @@ def cmd_render(args: argparse.Namespace) -> int:
     import shutil
     import subprocess
 
+    from . import config
+
     project = Project.open(args.slug)
     if not project.timeline.is_file():
         return _fail("06-timeline.json manquant — lancer `timeline` d'abord.")
 
-    from . import config
     remotion = config.repo_root() / "remotion"
     if not (remotion / "node_modules").is_dir():
         return _fail(f"dépendances Remotion absentes — `npm install` dans {remotion}")
@@ -232,6 +233,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         f"--props={project.timeline}",
         f"--public-dir={project.root}",
         f"--concurrency={args.concurrency}",
+        f"--crf={config.get('montage', 'crf', default=22)}",
     ]
     if args.browser:
         command.append(f"--browser-executable={args.browser}")

@@ -100,6 +100,11 @@ visuels:
 montage:
   resolution: [1920, 1080]
   fps: 30
+  # Qualité d'encodage H.264. Plus bas = meilleur et plus lourd.
+  # Le défaut de Remotion (18) est quasi sans perte et produit ~12 Mbit/s sur
+  # des photographies d'archive : inutilement lourd pour de la diffusion.
+  # 22 tient autour de 4 Mbit/s sans différence visible en 1080p.
+  crf: 22
   # Mouvement appliqué aux images fixes. Le soin mis ici fait toute la
   # différence entre un zoom moche et un mouvement crédible.
   ken_burns:
