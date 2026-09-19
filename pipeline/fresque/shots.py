@@ -39,6 +39,23 @@ MOTION_FIELDS: dict[str, tuple[str, ...]] = {
     # Un document officiel, avec un passage surligné. Sur un sujet judiciaire
     # ou administratif, souvent le plan le plus fort disponible.
     "document": ("lignes",),
+    # Lignes et colonnes. Quatre chefs d'accusation en face de quatre
+    # décisions disent en une image ce que la narration met trente secondes
+    # à établir.
+    "tableau": ("colonnes", "lignes"),
+    # Des quantités comparées, en barres horizontales.
+    "barres": ("series",),
+    # Une part dans un tout. Un chiffre isolé ne dit rien tant qu'on ne sait
+    # pas de quoi il est la part.
+    "proportion": ("valeur", "total", "libelle"),
+    # Deux colonnes opposées : ce qu'on croit, ce qui a été établi.
+    "comparaison": ("gauche", "droite"),
+    # Des personnes et ce qui les relie. Sur une association de malfaiteurs,
+    # c'est une illustration littérale de l'infraction retenue.
+    "reseau": ("noeuds",),
+    # Une fenêtre de navigateur, construite et jamais capturée. La source
+    # est obligatoire, comme pour un journal.
+    "maquette": ("site", "titre", "source"),
 }
 
 #: Écritures disponibles pour un document. Aucune police n'est embarquée :
@@ -270,6 +287,110 @@ def _validate_motion(motion: dict[str, Any] | None, where: str) -> None:
                     f"{where} : marqueurs[{index}] coord {coord} hors limites "
                     "— l'ordre attendu est [longitude, latitude]."
                 )
+
+    if kind == "tableau":
+        colonnes, lignes = motion["colonnes"], motion["lignes"]
+        if not isinstance(colonnes, list) or len(colonnes) < 2:
+            raise ShotsError(f"{where} : un tableau demande au moins deux colonnes.")
+        if len(colonnes) > 4:
+            raise ShotsError(
+                f"{where} : {len(colonnes)} colonnes — au-delà de quatre, le "
+                "texte devient illisible à l'écran. Scinder le tableau."
+            )
+        if not isinstance(lignes, list) or not lignes:
+            raise ShotsError(f"{where} : `lignes` doit être une liste non vide.")
+        if len(lignes) > 6:
+            raise ShotsError(
+                f"{where} : {len(lignes)} lignes — un spectateur n'en lit pas "
+                "plus de six pendant que la voix parle."
+            )
+        for index, ligne in enumerate(lignes):
+            if not isinstance(ligne, list) or len(ligne) != len(colonnes):
+                raise ShotsError(
+                    f"{where} : lignes[{index}] a {len(ligne) if isinstance(ligne, list) else '?'} "
+                    f"cellules pour {len(colonnes)} colonnes."
+                )
+        accent = motion.get("colonne_accent")
+        if accent is not None and not (
+            isinstance(accent, int) and 0 <= accent < len(colonnes)
+        ):
+            raise ShotsError(
+                f"{where} : `colonne_accent` vaut {accent!r} — attendu un index "
+                f"entre 0 et {len(colonnes) - 1}."
+            )
+
+    if kind == "barres":
+        series = motion["series"]
+        if not isinstance(series, list) or len(series) < 2:
+            raise ShotsError(
+                f"{where} : deux séries au minimum — en dessous c'est un "
+                "chiffre, pas un graphique."
+            )
+        if len(series) > 6:
+            raise ShotsError(f"{where} : {len(series)} barres, six au maximum.")
+        for index, serie in enumerate(series):
+            if not isinstance(serie, dict) or not serie.get("libelle"):
+                raise ShotsError(f"{where} : series[{index}] exige un `libelle`.")
+            try:
+                valeur = float(serie.get("valeur"))
+            except (TypeError, ValueError):
+                raise ShotsError(
+                    f"{where} : series[{index}].valeur doit être un nombre."
+                ) from None
+            if valeur < 0:
+                raise ShotsError(f"{where} : series[{index}].valeur est négative.")
+
+    if kind == "proportion":
+        try:
+            valeur, total = float(motion["valeur"]), float(motion["total"])
+        except (TypeError, ValueError):
+            raise ShotsError(
+                f"{where} : `valeur` et `total` doivent être des nombres."
+            ) from None
+        if total <= 0:
+            raise ShotsError(f"{where} : `total` doit être strictement positif.")
+        if not 0 <= valeur <= total:
+            raise ShotsError(
+                f"{where} : une part de {valeur:g} sur {total:g} n'est pas une "
+                "part. Vérifier l'ordre des deux valeurs."
+            )
+
+    if kind == "comparaison":
+        for cote in ("gauche", "droite"):
+            bloc = motion[cote]
+            if not isinstance(bloc, dict) or not bloc.get("titre"):
+                raise ShotsError(f"{where} : `{cote}` exige un `titre`.")
+            points = bloc.get("points")
+            if not isinstance(points, list) or not points:
+                raise ShotsError(f"{where} : `{cote}.points` doit être non vide.")
+            if len(points) > 4:
+                raise ShotsError(
+                    f"{where} : {len(points)} points à {cote} — quatre au "
+                    "maximum, les deux colonnes se lisent en parallèle."
+                )
+
+    if kind == "reseau":
+        noeuds = motion["noeuds"]
+        if not isinstance(noeuds, list) or len(noeuds) < 2:
+            raise ShotsError(f"{where} : un réseau demande au moins deux nœuds.")
+        if len(noeuds) > 8:
+            raise ShotsError(
+                f"{where} : {len(noeuds)} nœuds — au-delà de huit, les noms se "
+                "chevauchent sur le cercle."
+            )
+        for index, noeud in enumerate(noeuds):
+            if not isinstance(noeud, dict) or not noeud.get("nom"):
+                raise ShotsError(f"{where} : noeuds[{index}] exige un `nom`.")
+        for index, lien in enumerate(motion.get("liens") or []):
+            if not isinstance(lien, dict):
+                raise ShotsError(f"{where} : liens[{index}] doit être un objet.")
+            for bout in ("de", "a"):
+                cible = lien.get(bout)
+                if not (isinstance(cible, int) and 0 <= cible < len(noeuds)):
+                    raise ShotsError(
+                        f"{where} : liens[{index}].{bout} vaut {cible!r} — "
+                        f"attendu un index de nœud entre 0 et {len(noeuds) - 1}."
+                    )
 
     if kind == "chronologie":
         events = motion["evenements"]

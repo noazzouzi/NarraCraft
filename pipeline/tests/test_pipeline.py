@@ -1627,3 +1627,59 @@ def test_a_non_commercial_track_is_refused():
     assert not piste("CC BY-NC 4.0").utilisable
     assert not piste("CC BY-ND 4.0").utilisable
     assert not piste("Tous droits réservés").utilisable
+
+
+def test_every_motion_kind_reaches_the_renderer():
+    """Un `kind` validé par le pipeline mais absent du routeur ne se voit
+    qu'au rendu, une heure plus tard, sous la forme d'un panneau vide."""
+    from fresque.shots import MOTION_FIELDS
+
+    source = Path("remotion/src/Motion.tsx").read_text(encoding="utf-8")
+    for kind in MOTION_FIELDS:
+        assert f'case "{kind}":' in source, kind
+
+
+def test_a_table_row_must_match_its_columns(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "tableau",
+        "colonnes": ["Chef", "Décision"],
+        "lignes": [["Corruption passive", "Relaxé"], ["Association"]],
+    })])
+    with pytest.raises(ShotsError, match="cellules pour"):
+        load_shots(path, ["B001"])
+
+
+def test_a_proportion_larger_than_its_total_is_refused(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "proportion", "valeur": 2000, "total": 20, "libelle": "jours",
+    })])
+    with pytest.raises(ShotsError, match="n'est pas une"):
+        load_shots(path, ["B001"])
+
+
+def test_a_network_link_must_point_at_a_node(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "reseau",
+        "noeuds": [{"nom": "A"}, {"nom": "B"}],
+        "liens": [{"de": 0, "a": 7}],
+    })])
+    with pytest.raises(ShotsError, match="index de nœud"):
+        load_shots(path, ["B001"])
+
+
+def test_a_mockup_without_its_source_is_refused(tmp_path):
+    """Même règle que le journal : fabriquer une page au nom d'un média réel
+    sans dire d'où vient l'information est l'écart le plus grave possible."""
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "maquette", "site": "Mediapart", "titre": "Un document",
+    })])
+    with pytest.raises(ShotsError, match="source"):
+        load_shots(path, ["B001"])
+
+
+def test_a_bar_chart_with_one_series_is_refused(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "barres", "series": [{"libelle": "requis", "valeur": 7}],
+    })])
+    with pytest.raises(ShotsError, match="deux séries"):
+        load_shots(path, ["B001"])

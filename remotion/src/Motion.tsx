@@ -1,47 +1,13 @@
 import React from "react";
-import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { Carte } from "./Carte";
+import { Barres, Comparaison, Proportion, Tableau } from "./Donnees";
 import { Document } from "./Document";
 import { Journal } from "./Journal";
+import { Maquette } from "./Maquette";
+import { Reseau } from "./Reseau";
+import { EASE_OUT, Fond, reveal } from "./panneau";
 import type { MotionStyle } from "./types";
-
-const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
-
-/** Staggered reveal: element `index` starts `cascade` seconds after the one
- *  before it. Returns 0 → 1, plus the slide-up offset that goes with it.
- *
- *  Everything appearing at once reads as a slide. Appearing one by one lets
- *  the eye follow the narration, which is arriving at the same pace.
- *
- *  A plain function, not a hook, because timeline entries reveal inside a
- *  `.map()` — calling a hook there breaks the rules of hooks. */
-function reveal(
-  frame: number, fps: number, index: number, cascade: number, delay = 0,
-) {
-  const start = (delay + index * cascade) * fps;
-  const progress = interpolate(frame, [start, start + fps * 0.5], [0, 1], {
-    easing: EASE_OUT,
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  return { progress, lift: (1 - progress) * 18 };
-}
-
-const Fond: React.FC<{ style: MotionStyle; children: React.ReactNode }> = ({
-  style,
-  children,
-}) => (
-  <AbsoluteFill
-    style={{
-      backgroundColor: style.fond,
-      fontFamily: style.famille,
-      padding: "0 140px",
-      justifyContent: "center",
-    }}
-  >
-    {children}
-  </AbsoluteFill>
-);
 
 /** A dated timeline. The single most useful panel on a judicial or
  *  historical subject: it replaces the illustrative photograph nobody has. */
@@ -61,21 +27,7 @@ export const Chronologie: React.FC<{
   });
 
   return (
-    <Fond style={style}>
-      {titre ? (
-        <div
-          style={{
-            color: style.attenue,
-            fontSize: 30,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            marginBottom: 64,
-          }}
-        >
-          {titre}
-        </div>
-      ) : null}
-
+    <Fond style={style} titre={titre}>
       <div style={{ position: "relative", paddingTop: 30 }}>
         <div
           style={{
@@ -297,6 +249,66 @@ export const MotionGraphic: React.FC<{
           lignes={motion.lignes as string[]}
           surligne={motion.surligne as number | undefined}
           ecriture={motion.ecriture as string | undefined}
+          style={style}
+        />
+      );
+    case "tableau":
+      return (
+        <Tableau
+          titre={motion.titre as string | undefined}
+          colonnes={motion.colonnes as string[]}
+          lignes={motion.lignes as string[][]}
+          colonne_accent={motion.colonne_accent as number | undefined}
+          style={style}
+        />
+      );
+    case "barres":
+      return (
+        <Barres
+          titre={motion.titre as string | undefined}
+          unite={motion.unite as string | undefined}
+          series={motion.series as { libelle: string; valeur: number }[]}
+          style={style}
+        />
+      );
+    case "proportion":
+      return (
+        <Proportion
+          titre={motion.titre as string | undefined}
+          valeur={motion.valeur as number}
+          total={motion.total as number}
+          libelle={motion.libelle as string}
+          libelle_total={motion.libelle_total as string | undefined}
+          style={style}
+        />
+      );
+    case "comparaison":
+      return (
+        <Comparaison
+          titre={motion.titre as string | undefined}
+          gauche={motion.gauche as { titre: string; points: string[] }}
+          droite={motion.droite as { titre: string; points: string[] }}
+          style={style}
+        />
+      );
+    case "reseau":
+      return (
+        <Reseau
+          titre={motion.titre as string | undefined}
+          noeuds={motion.noeuds as { nom: string; role?: string }[]}
+          liens={motion.liens as { de: number; a: number; libelle?: string }[]}
+          style={style}
+        />
+      );
+    case "maquette":
+      return (
+        <Maquette
+          site={motion.site as string}
+          url={motion.url as string | undefined}
+          date={motion.date as string | undefined}
+          titre={motion.titre as string}
+          chapeau={motion.chapeau as string | undefined}
+          source={motion.source as string}
           style={style}
         />
       );
