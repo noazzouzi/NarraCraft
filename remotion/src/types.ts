@@ -18,6 +18,7 @@ export type Clip = {
   debut_frame: number;
   duree_frames: number;
   image: string | null;
+  ratio: number | null;
   mouvement: Mouvement;
   motion: Record<string, unknown> | null;
   intention: string;

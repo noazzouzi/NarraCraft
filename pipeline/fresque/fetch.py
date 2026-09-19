@@ -36,7 +36,8 @@ def _extension(candidate: Candidate) -> str:
 
 
 def _record(shot: Shot, candidate: Candidate, filename: str,
-            alternatives: list[Candidate]) -> dict[str, Any]:
+            alternatives: list[Candidate], used_query: str = "",
+            used_width: int = 0) -> dict[str, Any]:
     return {
         "fichier": f"05-visuals/{filename}",
         "shot": shot.id,
@@ -51,6 +52,12 @@ def _record(shot: Shot, candidate: Candidate, filename: str,
         "largeur": candidate.width,
         "hauteur": candidate.height,
         "requete": shot.requete,
+        # When the search had to be widened, say so: a relaxed query can match
+        # something only loosely related, and a human reviewing the assets
+        # needs to know which picks deserve a second look.
+        "requete_effective": used_query or shot.requete,
+        "requete_relachee": bool(used_query) and used_query != shot.requete,
+        "largeur_min_utilisee": used_width,
         # Kept so a human can swap a bad pick without searching again.
         "alternatives": [
             {"titre": c.title, "url": c.page_url, "licence": c.licence}
@@ -67,7 +74,7 @@ def fetch_archives(
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Return (assets by shot id, list of shots left unsourced)."""
     say = report or (lambda _: None)
-    min_width = 1280
+    min_width = 1920   # cascade descendante gérée par search_relaxed
     session = requests.Session()
 
     assets: dict[str, dict[str, Any]] = {}
@@ -77,7 +84,7 @@ def fetch_archives(
         if shot.type != "archive":
             continue
         try:
-            candidates = wikimedia.search(
+            candidates, used_query, used_width = wikimedia.search_relaxed(
                 shot.requete, limit=6, min_width=min_width, session=session
             )
         except requests.RequestException as error:
@@ -94,13 +101,24 @@ def fetch_archives(
 
         best = candidates[0]
         filename = f"{shot.id}{_extension(best)}"
-        say(f"  ✓ {shot.id} : {best.title[:58]} [{best.licence}]")
+        relaxed = " (requête élargie)" if used_query != shot.requete else ""
+        say(f"  ✓ {shot.id} : {best.title[:52]} [{best.licence}]{relaxed}")
 
         if not dry_run:
             visuals_dir.mkdir(parents=True, exist_ok=True)
-            wikimedia.download(best, visuals_dir / filename)
+            try:
+                wikimedia.download(best, visuals_dir / filename)
+            except requests.RequestException as error:
+                # One unavailable file must not cost the whole run: the other
+                # shots are independent, and a re-run picks this one back up.
+                say(f"  ✗ {shot.id} : téléchargement échoué — {error}")
+                (visuals_dir / filename).unlink(missing_ok=True)
+                unsourced.append(shot.id)
+                continue
 
-        assets[shot.id] = _record(shot, best, filename, candidates[1:])
+        assets[shot.id] = _record(
+            shot, best, filename, candidates[1:], used_query, used_width
+        )
 
     return assets, unsourced
 

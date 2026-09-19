@@ -152,6 +152,8 @@ def build(
             start_frame = round(cursor * fps)
             end_frame = max(round(end * fps), start_frame + 1)
             asset = assets.get(shot.id, {})
+            width_px = int(asset.get("largeur") or 0)
+            height_px = int(asset.get("hauteur") or 0)
 
             clips.append({
                 "id": shot.id,
@@ -160,6 +162,9 @@ def build(
                 "debut_frame": start_frame,
                 "duree_frames": end_frame - start_frame,
                 "image": asset.get("fichier"),
+                # Lets the renderer letterbox a tall archive document instead
+                # of cropping it to a vertical slice of itself.
+                "ratio": round(width_px / height_px, 4) if height_px else None,
                 "mouvement": _movement(shot),
                 "motion": shot.motion,
                 "intention": shot.intention,

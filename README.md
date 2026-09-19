@@ -92,7 +92,7 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 5 | Timeline et rendu Remotion | fait |
 | 4a | Plan visuel (skill) et validation | fait |
 | 3a | Voix off Kokoro, durées réelles | fait |
-| 4b | Sourcing Wikimedia Commons | écrit, non exécuté ici |
+| 4b | Sourcing Wikimedia Commons | fait, vérifié en réel |
 | 4c | Génération d'images Gemini | à venir |
 | 3b | Alignement forcé mot-à-mot | à venir |
 | 6 | Motion graphics : cartes, unes de journaux, archives | à venir |
@@ -103,9 +103,8 @@ coupes tombent exactement là où la narration change. Seule la position d'un
 mot à l'intérieur d'un beat reste estimée, ce qui n'affecte que les
 sous-titres.
 
-Le sourcing Wikimedia est écrit et couvert par des tests sur réponse
-enregistrée, mais n'a jamais été exercé contre l'API réelle : elle était
-bloquée depuis l'environnement de développement. À valider en premier.
+Le sourcing Wikimedia tourne contre l'API réelle : 8 plans sur 8 sourcés,
+licences libres uniquement, sans dépasser les limites de débit du service.
 
 **Temps de rendu** : mesuré à 0,053 s par frame sur 4 cœurs, soit environ
 1,6× la durée de la vidéo. Remotion plafonne la concurrence au nombre de

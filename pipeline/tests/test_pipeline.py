@@ -397,3 +397,57 @@ def test_exhausted_quota_stops_the_whole_run(monkeypatch, tmp_path):
     assert assets == {}
     assert len(attempts) == 1
     assert len(failures) == 1
+
+
+# --- Cadrage des archives ----------------------------------------------------
+
+from fresque.sources.base import Candidate  # noqa: E402
+from fresque.sources.wikimedia import _prefer_landscape, build_search, variants  # noqa: E402
+
+
+def _cand(title: str, width: int, height: int) -> Candidate:
+    return Candidate(
+        provider="wikimedia_commons", title=title, page_url="", file_url="u",
+        licence="Public domain", width=width, height=height, mime="image/jpeg",
+    )
+
+
+def test_landscape_candidates_come_first():
+    """A 1920x2888 book scan shown in a 16:9 frame is a vertical slice of
+    itself — exactly what the first real run produced."""
+    ordered = _prefer_landscape([
+        _cand("scan de livre", 1920, 2888),
+        _cand("photographie", 1920, 1280),
+    ])
+    assert ordered[0].title == "photographie"
+
+
+def test_portrait_is_kept_as_a_last_resort():
+    only_portrait = [_cand("plaque verticale", 1920, 2560)]
+    assert _prefer_landscape(only_portrait) == only_portrait
+
+
+def test_relevance_order_is_preserved_within_a_group():
+    ordered = _prefer_landscape([
+        _cand("premier paysage", 1920, 1080),
+        _cand("second paysage", 1920, 1200),
+    ])
+    assert [c.title for c in ordered] == ["premier paysage", "second paysage"]
+
+
+def test_search_excludes_scanned_documents():
+    built = build_search("Titanic boiler room", 1920)
+    assert "filetype:bitmap" in built
+    assert "filew:>1920" in built
+
+
+def test_search_respects_an_explicit_filter():
+    built = build_search("Titanic filemime:image/png", 1920)
+    assert "filetype:bitmap" not in built
+
+
+def test_variants_go_from_specific_to_loose():
+    steps = variants("Titanic boiler room stokers 1912", 1920)
+    assert steps[0] == ("Titanic boiler room stokers 1912", 1920)
+    assert steps[-1][1] == 800
+    assert len(steps) == len(set(steps))
