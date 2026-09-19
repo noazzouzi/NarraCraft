@@ -170,7 +170,7 @@ def build(
     assets: dict[str, dict[str, Any]],
     audio: str | None = None,
     sons_dir: str | None = None,
-    musique: str | None = None,
+    musique: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     fps = int(config.get("montage", "fps", default=30))
     width, height = config.get("montage", "resolution", default=[1920, 1080])
@@ -309,8 +309,7 @@ def build(
         # Le lit sonore. Le moteur le boucle : il n'a pas à savoir combien de
         # fois, seulement à quel volume et sur quelle durée de fondu.
         "musique": {
-            "fichier": musique,
-            "gain": float(config.get("montage", "musique", "gain", default=0.07)),
+            **musique,
             "fondu_frames": round(
                 float(config.get("montage", "musique", "fondu_s", default=3.0)) * fps
             ),

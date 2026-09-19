@@ -287,17 +287,29 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     sons_dir = "04-audio/sons"
     sons_mod.build(project.root / sons_dir)
 
+    voix = project.audio_dir / "voix.wav"
+
     musique = None
     if config.get("montage", "musique", "actif", default=True):
-        musique = f"{sons_dir}/musique.wav"
-        sons_mod.build_musique(
-            project.root / musique,
+        relatif = f"{sons_dir}/musique.wav"
+        piste = sons_mod.build_musique(
+            project.root / relatif,
             duree_s=float(config.get("montage", "musique", "boucle_s", default=40)),
-            tonique_hz=float(config.get("montage", "musique", "tonique_hz", default=55)),
+            tonique_hz=float(config.get("montage", "musique", "tonique_hz", default=110)),
             mode=str(config.get("montage", "musique", "mode", default="sobre")),
+            force=True,
         )
+        # Le gain se mesure, il ne se règle pas : le même 0,06 est inaudible
+        # sur un bourdon à 49 Hz et envahissant sur un lit à 300.
+        niveau_db = float(config.get(
+            "montage", "musique", "niveau_relatif_db", default=-24))
+        if voix.is_file():
+            gain = sons_mod.gain_pour(piste, voix, niveau_db)
+        else:
+            gain = float(config.get("montage", "musique", "gain", default=0.1))
+        musique = {"fichier": relatif, "gain": round(gain, 4),
+                   "niveau_relatif_db": niveau_db}
 
-    voix = project.audio_dir / "voix.wav"
     timeline = timeline_mod.build(
         alignment, plan, assets,
         audio="04-audio/voix.wav" if voix.is_file() else None,
@@ -322,6 +334,10 @@ def cmd_timeline(args: argparse.Namespace) -> int:
         f"{kind} {count}" for kind, count in sorted(arrivees.items())
     ))
     print(f"  {len(timeline['sons'])} son(s) de transition")
+    if timeline.get("musique"):
+        mus = timeline["musique"]
+        print(f"  lit sonore : {mus['niveau_relatif_db']:+g} dB sous la voix "
+              f"(pondéré A) · gain {mus['gain']:g}")
     if timeline["source_timings"] == "estimate":
         print("  ⚠ construit sur des timings estimés")
     if problems:

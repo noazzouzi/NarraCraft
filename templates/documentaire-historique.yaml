@@ -139,8 +139,10 @@ montage:
   # qu'en l'enlevant, et c'est le but.
   musique:
     mode: sombre
-    tonique_hz: 49
-    gain: 0.06
+    # Sol2, une seconde sous le la de la base : un peu plus lourd, toujours
+    # dans la zone que restitue un haut-parleur d'ordinateur.
+    tonique_hz: 98
+    niveau_relatif_db: -24
     fondu_s: 4.0
 
   # Comment un plan arrive. Le format supporte des flashs, mais moins

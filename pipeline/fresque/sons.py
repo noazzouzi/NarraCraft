@@ -256,3 +256,67 @@ def build_musique(destination: Path, duree_s: float = 40.0,
     if force or not destination.is_file():
         _write(destination, musique(duree_s, tonique_hz, mode), np)
     return destination
+
+
+def _ponderation_a(freq):
+    """Réponse de la courbe A, qui approche la sensibilité de l'oreille.
+
+    Elle chute très vite dans le grave : à 50 Hz elle retire une trentaine
+    de décibels. C'est ce qui rend un bourdon très grave mesurable et
+    pourtant inaudible — et c'est l'erreur qu'on a faite en réglant le lit
+    à l'œil sur un spectre plutôt qu'à l'oreille sur un niveau.
+    """
+    import numpy as np
+
+    f = np.maximum(np.asarray(freq, dtype="float64"), 1e-6)
+    numerateur = (12194.0**2) * f**4
+    denominateur = (
+        (f**2 + 20.6**2)
+        * np.sqrt((f**2 + 107.7**2) * (f**2 + 737.9**2))
+        * (f**2 + 12194.0**2)
+    )
+    return numerateur / denominateur
+
+
+def niveau_pondere_a(echantillons, rate: int = RATE) -> float:
+    """Niveau perçu d'un signal, pondéré A.
+
+    C'est la seule mesure qui répond à « est-ce qu'on l'entend ». Le niveau
+    brut, lui, dit seulement qu'il y a de l'énergie quelque part.
+    """
+    import numpy as np
+
+    x = np.asarray(echantillons, dtype="float64")
+    if not len(x):
+        return 0.0
+    spectre = np.abs(np.fft.rfft(x))
+    freqs = np.fft.rfftfreq(len(x), 1.0 / rate)
+    return float(np.sqrt(((spectre * _ponderation_a(freqs)) ** 2).sum()) / len(x))
+
+
+def lire_wav(chemin: Path) -> tuple["np.ndarray", int]:
+    import numpy as np
+
+    with wave.open(str(chemin)) as fh:
+        rate = fh.getframerate()
+        brut = fh.readframes(fh.getnframes())
+    return np.frombuffer(brut, dtype="<i2").astype("float64") / 32768.0, rate
+
+
+def gain_pour(musique_path: Path, voix_path: Path, niveau_db: float) -> float:
+    """Le gain qui place le lit `niveau_db` sous la voix, à l'oreille.
+
+    Régler ce gain à la main revient à deviner : le même 0,06 est inaudible
+    sur un bourdon à 49 Hz et envahissant sur un lit à 300 Hz. On mesure les
+    deux pistes et on résout.
+    """
+    musique_x, musique_r = lire_wav(musique_path)
+    voix_x, voix_r = lire_wav(voix_path)
+
+    niveau_musique = niveau_pondere_a(musique_x, musique_r)
+    # Une minute de voix suffit à en établir le niveau, et c'est cent fois
+    # plus rapide qu'une transformée sur un quart d'heure.
+    niveau_voix = niveau_pondere_a(voix_x[: voix_r * 60], voix_r)
+    if niveau_musique <= 0:
+        return 0.0
+    return float(10.0 ** (niveau_db / 20.0) * niveau_voix / niveau_musique)

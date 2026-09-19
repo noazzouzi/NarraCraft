@@ -29,6 +29,15 @@ TEMPLATES_DIR = "templates"
 # caller must call `use_template()` itself.
 _active_template: str | None = None
 
+# Réglages propres à un projet, lus dans son `projet.yaml`. Ils s'appliquent
+# par-dessus le template, qui s'applique lui-même par-dessus la base.
+#
+# C'est ce qui permet de tester un montage sur deux minutes sans toucher au
+# template : la durée cible est un réglage du projet, pas du genre. Sans ce
+# niveau, raccourcir une vidéo d'essai reviendrait à modifier le template et
+# à le remettre en place après — donc à oublier de le remettre en place.
+_project_overrides: dict[str, Any] = {}
+
 
 class TemplateError(ValueError):
     pass
@@ -50,6 +59,19 @@ def use_template(name: str | None) -> None:
     if name != _active_template:
         _active_template = name
         load.cache_clear()
+
+
+def use_project_overrides(reglages: dict[str, Any] | None) -> None:
+    """Apply a project's own settings on top of its template."""
+    global _project_overrides
+    reglages = reglages or {}
+    if reglages != _project_overrides:
+        _project_overrides = reglages
+        load.cache_clear()
+
+
+def project_overrides() -> dict[str, Any]:
+    return _project_overrides
 
 
 def active_template() -> str | None:
@@ -77,13 +99,14 @@ def load() -> dict[str, Any]:
     with (root / CONFIG_NAME).open(encoding="utf-8") as fh:
         base = yaml.safe_load(fh)
 
-    if not _active_template:
-        return base
+    if _active_template:
+        path = root / TEMPLATES_DIR / f"{_active_template}.yaml"
+        with path.open(encoding="utf-8") as fh:
+            base = _merge(base, yaml.safe_load(fh) or {})
 
-    path = root / TEMPLATES_DIR / f"{_active_template}.yaml"
-    with path.open(encoding="utf-8") as fh:
-        overlay = yaml.safe_load(fh) or {}
-    return _merge(base, overlay)
+    # Le projet a le dernier mot : c'est le seul niveau qui connaisse la
+    # vidéo qu'on est en train de faire.
+    return _merge(base, _project_overrides) if _project_overrides else base
 
 
 def get(*keys: str, default: Any = None) -> Any:

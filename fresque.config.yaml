@@ -316,15 +316,30 @@ montage:
   # documentaire historique ne sonnent pas pareil.
   musique:
     actif: true
-    # Relatif à la voix. Au-delà de 0,12 on l'entend comme de la musique.
-    gain: 0.07
+
+    # Niveau du lit SOUS la voix, en décibels et pondéré A — c'est-à-dire
+    # tel que l'oreille l'entend, pas tel qu'un spectre le montre. Le gain
+    # n'est donc pas réglé ici : le pipeline mesure les deux pistes et le
+    # résout. C'est la seule façon d'y arriver, parce qu'un même gain est
+    # inaudible sur un bourdon à 49 Hz et envahissant sur un lit à 300.
+    #
+    # Mesuré : -24 dB s'entend nettement sans jamais masquer une consonne.
+    # Vers -32 le lit disparaît sur un haut-parleur d'ordinateur, vers -18
+    # il commence à se disputer la narration.
+    niveau_relatif_db: -24
+
     # Montée au début, descente à la fin. Un lit qui démarre sec s'entend.
     fondu_s: 3.0
     # Longueur de la boucle. Elle est sans couture par construction, pas
     # par fondu croisé : chaque partiel compte un nombre entier de cycles.
     boucle_s: 40
-    # La ou G1. Assez grave pour ne jamais croiser la voix.
-    tonique_hz: 55
+
+    # La2. Le premier réglage descendait à 49 Hz « pour ne jamais croiser
+    # la voix » : à ce point le lit était inaudible, l'oreille y perd une
+    # trentaine de décibels et aucun haut-parleur d'ordinateur ne descend
+    # si bas. 110 Hz reste très en dessous de la zone d'intelligibilité de
+    # la parole tout en étant restitué partout.
+    tonique_hz: 110
     # sobre · sombre · tendu · clair — voir `sons.MODES`.
     mode: sobre
 

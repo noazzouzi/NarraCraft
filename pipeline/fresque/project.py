@@ -30,8 +30,11 @@ class Project:
         if not root.is_dir():
             raise FileNotFoundError(f"Projet introuvable : {root}")
         project = cls(slug=slug, root=root)
-        # Every command reads its settings through the project's template.
+        # Every command reads its settings through the project's template,
+        # then through the project's own overrides. The project has the last
+        # word because it is the only level that knows which video this is.
         config.use_template(project.template)
+        config.use_project_overrides(project.reglages)
         return project
 
     @classmethod
@@ -59,6 +62,25 @@ class Project:
             return None
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         return data.get("template")
+
+    @property
+    def reglages(self) -> dict:
+        """Settings this project overrides, from its `projet.yaml`.
+
+        The layer exists so a two-minute test montage costs one line in the
+        project rather than an edit to the template — an edit one then has to
+        remember to undo, and does not.
+
+            template: documentaire-historique
+            reglages:
+              production:
+                duree_cible_min: 2
+        """
+        path = self.root / "projet.yaml"
+        if not path.is_file():
+            return {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return data.get("reglages") or {}
 
     def set_template(self, name: str) -> None:
         path = self.root / "projet.yaml"

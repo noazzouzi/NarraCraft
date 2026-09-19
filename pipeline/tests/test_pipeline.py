@@ -1478,3 +1478,67 @@ def test_template_page_is_static_and_self_contained(tmp_path):
     assert "http://" not in page and "https://" not in page
     # Les couleurs du template y figurent comme pastilles.
     assert "#c9a227" in page
+
+
+def test_a_project_can_override_its_template(tmp_path, monkeypatch):
+    """Tester un montage sur deux minutes doit coûter une ligne dans le
+    projet, pas une modification du template qu'on oubliera de défaire."""
+    from fresque import config as config_mod
+    from fresque.project import Project
+
+    racine = tmp_path / "projects" / "essai"
+    racine.mkdir(parents=True)
+    (racine / "projet.yaml").write_text(
+        "template: documentaire-historique\n"
+        "reglages:\n  production:\n    duree_cible_min: 2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_mod, "repo_root", lambda *a, **k: tmp_path)
+    # Le dépôt réel fournit la config de base et les templates.
+    vrai = Path(__file__).resolve().parents[2]
+    for nom in (config_mod.CONFIG_NAME,):
+        (tmp_path / nom).write_text((vrai / nom).read_text(encoding="utf-8"),
+                                    encoding="utf-8")
+    (tmp_path / "templates").mkdir()
+    for gabarit in (vrai / "templates").glob("*.yaml"):
+        (tmp_path / "templates" / gabarit.name).write_text(
+            gabarit.read_text(encoding="utf-8"), encoding="utf-8")
+
+    try:
+        Project.open("essai")
+        # Le projet a le dernier mot…
+        assert config_mod.get("production", "duree_cible_min") == 2
+        # …sans écraser ce que le template dit par ailleurs.
+        assert config_mod.get("narration", "mots_par_minute") == 170
+    finally:
+        config_mod.use_project_overrides({})
+        config_mod.use_template(None)
+
+
+def test_the_bed_gain_is_measured_against_the_voice(tmp_path):
+    """Un même gain est inaudible sur un bourdon à 49 Hz et envahissant sur
+    un lit à 300. Il se mesure, il ne se règle pas."""
+    import numpy as np
+
+    from fresque import sons as sons_mod
+
+    voix = tmp_path / "voix.wav"
+    t = np.arange(int(sons_mod.RATE * 2)) / sons_mod.RATE
+    # Une « voix » à 200 Hz, là où la pondération A ne retire presque rien.
+    sons_mod._write(voix, 0.5 * np.sin(2 * np.pi * 200 * t), np)
+
+    gains = {}
+    for tonique in (49.0, 110.0):
+        piste = sons_mod.build_musique(
+            tmp_path / f"m{tonique:.0f}.wav", 4.0, tonique, "sombre", force=True)
+        gains[tonique] = sons_mod.gain_pour(piste, voix, -24.0)
+
+    # Plus le lit est grave, plus il faut de gain pour le même niveau perçu.
+    assert gains[49.0] > gains[110.0] * 2
+    # Et le rapport demandé est bien tenu.
+    piste = tmp_path / "m110.wav"
+    x, r = sons_mod.lire_wav(piste)
+    v, vr = sons_mod.lire_wav(voix)
+    obtenu = (sons_mod.niveau_pondere_a(x * gains[110.0], r)
+              / sons_mod.niveau_pondere_a(v, vr))
+    assert 20 * np.log10(obtenu) == pytest.approx(-24, abs=0.5)
