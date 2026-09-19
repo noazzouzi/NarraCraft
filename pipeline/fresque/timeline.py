@@ -334,9 +334,14 @@ def build(
         # fois, seulement à quel volume et sur quelle durée de fondu.
         "musique": {
             **musique,
-            "fondu_frames": round(
-                float(config.get("montage", "musique", "fondu_s", default=3.0)) * fps
-            ),
+            "fondu_entree_frames": round(float(config.get(
+                "montage", "musique", "fondu_entree_s",
+                default=config.get("montage", "musique", "fondu_s", default=0.0),
+            )) * fps),
+            "fondu_sortie_frames": round(float(config.get(
+                "montage", "musique", "fondu_sortie_s",
+                default=config.get("montage", "musique", "fondu_s", default=3.0),
+            )) * fps),
         } if musique and config.get("montage", "musique", "actif", default=True)
         else None,
         "sons": sound_track,

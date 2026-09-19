@@ -16,9 +16,12 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
     <AbsoluteFill style={{ backgroundColor: palette.fond }}>
       {audio ? <Audio src={staticFile(audio)} /> : null}
 
-      {/* Le lit sonore, bouclé sur toute la durée. Il monte et redescend :
-          un fond qui démarre sec s'entend, et c'est précisément ce qu'on ne
-          veut pas d'un lit sonore. */}
+      {/* Le lit sonore, bouclé sur toute la durée. L'entrée et la sortie
+          sont réglées séparément : une entrée nulle met le lit à plein
+          niveau dès la première image — les quinze premières secondes
+          décident du reste, leur retirer la musique n'a pas de sens — et
+          la sortie reste longue, parce qu'une coupe nette à la fin
+          s'entend comme une panne. */}
       {musique ? (
         <Audio
           src={staticFile(musique.fichier)}
@@ -29,11 +32,14 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
               frame,
               [
                 0,
-                musique.fondu_frames,
-                Math.max(duree_frames - musique.fondu_frames, musique.fondu_frames + 1),
+                Math.max(musique.fondu_entree_frames, 0),
+                Math.max(
+                  duree_frames - musique.fondu_sortie_frames,
+                  musique.fondu_entree_frames + 1,
+                ),
                 duree_frames,
               ],
-              [0, 1, 1, 0],
+              [musique.fondu_entree_frames > 0 ? 0 : 1, 1, 1, 0],
               { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
             )
           }

@@ -160,7 +160,11 @@ montage:
     boucle_fondu_s: 4.0
 
     niveau_relatif_db: -22
-    fondu_s: 4.0
+    # Le lit est là dès la première image, à plein niveau. Les quinze
+    # premières secondes décident du reste : leur retirer la musique pour
+    # ménager une entrée en fondu revient à l'enlever là où elle sert.
+    fondu_entree_s: 0.0
+    fondu_sortie_s: 4.0
 
   # Comment un plan arrive. Le format supporte des flashs, mais moins
   # appuyés qu'ailleurs : sur une façade en plein soleil, un flash à pleine

@@ -352,8 +352,15 @@ montage:
     # il commence à se disputer la narration.
     niveau_relatif_db: -22
 
-    # Montée au début, descente à la fin. Un lit qui démarre sec s'entend.
-    fondu_s: 3.0
+    # Montée au début, descente à la fin, séparées : elles ne répondent pas
+    # à la même question. Une sortie sèche coupe le film net ; une entrée
+    # lente, elle, prive les premières secondes du lit — et ce sont
+    # justement celles où le spectateur décide de rester.
+    #
+    # Un démarrage à zéro ne claque pas : le premier échantillon de la
+    # boucle est à -0,056, soit environ -45 dBFS une fois le gain appliqué.
+    fondu_entree_s: 0.0
+    fondu_sortie_s: 3.0
     # Longueur de la boucle. Elle est sans couture par construction, pas
     # par fondu croisé : chaque partiel compte un nombre entier de cycles.
     boucle_s: 40

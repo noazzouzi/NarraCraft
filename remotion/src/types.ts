@@ -122,7 +122,12 @@ export type Timeline = {
   sons: { fichier: string; debut_frame: number; gain: number }[];
   /** The background bed, looped for the whole film. Null when the template
    *  turns it off. */
-  musique: { fichier: string; gain: number; fondu_frames: number } | null;
+  musique: {
+    fichier: string;
+    gain: number;
+    fondu_entree_frames: number;
+    fondu_sortie_frames: number;
+  } | null;
   sous_titres: SousTitre[];
   credits: { asset: string; credit: string; url: string; licence: string }[];
 };
