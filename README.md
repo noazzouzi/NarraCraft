@@ -92,7 +92,7 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 5 | Timeline et rendu Remotion | fait |
 | 4a | Plan visuel (skill) et validation | fait |
 | 3a | Voix off Kokoro, durées réelles | fait |
-| 4b | Sourcing Wikimedia Commons | fait, vérifié en réel |
+| 4b | Sourcing Wikimedia Commons + Openverse | fait, vérifié en réel |
 | 4c | Génération d'images Gemini | à venir |
 | 3b | Alignement forcé mot-à-mot | à venir |
 | 6 | Motion graphics : cartes, unes de journaux, archives | à venir |

@@ -11,17 +11,28 @@ optimistic reading.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable
 
 import requests
 
-from . import config
 from .shots import Shot
-from .sources import wikimedia
+from .sources import openverse, wikimedia
 from .sources.base import Candidate
 
 Reporter = Callable[[str], None]
+
+#: Wikimedia first: it serves cached renderings at the width we ask for.
+#: Openverse second, and only as a fallback — it indexes renditions rather
+#: than originals and tops out around 1024px (see its module docstring), so a
+#: shot it covers is a shot we would otherwise have had to pay to generate.
+CASCADE = ("wikimedia_commons", "openverse")
+
+#: Below this, a source image upscaled into a 1080p frame is visibly soft,
+#: and the Ken Burns zoom makes it worse.
+WIDTH_TARGET = 1920
+WIDTH_FALLBACK = 900
 
 
 class FetchError(RuntimeError):
@@ -30,14 +41,29 @@ class FetchError(RuntimeError):
 
 def _extension(candidate: Candidate) -> str:
     return {
-        "image/jpeg": ".jpg", "image/png": ".png",
+        "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
         "image/tiff": ".jpg", "image/webp": ".webp",
     }.get(candidate.mime, ".jpg")
 
 
+def real_size(path: Path) -> tuple[int, int]:
+    """Measure the file we actually got.
+
+    Providers describe the original they hold, not the rendition they serve:
+    Rawpixel announces 6999px and returns a 1024px `editor_1024`, Flickr
+    announces 1024 and answers 410 for anything larger. Metadata is a
+    promise, the file on disk is the fact.
+    """
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return image.size
+
+
 def _record(shot: Shot, candidate: Candidate, filename: str,
             alternatives: list[Candidate], used_query: str = "",
-            used_width: int = 0) -> dict[str, Any]:
+            used_width: int = 0, real: tuple[int, int] | None = None) -> dict[str, Any]:
+    width, height = real or (candidate.width, candidate.height)
     return {
         "fichier": f"05-visuals/{filename}",
         "shot": shot.id,
@@ -49,8 +75,10 @@ def _record(shot: Shot, candidate: Candidate, filename: str,
         "licence_url": candidate.licence_url,
         "url": candidate.page_url,
         "credit": candidate.credit(),
-        "largeur": candidate.width,
-        "hauteur": candidate.height,
+        # Measured on the downloaded file, not taken from the provider.
+        "largeur": width,
+        "hauteur": height,
+        "largeur_annoncee": candidate.width,
         "requete": shot.requete,
         # When the search had to be widened, say so: a relaxed query can match
         # something only loosely related, and a human reviewing the assets
@@ -66,15 +94,35 @@ def _record(shot: Shot, candidate: Candidate, filename: str,
     }
 
 
+def _search_wikimedia(query: str, session) -> tuple[list[Candidate], str, int]:
+    return wikimedia.search_relaxed(
+        query, limit=6, min_width=WIDTH_TARGET, session=session
+    )
+
+
+def _search_openverse(query: str, session) -> tuple[list[Candidate], str, int]:
+    found = openverse.search(
+        query, limit=6, min_width=WIDTH_FALLBACK, session=session,
+        token=os.environ.get("OPENVERSE_TOKEN"),
+    )
+    return found, query, WIDTH_FALLBACK
+
+
+PROVIDERS = {
+    "wikimedia_commons": (_search_wikimedia, wikimedia.download),
+    "openverse": (_search_openverse, openverse.download),
+}
+
+
 def fetch_archives(
     shots: list[Shot],
     visuals_dir: Path,
     report: Reporter | None = None,
     dry_run: bool = False,
+    cascade: tuple[str, ...] = CASCADE,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Return (assets by shot id, list of shots left unsourced)."""
     say = report or (lambda _: None)
-    min_width = 1920   # cascade descendante gérée par search_relaxed
     session = requests.Session()
 
     assets: dict[str, dict[str, Any]] = {}
@@ -83,44 +131,59 @@ def fetch_archives(
     for shot in shots:
         if shot.type != "archive":
             continue
+
+        record = _source_one(shot, visuals_dir, session, cascade, say, dry_run)
+        if record is None:
+            unsourced.append(shot.id)
+        else:
+            assets[shot.id] = record
+
+    return assets, unsourced
+
+
+def _source_one(shot, visuals_dir, session, cascade, say, dry_run):
+    """Walk the cascade until one provider yields a usable file."""
+    for provider in cascade:
+        search, download = PROVIDERS[provider]
         try:
-            candidates, used_query, used_width = wikimedia.search_relaxed(
-                shot.requete, limit=6, min_width=min_width, session=session
-            )
-        except requests.RequestException as error:
-            raise FetchError(
-                f"{shot.id} : la recherche d'archive a échoué — {error}\n"
-                "Si l'hôte est bloqué par une politique réseau, le sourcing "
-                "doit tourner depuis une machine qui y a accès."
-            ) from error
+            candidates, used_query, used_width = search(shot.requete, session)
+        except (requests.RequestException, ValueError) as error:
+            say(f"  ! {shot.id} : {provider} indisponible — {str(error)[:90]}")
+            continue
 
         if not candidates:
-            say(f"  · {shot.id} : rien de libre pour « {shot.requete} »")
-            unsourced.append(shot.id)
             continue
 
         best = candidates[0]
         filename = f"{shot.id}{_extension(best)}"
-        relaxed = " (requête élargie)" if used_query != shot.requete else ""
-        say(f"  ✓ {shot.id} : {best.title[:52]} [{best.licence}]{relaxed}")
+        note = " (requête élargie)" if used_query != shot.requete else ""
+        origin = "" if provider == "wikimedia_commons" else f" via {provider}"
 
-        if not dry_run:
-            visuals_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                wikimedia.download(best, visuals_dir / filename)
-            except requests.RequestException as error:
-                # One unavailable file must not cost the whole run: the other
-                # shots are independent, and a re-run picks this one back up.
-                say(f"  ✗ {shot.id} : téléchargement échoué — {error}")
-                (visuals_dir / filename).unlink(missing_ok=True)
-                unsourced.append(shot.id)
-                continue
+        if dry_run:
+            say(f"  ✓ {shot.id} : {best.title[:48]} [{best.licence}]{note}{origin}")
+            return _record(shot, best, filename, candidates[1:], used_query, used_width)
 
-        assets[shot.id] = _record(
-            shot, best, filename, candidates[1:], used_query, used_width
-        )
+        destination = visuals_dir / filename
+        visuals_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            download(best, destination)
+            real = real_size(destination)
+        except (requests.RequestException, OSError) as error:
+            # One unavailable file must not cost the whole run: the other
+            # shots are independent, and a re-run picks this one back up.
+            say(f"  ! {shot.id} : téléchargement {provider} échoué — {str(error)[:70]}")
+            destination.unlink(missing_ok=True)
+            continue
 
-    return assets, unsourced
+        gap = ""
+        if real[0] < best.width:
+            gap = f" (annoncé {best.width}px, servi {real[0]}px)"
+        say(f"  ✓ {shot.id} : {best.title[:44]} [{best.licence}]{note}{origin}{gap}")
+        return _record(shot, best, filename, candidates[1:], used_query,
+                       used_width, real=real)
+
+    say(f"  · {shot.id} : rien de libre pour « {shot.requete} »")
+    return None
 
 
 def write_assets(assets: dict[str, dict[str, Any]], path: Path) -> None:

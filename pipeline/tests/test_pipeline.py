@@ -629,3 +629,140 @@ def test_template_reaches_the_linter(base_template, tmp_path):
 
     config_mod.use_template("sobre")
     assert [v for v in lint_mod.check(script) if v.rule == "longueur-beat"]
+
+
+# --- Openverse ---------------------------------------------------------------
+#
+# Calé sur des réponses réelles de l'API, relevées le 2026-09-19. Le point
+# important est la résolution : Openverse indexe une rendition, pas
+# l'original, et ses métadonnées annoncent l'original.
+
+from fresque.sources import openverse as ov  # noqa: E402
+
+OV_RESULTS = [
+    {   # Flickr : déclaré = servi, mais plafonné à 1024.
+        "title": "Courtroom", "url": "https://live.staticflickr.com/x_b.jpg",
+        "foreign_landing_url": "https://flickr.com/photos/x",
+        "license": "by-sa", "license_version": "3.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+        "creator": "Nitot", "source": "flickr", "filetype": "jpg",
+        "width": 1024, "height": 683, "attribution": "\"Courtroom\" by Nitot…",
+    },
+    {   # Non commercial : refusé avant tout transfert.
+        "title": "Interdit", "url": "https://example.org/nc.jpg",
+        "license": "by-nc", "license_version": "4.0",
+        "source": "flickr", "filetype": "jpg", "width": 4000, "height": 3000,
+    },
+    {   # Pas de dérivée : un mouvement Ken Burns en est une.
+        "title": "Sans dérivée", "url": "https://example.org/nd.jpg",
+        "license": "by-nd", "license_version": "4.0",
+        "source": "flickr", "filetype": "jpg", "width": 4000, "height": 3000,
+    },
+    {   # Format non affichable.
+        "title": "Vectoriel", "url": "https://example.org/x.svg",
+        "license": "cc0", "license_version": "1.0",
+        "source": "rawpixel", "filetype": "svg", "width": 4000, "height": 3000,
+    },
+    {   # Trop petit.
+        "title": "Vignette", "url": "https://example.org/small.jpg",
+        "license": "cc0", "license_version": "1.0",
+        "source": "rawpixel", "filetype": "jpg", "width": 400, "height": 300,
+    },
+]
+
+
+def test_only_commercially_usable_results_survive():
+    found = ov._to_candidates(OV_RESULTS, limit=10, min_width=900)
+    assert [c.title for c in found] == ["Courtroom"]
+
+
+def test_non_derivative_licence_is_refused():
+    """Un mouvement de caméra est une modification : CC BY-ND est inutilisable."""
+    assert all("dérivée" not in c.title for c in ov._to_candidates(OV_RESULTS, 10, 900))
+
+
+def test_licence_code_is_expanded_to_a_readable_label():
+    assert ov._licence_label({"license": "by-sa", "license_version": "3.0"}) == "CC BY-SA 3.0"
+    assert ov._licence_label({"license": "cc0", "license_version": "1.0"}) == "CC0 1.0"
+    assert ov._licence_label({"license": "pdm", "license_version": "1.0"}) == "Public domain 1.0"
+    assert ov._licence_label({}) == ""
+
+
+def test_provider_is_recorded_down_to_the_collection():
+    """« openverse » ne suffit pas : il faut savoir si c'est Flickr ou un musée."""
+    found = ov._to_candidates(OV_RESULTS, limit=10, min_width=900)
+    assert found[0].provider == "openverse:flickr"
+
+
+def test_wikimedia_is_excluded_server_side():
+    """On l'interroge déjà en direct, avec de meilleures vignettes."""
+    assert ov.EXCLUDED_SOURCES == "wikimedia"
+
+
+# --- Garde sur les réponses non-JSON ----------------------------------------
+
+from fresque.sources.base import Throttle, expects_json, is_retryable, retry_delay  # noqa: E402
+
+
+class _FakeResponse:
+    def __init__(self, status=200, headers=None):
+        self.status_code = status
+        self.headers = headers or {}
+
+
+def test_html_error_page_is_reported_as_such():
+    """Library of Congress sert une page Cloudflare en 429 ; appeler .json()
+    dessus lèverait une erreur de décodage qui ne dit rien du problème."""
+    with pytest.raises(ValueError, match="non-JSON"):
+        expects_json(_FakeResponse(429, {"Content-Type": "text/html"}))
+
+
+def test_json_response_passes_the_guard():
+    expects_json(_FakeResponse(200, {"Content-Type": "application/json"}))
+
+
+def test_retry_after_is_honoured_when_sent():
+    assert retry_delay(_FakeResponse(429, {"Retry-After": "7"}), 0, 1.0) == 7.0
+
+
+def test_backoff_grows_when_no_retry_after():
+    first = retry_delay(_FakeResponse(429), 0, 1.0)
+    second = retry_delay(_FakeResponse(429), 1, 1.0)
+    assert second > first
+
+
+def test_retry_delay_is_capped():
+    assert retry_delay(_FakeResponse(429, {"Retry-After": "9999"}), 0, 1.0) == 30.0
+
+
+def test_only_429_and_server_errors_are_retried():
+    assert is_retryable(429) and is_retryable(503)
+    assert not is_retryable(404) and not is_retryable(200)
+
+
+def test_throttle_spaces_successive_calls():
+    import time
+    throttle = Throttle(0.05)
+    start = time.monotonic()
+    for _ in range(3):
+        throttle.wait()
+    assert time.monotonic() - start >= 0.1
+
+
+def test_non_commercial_and_no_derivative_licences_are_refused():
+    """Régression. Un simple test de sous-chaîne lisait « cc by-nc 4.0 » comme
+    contenant « cc by » et le laissait passer : le filtre a accepté du non
+    commercial pendant toute la première moitié du projet."""
+    from fresque.sources.base import is_free_licence as free
+    assert not free("CC BY-NC 4.0")
+    assert not free("CC BY-NC-SA 3.0")
+    assert not free("CC BY-ND 4.0")
+    assert not free("CC BY-NC-ND 4.0")
+    assert not free("Creative Commons Non-Commercial")
+    assert not free("CC BY-SA 3.0 NoDerivatives")
+    # Et ce qui reste autorisé le reste.
+    assert free("CC BY-SA 3.0")
+    assert free("CC BY 4.0")
+    assert free("CC0 1.0")
+    assert free("Public domain")
+    assert free("No restrictions")

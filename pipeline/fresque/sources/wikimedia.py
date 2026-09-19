@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import re
-import threading
 import time
 from typing import Any, Iterable
 
 import requests
 
-from .base import Candidate
+from .base import Candidate, Throttle, expects_json, is_retryable, retry_delay
 
 API = "https://commons.wikimedia.org/w/api.php"
 # Commons asks identifiable clients to declare themselves.
@@ -23,17 +22,7 @@ GOOD_MIME = ("image/jpeg", "image/png", "image/tiff", "image/webp")
 MIN_INTERVAL_S = 1.1
 MAX_RETRIES = 3
 
-_throttle = threading.Lock()
-_last_call = 0.0
-
-
-def _wait_turn() -> None:
-    global _last_call
-    with _throttle:
-        elapsed = time.monotonic() - _last_call
-        if elapsed < MIN_INTERVAL_S:
-            time.sleep(MIN_INTERVAL_S - elapsed)
-        _last_call = time.monotonic()
+_throttle = Throttle(MIN_INTERVAL_S)
 
 
 def build_search(query: str, min_width: int) -> str:
@@ -148,19 +137,16 @@ def search(
 def _get(http: requests.Session, params: dict[str, str], timeout: float):
     """One throttled request, retried on 429 and 5xx."""
     for attempt in range(MAX_RETRIES + 1):
-        _wait_turn()
+        _throttle.wait()
         response = http.get(
             API, params=params, timeout=timeout,
             headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
         )
-        retryable = response.status_code == 429 or response.status_code >= 500
-        if retryable and attempt < MAX_RETRIES:
-            # Honour Retry-After when Commons sends one; back off otherwise.
-            header = response.headers.get("Retry-After", "")
-            delay = float(header) if header.isdigit() else MIN_INTERVAL_S * (2 ** (attempt + 1))
-            time.sleep(min(delay, 30.0))
+        if is_retryable(response.status_code) and attempt < MAX_RETRIES:
+            time.sleep(retry_delay(response, attempt, MIN_INTERVAL_S))
             continue
         response.raise_for_status()
+        expects_json(response)
         return response
     response.raise_for_status()
     return response
@@ -241,17 +227,14 @@ def download(candidate: Candidate, destination, timeout: float = 60.0) -> None:
     """
     last_error: Exception | None = None
     for attempt in range(MAX_RETRIES + 1):
-        _wait_turn()
+        _throttle.wait()
         try:
             with requests.get(
                 candidate.file_url, stream=True, timeout=timeout,
                 headers={"User-Agent": USER_AGENT},
             ) as response:
-                if (response.status_code == 429 or response.status_code >= 500) \
-                        and attempt < MAX_RETRIES:
-                    header = response.headers.get("Retry-After", "")
-                    delay = float(header) if header.isdigit() else 2.0 * (2 ** attempt)
-                    time.sleep(min(delay, 30.0))
+                if is_retryable(response.status_code) and attempt < MAX_RETRIES:
+                    time.sleep(retry_delay(response, attempt, 2.0))
                     continue
                 response.raise_for_status()
                 with open(destination, "wb") as fh:
