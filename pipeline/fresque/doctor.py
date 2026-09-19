@@ -32,6 +32,10 @@ class Group:
     label: str
     hosts: list[Host]
     optional: bool = False
+    #: Why this provider needs no file host of its own. A provider whose API
+    #: is reachable but whose files are not looks healthy here and then fails
+    #: at download time, so a single-host group has to justify itself.
+    fichiers_ailleurs: str = ""
     results: dict[str, str] = field(default_factory=dict)
 
 
@@ -48,7 +52,10 @@ GROUPS = [
     ], optional=True),
     Group("Archives — Openverse (52 fonds agrégés)", [
         Host("api.openverse.org", "recherche multi-fonds", "fetch"),
-    ]),
+    ], fichiers_ailleurs=(
+        "les fichiers sont servis par les 52 fournisseurs d'origine "
+        "(Flickr, Commons, musées) : impossible de tous les lister ici"
+    )),
     Group("Archives — Smithsonian Open Access", [
         Host("api.si.edu", "recherche", "fetch"),
         Host("ids.si.edu", "téléchargement et IIIF", "fetch"),
@@ -59,13 +66,13 @@ GROUPS = [
     ]),
     Group("B-roll générique — Pixabay", [
         Host("pixabay.com", "recherche et fichiers", "fetch"),
-    ], optional=True),
+    ], optional=True, fichiers_ailleurs="même hôte que la recherche"),
     Group("Génération d'images — Gemini", [
         Host("generativelanguage.googleapis.com", "génération", "images"),
-    ]),
+    ], fichiers_ailleurs="images renvoyées dans la réponse"),
     Group("Voix de finition — ElevenLabs", [
         Host("api.elevenlabs.io", "voix payante", "voice --provider elevenlabs"),
-    ], optional=True),
+    ], optional=True, fichiers_ailleurs="audio renvoyé dans la réponse"),
 ]
 
 

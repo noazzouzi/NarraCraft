@@ -254,12 +254,20 @@ def test_allowlist_deduplicates():
     ]
 
 
-def test_every_archive_group_lists_its_file_host():
+def test_every_group_probes_its_file_host_or_says_why_not():
     """A provider whose API is allowed but whose file host is not looks healthy
-    and then fails at download time. Both must be probed."""
+    here and then fails at download time. A single-host group must justify
+    itself — Openverse is the real case: its files come from 52 providers."""
     for group in GROUPS:
-        if "Archives" in group.label and len(group.hosts) == 1:
-            assert "gallica" in group.label.lower(), group.label
+        if len(group.hosts) == 1:
+            assert group.fichiers_ailleurs, group.label
+
+
+def test_gallica_is_not_probed_anymore():
+    """Commercial reuse is paid and licensed even for public-domain works
+    (loi 78-753). Probing it would suggest it is an option."""
+    hosts = {h.name for g in GROUPS for h in g.hosts}
+    assert not any("bnf" in h or "gallica" in h for h in hosts)
 
 
 # --- Génération d'images -----------------------------------------------------
