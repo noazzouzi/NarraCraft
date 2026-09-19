@@ -1265,3 +1265,48 @@ def test_staging_exposes_every_media_the_timeline_references(tmp_path, monkeypat
     assert exposes == {
         "05-visuals/S000.jpg", "05-visuals/rushes/a.mp4", "04-audio/voix.wav",
     }
+
+
+def test_two_shots_sharing_a_query_get_two_different_files(tmp_path):
+    """À quinze plans la minute, un documentaire revient au même tribunal.
+
+    Il ne doit pas en revenir avec la même photographie : c'est le signe le
+    plus visible qu'un montage a épuisé sa matière."""
+    from fresque import fetch as fetch_mod
+    from fresque.sources.base import Candidate
+
+    def _candidat(nom):
+        return Candidate(
+            provider="wikimedia_commons", title=nom, page_url=f"https://c/{nom}",
+            file_url=f"https://c/{nom}.jpg", licence="CC BY-SA 4.0",
+            licence_url="", author="a", width=2000, height=1200, mime="image/jpeg",
+        )
+
+    appels = []
+
+    def faux_search(query, session):
+        appels.append(query)
+        return [_candidat("un"), _candidat("deux")], query, 1920
+
+    def faux_download(candidate, destination):
+        destination.write_bytes(b"\x00")
+
+    monkey = {"wikimedia_commons": (faux_search, faux_download)}
+    origine = fetch_mod.PROVIDERS
+    fetch_mod.PROVIDERS = monkey
+    try:
+        shots = [
+            Shot(index=0, beat="B001", type="archive", requete="palais de justice"),
+            Shot(index=1, beat="B002", type="archive", requete="palais de justice"),
+        ]
+        assets, absents = fetch_mod.fetch_archives(
+            shots, tmp_path / "05-visuals", cascade=("wikimedia_commons",),
+            dry_run=True,
+        )
+    finally:
+        fetch_mod.PROVIDERS = origine
+
+    assert absents == []
+    assert assets["S000"]["url"] != assets["S001"]["url"]
+    # Et la recherche n'a été lancée qu'une fois pour les deux plans.
+    assert appels == ["palais de justice"]

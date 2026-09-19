@@ -94,15 +94,21 @@ def _record(shot: Shot, candidate: Candidate, filename: str,
     }
 
 
+#: Deep enough that one query can serve several shots once the files already
+#: taken are removed. A documentary comes back to the same courthouse, and at
+#: fifteen shots a minute it comes back often.
+PROFONDEUR = 14
+
+
 def _search_wikimedia(query: str, session) -> tuple[list[Candidate], str, int]:
     return wikimedia.search_relaxed(
-        query, limit=6, min_width=WIDTH_TARGET, session=session
+        query, limit=PROFONDEUR, min_width=WIDTH_TARGET, session=session
     )
 
 
 def _search_openverse(query: str, session) -> tuple[list[Candidate], str, int]:
     found = openverse.search(
-        query, limit=6, min_width=WIDTH_FALLBACK, session=session,
+        query, limit=PROFONDEUR, min_width=WIDTH_FALLBACK, session=session,
         token=os.environ.get("OPENVERSE_TOKEN"),
     )
     return found, query, WIDTH_FALLBACK
@@ -136,6 +142,18 @@ def fetch_archives(
     unsourced: list[str] = []
     repris = 0
 
+    # Two shots may legitimately carry the same query — a documentary comes
+    # back to the same courthouse — but they must not come back with the same
+    # photograph, which reads as the montage having run out of material.
+    # Resumed shots count as taken, or a re-run would duplicate what it kept.
+    pris: set[str] = {
+        record.get("url", "") for record in deja.values() if record.get("url")
+    }
+    # Searches are deduplicated within a run: shots sharing a query hit the
+    # API once. At a hundred and fifty archive shots this is the difference
+    # between a three-minute run and a ten-minute one.
+    cache: dict[tuple[str, str], tuple[list[Candidate], str, int]] = {}
+
     for shot in shots:
         if shot.type != "archive":
             continue
@@ -146,25 +164,38 @@ def fetch_archives(
             repris += 1
             continue
 
-        record = _source_one(shot, visuals_dir, session, cascade, say, dry_run)
+        record = _source_one(shot, visuals_dir, session, cascade, say, dry_run,
+                             pris, cache)
         if record is None:
             unsourced.append(shot.id)
         else:
             assets[shot.id] = record
+            pris.add(record.get("url", ""))
 
     return assets, unsourced
 
 
-def _source_one(shot, visuals_dir, session, cascade, say, dry_run):
+def _source_one(shot, visuals_dir, session, cascade, say, dry_run, pris=None,
+                cache=None):
     """Walk the cascade until one provider yields a usable file."""
+    pris = pris if pris is not None else set()
+    cache = cache if cache is not None else {}
+
     for provider in cascade:
         search, download = PROVIDERS[provider]
+        cle = (provider, shot.requete)
         try:
-            candidates, used_query, used_width = search(shot.requete, session)
+            if cle not in cache:
+                cache[cle] = search(shot.requete, session)
+            candidates, used_query, used_width = cache[cle]
         except (requests.RequestException, ValueError) as error:
             say(f"  ! {shot.id} : {provider} indisponible — {str(error)[:90]}")
             continue
 
+        # A file another shot already took is not a candidate here. Falling
+        # back to it would be worse than the shot going unsourced, which at
+        # least gets reported and fixed.
+        candidates = [c for c in candidates if c.page_url not in pris]
         if not candidates:
             continue
 
