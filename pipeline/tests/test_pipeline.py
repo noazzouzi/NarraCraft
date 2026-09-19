@@ -1329,3 +1329,86 @@ def test_relevance_requires_every_word_of_the_query():
     assert est_pertinent("prison de la Santé", "Facade Nord de la prison de la Santé")
     assert est_pertinent("courthouse interior", "Bytom courthouse interior stairs")
     assert est_pertinent("law court columns", "Court of the Thousand Columns, law")
+
+
+def _faux_fournisseur(titres, appels=None):
+    """Un fournisseur d'archives en mémoire, pour tester la réutilisation."""
+    from fresque.sources.base import Candidate
+
+    def candidat(nom):
+        return Candidate(
+            provider="wikimedia_commons", title=nom, page_url=f"https://c/{nom}",
+            file_url=f"https://c/{nom}.jpg", licence="CC BY-SA 4.0",
+            licence_url="", author="a", width=2000, height=1200, mime="image/jpeg",
+        )
+
+    def search(query, session):
+        if appels is not None:
+            appels.append(query)
+        return [candidat(t) for t in titres], query, 1920
+
+    def download(candidate, destination):
+        destination.write_bytes(b"\x00")
+
+    return {"wikimedia_commons": (search, download)}
+
+
+def test_an_image_comes_back_only_far_from_itself(tmp_path, monkeypatch):
+    """Les fonds libres sont finis : refuser toute reprise laisserait un
+    tiers du montage sans visuel. Ce qui la rend acceptable, c'est la
+    distance — jamais dans le même beat, jamais trop tôt."""
+    from fresque import config as config_mod, fetch as fetch_mod
+
+    vrai_get = config_mod.get
+
+    def get_court(*cles, default=None):
+        if cles[-1] == "ecart_min_plans":
+            return 3
+        return vrai_get(*cles, default=default)
+
+    monkeypatch.setattr(fetch_mod.config, "get", get_court)
+
+    origine = fetch_mod.PROVIDERS
+    fetch_mod.PROVIDERS = _faux_fournisseur(["un"])
+    try:
+        # Un seul fichier disponible, six plans répartis sur six beats.
+        shots = [
+            Shot(index=i, beat=f"B{i:03d}", type="archive", requete="q")
+            for i in range(6)
+        ]
+        assets, absents = fetch_mod.fetch_archives(
+            shots, tmp_path / "05-visuals", cascade=("wikimedia_commons",),
+            dry_run=True,
+        )
+    finally:
+        fetch_mod.PROVIDERS = origine
+
+    # Le premier plan prend le fichier ; les deux suivants sont trop proches
+    # et restent sans image ; le quatrième est assez loin pour le reprendre —
+    # et la reprise repousse d'autant la suivante.
+    assert "S000" in assets
+    assert absents == ["S001", "S002", "S004", "S005"]
+    assert assets["S003"]["reutilise_de"] == "S000"
+    # La reprise pointe le fichier déjà sur disque, sans second téléchargement.
+    assert assets["S003"]["fichier"] == assets["S000"]["fichier"]
+
+
+def test_two_shots_of_the_same_beat_never_share_an_image(tmp_path):
+    from fresque import fetch as fetch_mod
+
+    origine = fetch_mod.PROVIDERS
+    fetch_mod.PROVIDERS = _faux_fournisseur(["un"])
+    try:
+        shots = [
+            Shot(index=0, beat="B001", type="archive", requete="q"),
+            Shot(index=1, beat="B001", type="archive", requete="q"),
+        ]
+        assets, absents = fetch_mod.fetch_archives(
+            shots, tmp_path / "05-visuals", cascade=("wikimedia_commons",),
+            dry_run=True,
+        )
+    finally:
+        fetch_mod.PROVIDERS = origine
+
+    assert list(assets) == ["S000"]
+    assert absents == ["S001"]

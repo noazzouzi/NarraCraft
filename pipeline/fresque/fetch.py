@@ -17,6 +17,7 @@ from typing import Any, Callable
 
 import requests
 
+from . import config
 from .shots import Shot
 from .sources import openverse, wikimedia
 from .sources.base import Candidate
@@ -142,43 +143,84 @@ def fetch_archives(
     unsourced: list[str] = []
     repris = 0
 
-    # Two shots may legitimately carry the same query — a documentary comes
-    # back to the same courthouse — but they must not come back with the same
-    # photograph, which reads as the montage having run out of material.
-    # Resumed shots count as taken, or a re-run would duplicate what it kept.
-    pris: set[str] = {
-        record.get("url", "") for record in deja.values() if record.get("url")
-    }
+    ecart = int(config.get("visuels", "reutilisation", "ecart_min_plans", default=25))
+    # What has already been seen on screen, and where. A file may come back —
+    # a documentary returns to the same courthouse, and the free archives on a
+    # given subject are finite — but never close to itself. See `_eligibles`.
+    histoire: dict[str, dict[str, Any]] = {}
+    for identifiant, record in deja.items():
+        url = record.get("url")
+        if url:
+            histoire[url] = {"position": -10**6, "beat": record.get("beat"),
+                             "record": record}
+
     # Searches are deduplicated within a run: shots sharing a query hit the
     # API once. At a hundred and fifty archive shots this is the difference
     # between a three-minute run and a ten-minute one.
     cache: dict[tuple[str, str], tuple[list[Candidate], str, int]] = {}
 
+    position = 0
     for shot in shots:
         if shot.type != "archive":
+            # A motion panel or a generated still still occupies the screen,
+            # so it counts towards the distance between two reuses.
+            position += 1
             continue
 
         acquis = deja.get(shot.id)
         if acquis and (visuals_dir.parent / acquis.get("fichier", "")).is_file() \
                 and acquis.get("requete") == shot.requete:
             repris += 1
+            if acquis.get("url"):
+                histoire[acquis["url"]] = {
+                    "position": position, "beat": shot.beat, "record": acquis,
+                }
+            position += 1
             continue
 
         record = _source_one(shot, visuals_dir, session, cascade, say, dry_run,
-                             pris, cache)
+                             histoire, cache, position, ecart)
         if record is None:
             unsourced.append(shot.id)
         else:
             assets[shot.id] = record
-            pris.add(record.get("url", ""))
+            if record.get("url"):
+                histoire[record["url"]] = {
+                    "position": position, "beat": shot.beat, "record": record,
+                }
+        position += 1
 
+    if repris:
+        say(f"  {repris} plan(s) déjà sourcés, conservés")
     return assets, unsourced
 
 
-def _source_one(shot, visuals_dir, session, cascade, say, dry_run, pris=None,
-                cache=None):
+def _eligibles(candidates, histoire, position, ecart, beat):
+    """Split candidates into never-seen, reusable, and too-close.
+
+    A file already on screen is not disqualified for ever — on a subject
+    whose free archives number in the dozens, that would leave a third of the
+    montage blank. It is disqualified for a while: not in the same beat, and
+    not within `ecart` shots of its last appearance. Far enough apart, and
+    with a different camera move, the same photograph reads as a return
+    rather than as a repeat.
+    """
+    neufs, reutilisables = [], []
+    for candidate in candidates:
+        vu = histoire.get(candidate.page_url)
+        if vu is None:
+            neufs.append(candidate)
+        elif vu["beat"] != beat and position - vu["position"] >= ecart:
+            reutilisables.append((position - vu["position"], candidate))
+    # Never-seen first; failing that, whatever has been off screen longest.
+    reutilisables.sort(key=lambda pair: -pair[0])
+    return neufs, [candidate for _, candidate in reutilisables]
+
+
+def _source_one(shot, visuals_dir, session, cascade, say, dry_run,
+                histoire=None, cache=None, position=0, ecart=25):
     """Walk the cascade until one provider yields a usable file."""
-    pris = pris if pris is not None else set()
+    histoire = histoire if histoire is not None else {}
     cache = cache if cache is not None else {}
 
     for provider in cascade:
@@ -192,10 +234,27 @@ def _source_one(shot, visuals_dir, session, cascade, say, dry_run, pris=None,
             say(f"  ! {shot.id} : {provider} indisponible — {str(error)[:90]}")
             continue
 
-        # A file another shot already took is not a candidate here. Falling
-        # back to it would be worse than the shot going unsourced, which at
-        # least gets reported and fixed.
-        candidates = [c for c in candidates if c.page_url not in pris]
+        neufs, reutilisables = _eligibles(
+            candidates, histoire, position, ecart, shot.beat
+        )
+        if not neufs and reutilisables:
+            # Nothing new under this query. Bring back the file that has been
+            # off screen longest, pointing at the copy already on disk — a
+            # second download of the same bytes would be pure waste, and the
+            # camera move on this shot differs anyway.
+            repris = reutilisables[0]
+            ancien = histoire[repris.page_url]["record"]
+            record = dict(ancien)
+            record.update({
+                "shot": shot.id, "beat": shot.beat, "requete": shot.requete,
+                "requete_effective": used_query or shot.requete,
+                "reutilise_de": ancien.get("shot"),
+            })
+            say(f"  ↺ {shot.id} : {repris.title[:44]} — revu depuis "
+                f"{ancien.get('shot')}")
+            return record
+
+        candidates = neufs
         if not candidates:
             continue
 

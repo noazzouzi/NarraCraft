@@ -186,6 +186,20 @@ visuels:
   # Nombre de visuels visé par minute de montage.
   plans_par_minute: 8
 
+  # Une même image peut resservir. Mesuré sur un sujet judiciaire français
+  # contemporain : les fonds libres réellement pertinents plafonnent autour
+  # de la centaine d'images, alors qu'un quart d'heure à quinze plans par
+  # minute en demande le double. Refuser toute reprise laisserait un tiers
+  # du montage sans visuel.
+  #
+  # Ce qui rend une reprise acceptable, c'est la distance : jamais dans le
+  # même beat, et jamais à moins de N plans de sa dernière apparition. Le
+  # mouvement de caméra diffère de toute façon, puisqu'il dépend de
+  # l'identifiant du plan. Assez loin, une photographie revue se lit comme
+  # un retour, pas comme une panne.
+  reutilisation:
+    ecart_min_plans: 25
+
 # Métrage d'archive. Les fichiers sont des films entiers : mesuré, 1038 Mo
 # pour vingt-sept minutes. Les plafonds sont donc obligatoires, et vérifiés
 # avant le téléchargement, pas après.
