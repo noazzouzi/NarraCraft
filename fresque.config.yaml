@@ -206,6 +206,18 @@ montage:
     interligne: 1.28
     interlettrage: "-0.01em"
 
+  # Motion graphics. Sur un sujet fait de dates, de chefs d'accusation et de
+  # peines, la moitié des plans n'a pas besoin de photographie — et une frise
+  # lisible vaut mieux qu'une image d'illustration.
+  motion:
+    fond: "#0d1014"
+    texte: "#f2f4f8"
+    accent: "#c9a227"
+    attenue: "#7c8698"
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    # Secondes pendant lesquelles chaque élément apparaît, en cascade.
+    cascade_s: 0.45
+
   sous_titres:
     actifs: true
     mots_par_ligne: 7

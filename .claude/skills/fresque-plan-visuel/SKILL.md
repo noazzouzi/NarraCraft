@@ -161,9 +161,44 @@ Contraintes vérifiées par le pipeline, qui refusera le fichier sinon :
 - `poids` est strictement positif.
 - `mouvement` appartient à la liste ci-dessus.
 
-Les plans `motion` (cartes animées, unes de journaux, documents d'archive)
-relèvent du jalon 6 et ne sont pas encore rendus. Ne pas en produire pour
-l'instant.
+## Plans `motion`
+
+Trois panneaux existent. Sur un sujet fait de dates, de chefs d'accusation et
+de peines, **ils valent souvent mieux qu'une photo d'illustration** — et ils
+ne coûtent rien.
+
+**`chronologie`** — une frise datée. Le panneau le plus utile du lot.
+```json
+{"kind": "chronologie", "titre": "Trois affaires",
+ "evenements": [
+   {"date": "déc. 2024", "texte": "Bismuth — définitif"},
+   {"date": "sept. 2025", "texte": "Financement libyen — cinq ans"}
+ ]}
+```
+Deux événements minimum — en dessous c'est une date, pas une frise. Sept
+maximum — au-delà c'est illisible, il faut scinder en deux plans. Les
+libellés font une ligne, pas une phrase.
+
+**`citation`** — un extrait avec sa source. Sur un sujet judiciaire, les mots
+exacts d'un jugement pèsent plus que n'importe quelle façade de tribunal.
+```json
+{"kind": "citation", "texte": "…", "source": "Jugement du 25 septembre 2025"}
+```
+La `source` est obligatoire. Une citation sans source n'est pas utilisable.
+
+**`chiffre`** — un nombre isolé et ce à quoi il se compare.
+```json
+{"kind": "chiffre", "valeur": "20", "libelle": "jours à la Santé",
+ "comparaison": "avant une libération sous contrôle judiciaire"}
+```
+La `comparaison` est facultative mais presque toujours souhaitable : un
+chiffre nu ne laisse aucune trace, à l'écran comme à l'oral.
+
+Un plan `motion` prend `"mouvement": "static"` — l'animation est interne.
+
+**Combien ?** Trois à cinq par quart d'heure. Ce sont des respirations et des
+moments de structure, pas un habillage. Enchaîner deux panneaux de suite
+casse le rythme documentaire.
 
 ## Avant de présenter
 

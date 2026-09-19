@@ -1,6 +1,8 @@
 import React from "react";
 import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Clip, Palette } from "./types";
+import { MotionGraphic } from "./Motion";
+import { Traitement } from "./Traitement";
+import type { Clip, MotionStyle, Palette } from "./types";
 
 const EASINGS: Record<string, (t: number) => number> = {
   easeInOutCubic: Easing.bezier(0.65, 0, 0.35, 1),
@@ -17,7 +19,12 @@ const MIN_FILL_RATIO = 1.15;
  *
  *  The move is fully described by the timeline, so this component decides
  *  nothing about pacing — it only plays back what the pipeline computed. */
-export const Plan: React.FC<{ clip: Clip; palette: Palette }> = ({ clip, palette }) => {
+export const Plan: React.FC<{
+  clip: Clip;
+  palette: Palette;
+  motionStyle: MotionStyle;
+  traitement: { grain?: number; vignette?: number };
+}> = ({ clip, palette, motionStyle, traitement }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const { debut, fin, rotation_deg, easing } = clip.mouvement;
@@ -34,6 +41,10 @@ export const Plan: React.FC<{ clip: Clip; palette: Palette }> = ({ clip, palette
   const x = at(debut.x, fin.x) * 100;
   const y = at(debut.y, fin.y) * 100;
   const rotation = at(0, rotation_deg);
+
+  if (clip.type === "motion" && clip.motion) {
+    return <MotionGraphic motion={clip.motion} style={motionStyle} />;
+  }
 
   if (!clip.image) {
     return (
@@ -80,6 +91,7 @@ export const Plan: React.FC<{ clip: Clip; palette: Palette }> = ({ clip, palette
             }}
           />
         </AbsoluteFill>
+        <Traitement grain={traitement.grain} vignette={traitement.vignette} />
       </AbsoluteFill>
     );
   }
@@ -96,6 +108,7 @@ export const Plan: React.FC<{ clip: Clip; palette: Palette }> = ({ clip, palette
           transformOrigin: "center center",
         }}
       />
+      <Traitement grain={traitement.grain} vignette={traitement.vignette} />
     </AbsoluteFill>
   );
 };

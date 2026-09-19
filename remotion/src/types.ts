@@ -51,10 +51,20 @@ export type Typographie = {
 /** The art direction, set by the project's template. The renderer applies
  *  it and decides none of it — which is what lets a new theme be a YAML
  *  file rather than a new set of components. */
+export type MotionStyle = {
+  fond: string;
+  texte: string;
+  accent: string;
+  attenue: string;
+  famille: string;
+  cascade_s: number;
+};
+
 export type Style = {
   palette: Palette;
   typographie: Typographie;
   traitement: { grain?: number; vignette?: number };
+  motion: MotionStyle;
 };
 
 export type Timeline = {

@@ -2,7 +2,6 @@ import React from "react";
 import { AbsoluteFill, Audio, Sequence, staticFile } from "remotion";
 import { Plan } from "./Plan";
 import { SousTitre } from "./SousTitre";
-import { Traitement } from "./Traitement";
 import type { Timeline } from "./types";
 
 /** Plays back 06-timeline.json. It computes nothing: every cut, every camera
@@ -10,7 +9,7 @@ import type { Timeline } from "./types";
  *  real word timings. See CLAUDE.md. */
 export const Documentaire: React.FC<Timeline> = (timeline) => {
   const { clips, sous_titres, style, audio } = timeline;
-  const { palette, typographie, traitement } = style;
+  const { palette, typographie, traitement, motion } = style;
 
   return (
     <AbsoluteFill style={{ backgroundColor: palette.fond }}>
@@ -23,11 +22,14 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
           durationInFrames={clip.duree_frames}
           name={`${clip.id} ${clip.beat}`}
         >
-          <Plan clip={clip} palette={palette} />
+          <Plan
+            clip={clip}
+            palette={palette}
+            motionStyle={motion}
+            traitement={traitement}
+          />
         </Sequence>
       ))}
-
-      <Traitement grain={traitement?.grain} vignette={traitement?.vignette} />
 
       {sous_titres.map((line, index) => (
         <Sequence

@@ -17,6 +17,19 @@ MOVEMENTS = {
     "pan_up", "pan_down", "static",
 }
 
+#: Motion graphics, and the fields each one needs. They are validated here
+#: rather than in the renderer: a missing field should stop the pipeline at
+#: the visual-plan checkpoint, not produce an empty panel twenty minutes into
+#: a render.
+MOTION_FIELDS: dict[str, tuple[str, ...]] = {
+    # Une frise de dates — le plan le plus utile sur un sujet judiciaire.
+    "chronologie": ("evenements",),
+    # Un extrait de jugement, de loi, de témoignage, avec sa source.
+    "citation": ("texte", "source"),
+    # Un chiffre isolé, et ce à quoi il se compare.
+    "chiffre": ("valeur", "libelle"),
+}
+
 
 class ShotsError(ValueError):
     """Raised when 03-shots.json is malformed or incomplete."""
@@ -83,8 +96,8 @@ def load(path: Path, beat_ids: list[str]) -> list[Shot]:
             raise ShotsError(f"{where} : un plan `archive` exige une `requete`.")
         if kind == "generated" and not shot.prompt:
             raise ShotsError(f"{where} : un plan `generated` exige un `prompt`.")
-        if kind == "motion" and not shot.motion:
-            raise ShotsError(f"{where} : un plan `motion` exige un objet `motion`.")
+        if kind == "motion":
+            _validate_motion(shot.motion, where)
         if shot.poids <= 0:
             raise ShotsError(f"{where} : `poids` doit être strictement positif.")
 
@@ -99,6 +112,44 @@ def load(path: Path, beat_ids: list[str]) -> list[Shot]:
         )
 
     return shots
+
+
+def _validate_motion(motion: dict[str, Any] | None, where: str) -> None:
+    if not motion:
+        raise ShotsError(f"{where} : un plan `motion` exige un objet `motion`.")
+
+    kind = motion.get("kind")
+    if kind not in MOTION_FIELDS:
+        raise ShotsError(
+            f"{where} : motion.kind {kind!r} inconnu "
+            f"(attendu : {', '.join(sorted(MOTION_FIELDS))})."
+        )
+
+    missing = [f for f in MOTION_FIELDS[kind] if not motion.get(f)]
+    if missing:
+        raise ShotsError(
+            f"{where} : motion `{kind}` — champ(s) manquant(s) : "
+            f"{', '.join(missing)}."
+        )
+
+    if kind == "chronologie":
+        events = motion["evenements"]
+        if not isinstance(events, list) or len(events) < 2:
+            raise ShotsError(
+                f"{where} : une chronologie demande au moins deux événements "
+                "— sinon c'est une date, pas une frise."
+            )
+        if len(events) > 7:
+            raise ShotsError(
+                f"{where} : {len(events)} événements — au-delà de sept, la "
+                "frise devient illisible à l'écran. La scinder en deux plans."
+            )
+        for index, event in enumerate(events):
+            if not isinstance(event, dict) or not event.get("date") \
+                    or not event.get("texte"):
+                raise ShotsError(
+                    f"{where} : evenements[{index}] exige `date` et `texte`."
+                )
 
 
 def by_beat(shots: list[Shot]) -> dict[str, list[Shot]]:

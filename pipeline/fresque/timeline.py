@@ -194,6 +194,7 @@ def build(
             "palette": config.get("montage", "palette", default={}),
             "typographie": config.get("montage", "typographie", default={}),
             "traitement": config.get("montage", "traitement", default={}),
+            "motion": config.get("montage", "motion", default={}),
         },
         "clips": clips,
         "sous_titres": subtitles,

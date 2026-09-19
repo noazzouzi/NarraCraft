@@ -766,3 +766,95 @@ def test_non_commercial_and_no_derivative_licences_are_refused():
     assert free("CC0 1.0")
     assert free("Public domain")
     assert free("No restrictions")
+
+
+# --- Motion graphics ---------------------------------------------------------
+#
+# La forme est validée au checkpoint du plan visuel, pas dans le moteur : un
+# champ manquant doit arrêter le pipeline là, pas produire un panneau vide
+# vingt minutes après le début d'un rendu.
+
+def _shots_file(tmp_path, shots: list) -> Path:
+    path = tmp_path / "03-shots.json"
+    path.write_text(json.dumps({"shots": shots}), encoding="utf-8")
+    return path
+
+
+def _motion_shot(motion: dict | None) -> dict:
+    return {"beat": "B001", "type": "motion", "motion": motion} if motion is not None \
+        else {"beat": "B001", "type": "motion"}
+
+
+def test_motion_without_object_is_refused(tmp_path):
+    with pytest.raises(ShotsError, match="objet `motion`"):
+        load_shots(_shots_file(tmp_path, [_motion_shot(None)]), ["B001"])
+
+
+def test_unknown_motion_kind_is_refused_and_lists_the_known_ones(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({"kind": "hologramme"})])
+    with pytest.raises(ShotsError, match="chronologie"):
+        load_shots(path, ["B001"])
+
+
+def test_citation_requires_its_source(tmp_path):
+    """Une citation sans source, sur un sujet judiciaire, est inutilisable."""
+    path = _shots_file(tmp_path, [_motion_shot({"kind": "citation", "texte": "x"})])
+    with pytest.raises(ShotsError, match="source"):
+        load_shots(path, ["B001"])
+
+
+def test_chiffre_requires_a_label(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({"kind": "chiffre", "valeur": "20"})])
+    with pytest.raises(ShotsError, match="libelle"):
+        load_shots(path, ["B001"])
+
+
+def test_a_single_dated_event_is_not_a_timeline(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "chronologie", "evenements": [{"date": "2024", "texte": "x"}],
+    })])
+    with pytest.raises(ShotsError, match="deux événements"):
+        load_shots(path, ["B001"])
+
+
+def test_too_many_events_are_refused_as_unreadable(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "chronologie",
+        "evenements": [{"date": str(y), "texte": "x"} for y in range(2010, 2019)],
+    })])
+    with pytest.raises(ShotsError, match="illisible"):
+        load_shots(path, ["B001"])
+
+
+def test_event_without_a_date_is_refused(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "chronologie",
+        "evenements": [{"date": "2024", "texte": "x"}, {"texte": "sans date"}],
+    })])
+    with pytest.raises(ShotsError, match=r"evenements\[1\]"):
+        load_shots(path, ["B001"])
+
+
+def test_a_well_formed_timeline_passes(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "chronologie", "titre": "Trois affaires",
+        "evenements": [
+            {"date": "déc. 2024", "texte": "Bismuth"},
+            {"date": "sept. 2025", "texte": "Financement libyen"},
+        ],
+    })])
+    shots = load_shots(path, ["B001"])
+    assert shots[0].motion["kind"] == "chronologie"
+
+
+def test_motion_clip_needs_no_image_in_the_timeline(tmp_path):
+    """`check` signale un plan sans visuel — sauf un motion, qui se dessine."""
+    body = "### B001\n> intention: x\n" + "mot " * 40 + "\n"
+    script_path = tmp_path / "02-script.md"
+    script_path.write_text(f"# T\n\n## Acte I — A\n\n{body}", encoding="utf-8")
+    script = script_parser.parse(script_path)
+
+    shot = Shot(index=0, beat="B001", type="motion",
+                motion={"kind": "chiffre", "valeur": "20", "libelle": "jours"})
+    timeline = timeline_mod.build(align.estimate(script), [shot], {})
+    assert timeline_mod.check(timeline) == []

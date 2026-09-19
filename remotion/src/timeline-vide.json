@@ -23,7 +23,13 @@
       "interligne": 1.28,
       "interlettrage": "-0.01em"
     },
-    "traitement": { "grain": 0.06, "vignette": 0.25 }
+    "traitement": { "grain": 0.06, "vignette": 0.25 },
+    "motion": {
+      "fond": "#0d1014", "texte": "#f2f4f8", "accent": "#c9a227",
+      "attenue": "#7c8698",
+      "famille": "'Inter', 'Helvetica Neue', Arial, sans-serif",
+      "cascade_s": 0.45
+    }
   },
   "clips": [],
   "sous_titres": [],
