@@ -71,14 +71,33 @@ c'est ton travail.
 
 Le champ `requete` part directement dans l'API de Wikimedia Commons.
 
+**Trois ou quatre termes, pas plus.** C'est la règle la plus importante, et
+elle est contre-intuitive. Commons combine les termes en ET : plus la requête
+est précise, plus elle a de chances de ne **rien** renvoyer. Mesuré sur ce
+pipeline — `Titanic boiler room stokers 1912` renvoie zéro fichier, même sans
+aucun plancher de résolution, tandis que `Titanic engineers memorial
+Southampton` en renvoie trois excellents.
+
+Le pipeline sait élargir tout seul une requête trop longue, mais il le fait en
+coupant les termes de queue, donc **mets les termes les plus déterminants en
+premier**. `Titanic boiler room stokers 1912` sera réessayé en `Titanic boiler
+room` — ce qui marche. `Photographie de 1912 du Titanic` deviendrait
+`Photographie de 1912`, ce qui ne veut plus rien dire.
+
+Le reste :
+
 - **Chercher en anglais**, et aussi dans la langue d'origine du sujet. Les
   fonds sont catalogués dans ces langues, rarement en français.
-- Employer des termes de catalogue, pas de la prose : `Titanic boiler room
-  stokers 1912` et non `des hommes qui pellettent du charbon`.
-- Inclure une date ou une période quand elle existe : c'est le filtre le plus
-  efficace pour éviter les reconstitutions modernes.
+- Employer des termes de catalogue, pas de la prose : `Titanic boiler room`
+  et non `des hommes qui pellettent du charbon`.
+- Une date aide quand le sujet existe à plusieurs époques, mais elle compte
+  comme un terme — et sur un sujet daté, elle est souvent redondante.
 - Éviter les termes qui ramènent des affiches de film, des captures de jeu ou
   des reconstitutions 3D.
+
+Le pipeline écarte déjà les PDF et les scans de livres, ne retient que les
+licences libres, et privilégie les images en format paysage. Tu n'as pas à
+t'en préoccuper dans la requête.
 
 ## Prompts de génération
 
