@@ -187,7 +187,14 @@ def build(
         "duree_s": round(duration_frames / fps, 3),
         "source_timings": alignment.get("source", "inconnu"),
         "audio": audio,
-        "traitement": config.get("montage", "traitement", default={}),
+        "template": config.active_template(),
+        # The renderer decides nothing about how it looks: the art direction
+        # travels with the montage, and a template redefines it wholesale.
+        "style": {
+            "palette": config.get("montage", "palette", default={}),
+            "typographie": config.get("montage", "typographie", default={}),
+            "traitement": config.get("montage", "traitement", default={}),
+        },
         "clips": clips,
         "sous_titres": subtitles,
         "credits": [

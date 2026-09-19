@@ -1,0 +1,113 @@
+# Template — Documentaire historique narré
+#
+# Surcouche de fresque.config.yaml : ne redéfinit que ce qui change. Les
+# champs `meta.*` sont en prose et lus par les skills ; tout le reste est lu
+# par le code.
+#
+# Validé de bout en bout sur le pilote « Titanic, la salle des machines » :
+# archives Wikimedia réelles, voix Kokoro, montage Remotion.
+
+meta:
+  nom: Documentaire historique
+  description: >-
+    Événement daté et documenté, raconté par la voix off sur des archives
+    réelles. Le format le moins cher et le plus tolérant aux défauts.
+
+  registre: >-
+    Sobre et factuel. La tension vient de l'ordre dans lequel les
+    informations arrivent, jamais des adjectifs posés dessus. Le silence
+    fait partie du dispositif : une phrase courte isolée après un
+    paragraphe dense frappe plus fort que n'importe quel superlatif. On
+    n'annonce pas ce qu'on va dire, on le dit.
+
+  structure_narrative: >-
+    Quatre actes. I — l'événement, posé sec, avec sa date et son heure.
+    II — ce qui l'a rendu possible, et que personne n'a vu venir.
+    III — le pivot : ce que le spectateur croyait savoir s'effondre.
+    IV — les conséquences, et ce qu'on ignore encore aujourd'hui.
+    Chaque acte se termine sur une question ouverte, sauf le dernier.
+
+  interdits_specifiques: >-
+    Aucune reconstitution présentée comme une archive. Aucune date ou
+    aucun chiffre sans source dans 01-research.md. Ne jamais combler un
+    trou documentaire par une déduction énoncée sur le ton du fait établi :
+    « on ne sait pas ce qui s'est dit dans cette pièce » est une phrase de
+    documentaire, l'inventer ne l'est pas.
+
+  sourcing: >-
+    Archives d'abord, toujours. Sur un sujet historique, une photographie
+    d'époque imparfaite est plus convaincante qu'une illustration générée
+    impeccable, et le spectateur fait la différence sans savoir l'expliquer.
+    On ne génère que l'intérieur détruit, la scène sans témoin, l'abstraction.
+
+# --- Écriture ---------------------------------------------------------------
+
+narration:
+  # Registre documentaire posé : on laisse respirer.
+  mots_par_minute: 140
+  pause_entre_actes_s: 1.4
+  pause_phrase_s: 0.5
+
+structure:
+  actes: 4
+  relance_retention_s: 90
+  hook_s: 20
+
+controle:
+  # Beats plus longs qu'ailleurs : le format supporte qu'une image tienne,
+  # à condition que le mouvement de caméra travaille.
+  mots_par_beat: [28, 65]
+  interdits:
+    - abonnez-vous
+    - dans cette vidéo
+    - dans cet article
+    - mais avant ça
+    - et si je vous disais
+    - vous n'allez pas croire
+    - incroyable
+    - choquant
+    - personne ne sait
+    - restez jusqu'à la fin
+    # Propres au genre : la reconstitution déguisée en archive.
+    - comme on peut le voir sur cette image
+    - cette image montre
+    - images d'archives exceptionnelles
+
+# --- Visuels ----------------------------------------------------------------
+
+visuels:
+  plans_par_minute: 8
+  generation:
+    direction_artistique: >-
+      Photographie documentaire d'archive, grain argentique fin,
+      lumière naturelle contrastée, palette désaturée, sans texte
+      ni inscription visible
+
+# --- Rendu ------------------------------------------------------------------
+
+montage:
+  # Mouvements amples et lents. Le format tient sur la durée des plans.
+  ken_burns:
+    zoom_min: 1.04
+    zoom_max: 1.18
+    easing: easeInOutCubic
+    derive_max_pct: 6
+    micro_rotation_deg: 0.4
+
+  traitement:
+    grain: 0.06
+    vignette: 0.25
+
+  palette:
+    fond: "#000000"
+    sous_titre: "#f4f6fa"
+    voile: "rgba(0,0,0,0.72)"
+    ombre: "rgba(0,0,0,0.55)"
+    letterbox: "#0a0c10"
+
+  typographie:
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    taille: 52
+    graisse: 500
+    interligne: 1.28
+    interlettrage: "-0.01em"

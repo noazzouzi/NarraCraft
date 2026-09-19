@@ -18,6 +18,8 @@ export type Clip = {
   debut_frame: number;
   duree_frames: number;
   image: string | null;
+  /** Source aspect ratio. Lets the renderer letterbox a tall archive
+   *  document instead of cropping it to a vertical slice of itself. */
   ratio: number | null;
   mouvement: Mouvement;
   motion: Record<string, unknown> | null;
@@ -30,6 +32,31 @@ export type SousTitre = {
   duree_frames: number;
 };
 
+export type Palette = {
+  fond: string;
+  sous_titre: string;
+  voile: string;
+  ombre: string;
+  letterbox: string;
+};
+
+export type Typographie = {
+  famille: string;
+  taille: number;
+  graisse: number;
+  interligne: number;
+  interlettrage: string;
+};
+
+/** The art direction, set by the project's template. The renderer applies
+ *  it and decides none of it — which is what lets a new theme be a YAML
+ *  file rather than a new set of components. */
+export type Style = {
+  palette: Palette;
+  typographie: Typographie;
+  traitement: { grain?: number; vignette?: number };
+};
+
 export type Timeline = {
   version: number;
   fps: number;
@@ -39,7 +66,8 @@ export type Timeline = {
   duree_s: number;
   source_timings: string;
   audio: string | null;
-  traitement: { grain?: number; vignette?: number };
+  template: string | null;
+  style: Style;
   clips: Clip[];
   sous_titres: SousTitre[];
   credits: { asset: string; credit: string; url: string; licence: string }[];

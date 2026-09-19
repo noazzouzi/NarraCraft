@@ -187,6 +187,25 @@ montage:
   traitement:
     grain: 0.06
     vignette: 0.25
+
+  # Direction artistique. Transportée par la timeline jusqu'au moteur de
+  # rendu, qui ne fait que l'appliquer. Un template la redéfinit — c'est ce
+  # qui fera qu'un documentaire criminel et un documentaire historique ne se
+  # ressembleront pas, sans qu'une ligne de composant change.
+  palette:
+    fond: "#000000"
+    sous_titre: "#f4f6fa"
+    voile: "rgba(0,0,0,0.72)"      # dégradé sous les sous-titres
+    ombre: "rgba(0,0,0,0.55)"
+    letterbox: "#0a0c10"           # fond des documents verticaux
+
+  typographie:
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    taille: 52
+    graisse: 500
+    interligne: 1.28
+    interlettrage: "-0.01em"
+
   sous_titres:
     actifs: true
     mots_par_ligne: 7

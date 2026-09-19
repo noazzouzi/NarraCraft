@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Clip } from "./types";
+import type { Clip, Palette } from "./types";
 
 const EASINGS: Record<string, (t: number) => number> = {
   easeInOutCubic: Easing.bezier(0.65, 0, 0.35, 1),
@@ -17,7 +17,7 @@ const MIN_FILL_RATIO = 1.15;
  *
  *  The move is fully described by the timeline, so this component decides
  *  nothing about pacing — it only plays back what the pipeline computed. */
-export const Plan: React.FC<{ clip: Clip }> = ({ clip }) => {
+export const Plan: React.FC<{ clip: Clip; palette: Palette }> = ({ clip, palette }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const { debut, fin, rotation_deg, easing } = clip.mouvement;
@@ -54,7 +54,7 @@ export const Plan: React.FC<{ clip: Clip }> = ({ clip }) => {
   // choice rather than as a framing accident.
   if (tall) {
     return (
-      <AbsoluteFill style={{ backgroundColor: "#0a0c10", overflow: "hidden" }}>
+      <AbsoluteFill style={{ backgroundColor: palette.letterbox, overflow: "hidden" }}>
         <Img
           src={src}
           style={{
@@ -76,7 +76,7 @@ export const Plan: React.FC<{ clip: Clip }> = ({ clip }) => {
               objectFit: "contain",
               transform,
               transformOrigin: "center center",
-              boxShadow: "0 24px 90px rgba(0,0,0,0.75)",
+              boxShadow: `0 24px 90px ${palette.ombre}`,
             }}
           />
         </AbsoluteFill>
@@ -85,7 +85,7 @@ export const Plan: React.FC<{ clip: Clip }> = ({ clip }) => {
   }
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
+    <AbsoluteFill style={{ backgroundColor: palette.fond, overflow: "hidden" }}>
       <Img
         src={src}
         style={{

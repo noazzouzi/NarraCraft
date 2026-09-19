@@ -547,3 +547,85 @@ def test_blocking_violations_are_listed_first(tmp_path):
     script = _script_from(_beat("B001", "Il est 01h23. " + "mot " * 30), tmp_path)
     found = lint_mod.check(script)
     assert found[0].blocking and not found[-1].blocking
+
+
+# --- Templates ---------------------------------------------------------------
+#
+# Un template est une surcouche de données : il redéfinit registre, rythme,
+# direction artistique et règles de lint sans qu'une ligne de code ou de
+# composant Remotion change. Ces tests vérifient que la surcouche atteint
+# bien chaque étage.
+
+import yaml as _yaml  # noqa: E402
+
+from fresque import config as config_mod  # noqa: E402
+
+
+@pytest.fixture
+def base_template(tmp_path, monkeypatch):
+    """Un faux dépôt avec une config de base et deux templates."""
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "fresque.config.yaml").write_text(_yaml.safe_dump({
+        "controle": {"mots_par_beat": [25, 60], "interdits": ["a", "b"]},
+        "montage": {"palette": {"fond": "#000", "sous_titre": "#fff"}, "fps": 30},
+        "narration": {"mots_par_minute": 140},
+    }), encoding="utf-8")
+    (tmp_path / "templates" / "sobre.yaml").write_text(_yaml.safe_dump({
+        "controle": {"mots_par_beat": [28, 65], "interdits": ["c"]},
+        "montage": {"palette": {"fond": "#101010"}},
+    }), encoding="utf-8")
+
+    monkeypatch.setattr(config_mod, "repo_root", lambda start=None: tmp_path)
+    config_mod.use_template(None)
+    config_mod.load.cache_clear()
+    yield tmp_path
+    config_mod.use_template(None)
+    config_mod.load.cache_clear()
+
+
+def test_template_overlays_only_what_it_redefines(base_template):
+    config_mod.use_template("sobre")
+    assert config_mod.get("controle", "mots_par_beat") == [28, 65]
+    # Non redéfini par le template : la valeur de base survit.
+    assert config_mod.get("montage", "fps") == 30
+    assert config_mod.get("narration", "mots_par_minute") == 140
+
+
+def test_nested_mappings_merge_rather_than_replace(base_template):
+    """Redéfinir `fond` ne doit pas effacer `sous_titre`."""
+    config_mod.use_template("sobre")
+    palette = config_mod.get("montage", "palette")
+    assert palette["fond"] == "#101010"
+    assert palette["sous_titre"] == "#fff"
+
+
+def test_lists_replace_rather_than_append(base_template):
+    """Redéfinir un ordre de sources signifie le remplacer, pas y ajouter."""
+    config_mod.use_template("sobre")
+    assert config_mod.get("controle", "interdits") == ["c"]
+
+
+def test_selecting_no_template_restores_the_base(base_template):
+    config_mod.use_template("sobre")
+    config_mod.use_template(None)
+    assert config_mod.get("controle", "mots_par_beat") == [25, 60]
+
+
+def test_unknown_template_is_refused_and_names_the_known_ones(base_template):
+    with pytest.raises(config_mod.TemplateError, match="sobre"):
+        config_mod.use_template("inexistant")
+
+
+def test_template_reaches_the_linter(base_template, tmp_path):
+    """La preuve que la surcouche traverse jusqu'aux règles d'écriture :
+    un beat de 26 mots passe en base et échoue sous le template."""
+    body = "### B001\n> intention: x\n" + "mot " * 26 + "\n"
+    path = tmp_path / "02-script.md"
+    path.write_text(f"# T\n\n## Acte I — A\n\n{body}", encoding="utf-8")
+    script = script_parser.parse(path)
+
+    config_mod.use_template(None)
+    assert not [v for v in lint_mod.check(script) if v.rule == "longueur-beat"]
+
+    config_mod.use_template("sobre")
+    assert [v for v in lint_mod.check(script) if v.rule == "longueur-beat"]

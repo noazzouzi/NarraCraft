@@ -8,6 +8,8 @@ description: Transforme un sujet ou un titre en brief de documentaire narré —
 Produire `projects/<slug>/00-brief.md`. C'est le contrat que toutes les
 étapes suivantes respecteront.
 
+Lire `projet.yaml` pour connaître le template, puis `templates/<template>.yaml` : ses champs `meta.registre`, `meta.structure_narrative` et `meta.interdits_specifiques` priment sur les consignes génériques de ce skill.
+
 Lire `fresque.config.yaml` avant de commencer : durée cible, nombre d'actes
 et débit de narration en dépendent.
 

@@ -7,7 +7,24 @@
   "duree_s": 2,
   "source_timings": "vide",
   "audio": null,
-  "traitement": { "grain": 0.06, "vignette": 0.25 },
+  "template": null,
+  "style": {
+    "palette": {
+      "fond": "#000000",
+      "sous_titre": "#f4f6fa",
+      "voile": "rgba(0,0,0,0.72)",
+      "ombre": "rgba(0,0,0,0.55)",
+      "letterbox": "#0a0c10"
+    },
+    "typographie": {
+      "famille": "'Inter', 'Helvetica Neue', Arial, sans-serif",
+      "taille": 52,
+      "graisse": 500,
+      "interligne": 1.28,
+      "interlettrage": "-0.01em"
+    },
+    "traitement": { "grain": 0.06, "vignette": 0.25 }
+  },
   "clips": [],
   "sous_titres": [],
   "credits": []

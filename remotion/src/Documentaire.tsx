@@ -9,10 +9,11 @@ import type { Timeline } from "./types";
  *  move and every subtitle window was decided by the Python pipeline from the
  *  real word timings. See CLAUDE.md. */
 export const Documentaire: React.FC<Timeline> = (timeline) => {
-  const { clips, sous_titres, traitement, audio } = timeline;
+  const { clips, sous_titres, style, audio } = timeline;
+  const { palette, typographie, traitement } = style;
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#000" }}>
+    <AbsoluteFill style={{ backgroundColor: palette.fond }}>
       {audio ? <Audio src={staticFile(audio)} /> : null}
 
       {clips.map((clip) => (
@@ -22,7 +23,7 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
           durationInFrames={clip.duree_frames}
           name={`${clip.id} ${clip.beat}`}
         >
-          <Plan clip={clip} />
+          <Plan clip={clip} palette={palette} />
         </Sequence>
       ))}
 
@@ -35,7 +36,11 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
           durationInFrames={line.duree_frames}
           name={`ST ${index}`}
         >
-          <SousTitre texte={line.texte} />
+          <SousTitre
+            texte={line.texte}
+            palette={palette}
+            typographie={typographie}
+          />
         </Sequence>
       ))}
     </AbsoluteFill>

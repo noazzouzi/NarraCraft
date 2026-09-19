@@ -9,6 +9,8 @@ Produire `projects/<slug>/02-script.md` à partir de `00-brief.md` et
 `01-research.md`. C'est le **checkpoint 1** : le fichier sera lu et corrigé
 par un humain avant toute dépense d'API.
 
+Lire `projet.yaml` pour connaître le template, puis `templates/<template>.yaml` : ses champs `meta.registre`, `meta.structure_narrative` et `meta.interdits_specifiques` priment sur les consignes génériques de ce skill.
+
 Lire `fresque.config.yaml` : `mots_par_minute`, `duree_cible_min`,
 `relance_retention_s` et `hook_s` pilotent l'écriture.
 

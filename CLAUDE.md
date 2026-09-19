@@ -73,10 +73,40 @@ un timestamp rapporté par le moteur. Les coupes du montage tombent donc au bon
 endroit dès maintenant ; seule la position d'un mot *à l'intérieur* d'un beat
 reste approchée, ce qui n'affecte que les sous-titres.
 
+## Templates
+
+Un **template** est une thématique de documentaire : criminel, historique,
+entreprise, célébrité. Il définit le registre d'écriture, la structure
+narrative, les interdits propres au genre, le rythme, les sources
+privilégiées et la direction artistique complète.
+
+```
+templates/documentaire-historique.yaml
+```
+
+Un template est une **surcouche** de `fresque.config.yaml` : il ne redéfinit
+que ce qui change. Les mappings fusionnent en profondeur, les listes
+remplacent — redéfinir un ordre de sources signifie le remplacer, pas y
+ajouter. Les champs `meta.*` sont en prose et lus par les skills ; tout le
+reste est lu par le code.
+
+Chaque projet enregistre son template dans `projet.yaml`, et toute commande
+l'applique en l'ouvrant. Un projet reste donc auto-descriptif : le relancer
+six mois plus tard reproduit la même chose.
+
+**Règle qui décide de la viabilité du projet : un template est de la donnée,
+jamais du code.** Il n'a pas de composant Remotion à lui. La direction
+artistique — palette, typographie, amplitude des mouvements, grain, vignette
+— voyage dans `06-timeline.json` sous la clé `style`, et le moteur ne fait
+que l'appliquer. Si une thématique semble exiger son propre composant, c'est
+le signe qu'il manque un paramètre, pas un composant. Sans quoi la quatrième
+thématique laisse quatre moteurs divergents à maintenir, et le projet meurt.
+
 ## Anatomie d'un projet
 
 ```
 projects/<slug>/
+├── projet.yaml       le template utilisé
 ├── 00-brief.md       angle, promesse, structure, durée cible
 ├── 01-research.md    faits sourcés + pistes d'archives
 ├── 02-script.md      narration découpée en beats          ← CHECKPOINT 1

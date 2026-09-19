@@ -1,10 +1,18 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import type { Palette, Typographie } from "./types";
 
 /** Subtitles sit on a soft gradient rather than a solid box: a hard black bar
  *  across a documentary frame reads as a player overlay, not as part of the
- *  film. The fade is short — long fades feel sluggish against speech. */
-export const SousTitre: React.FC<{ texte: string }> = ({ texte }) => {
+ *  film. The fade is short — long fades feel sluggish against speech.
+ *
+ *  Every colour and every metric comes from the template. This component
+ *  chooses nothing. */
+export const SousTitre: React.FC<{
+  texte: string;
+  palette: Palette;
+  typographie: Typographie;
+}> = ({ texte, palette, typographie }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const fade = Math.min(4, Math.floor(durationInFrames / 3));
@@ -25,20 +33,20 @@ export const SousTitre: React.FC<{ texte: string }> = ({ texte }) => {
           paddingTop: 140,
           display: "flex",
           justifyContent: "center",
-          background: "linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0))",
+          background: `linear-gradient(to top, ${palette.voile}, rgba(0,0,0,0))`,
         }}
       >
         <span
           style={{
             maxWidth: "78%",
             textAlign: "center",
-            color: "#f4f6fa",
-            fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
-            fontSize: 52,
-            lineHeight: 1.28,
-            fontWeight: 500,
-            letterSpacing: "-0.01em",
-            textShadow: "0 2px 18px rgba(0,0,0,0.55)",
+            color: palette.sous_titre,
+            fontFamily: typographie.famille,
+            fontSize: typographie.taille,
+            lineHeight: typographie.interligne,
+            fontWeight: typographie.graisse,
+            letterSpacing: typographie.interlettrage,
+            textShadow: `0 2px 18px ${palette.ombre}`,
           }}
         >
           {texte}
