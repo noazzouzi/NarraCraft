@@ -1683,3 +1683,36 @@ def test_a_bar_chart_with_one_series_is_refused(tmp_path):
     })])
     with pytest.raises(ShotsError, match="deux séries"):
         load_shots(path, ["B001"])
+
+
+def test_a_panel_inherits_the_texture_of_a_neighbouring_shot(script):
+    """Un panneau sur fond noir plat se lit comme une diapositive posée à
+    côté du film. L'image du plan voisin, floutée dessous, le rattache."""
+    alignment = align.estimate(script)
+    shots = [
+        Shot(index=0, beat="B001", type="archive", requete="q"),
+        Shot(index=1, beat="B002", type="motion",
+             motion={"kind": "chiffre", "valeur": "5", "libelle": "ans"}),
+        Shot(index=2, beat="B003", type="archive", requete="q"),
+    ]
+    assets = {"S000": {"fichier": "05-visuals/S000.jpg"},
+              "S002": {"fichier": "05-visuals/S002.jpg"}}
+    clips = timeline_mod.build(alignment, shots, assets)["clips"]
+
+    assert clips[1]["fond_image"] == "05-visuals/S000.jpg"
+    # Un plan photographique ne reçoit pas de texture : il EST l'image.
+    assert clips[0]["fond_image"] is None
+
+
+def test_a_panel_that_opens_the_film_borrows_the_shot_that_follows(script):
+    """Sinon il s'ouvrirait sur du noir, faute de plan précédent."""
+    alignment = align.estimate(script)
+    shots = [
+        Shot(index=0, beat="B001", type="motion",
+             motion={"kind": "chiffre", "valeur": "5", "libelle": "ans"}),
+        Shot(index=1, beat="B002", type="archive", requete="q"),
+        Shot(index=2, beat="B003", type="archive", requete="q"),
+    ]
+    assets = {"S001": {"fichier": "05-visuals/S001.jpg"}}
+    clips = timeline_mod.build(alignment, shots, assets)["clips"]
+    assert clips[0]["fond_image"] == "05-visuals/S001.jpg"

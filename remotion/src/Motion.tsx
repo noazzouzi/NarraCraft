@@ -6,7 +6,7 @@ import { Document } from "./Document";
 import { Journal } from "./Journal";
 import { Maquette } from "./Maquette";
 import { Reseau } from "./Reseau";
-import { EASE_OUT, Fond, reveal } from "./panneau";
+import { EASE_OUT, Fond, Scene, reveal } from "./panneau";
 import type { MotionStyle } from "./types";
 
 /** A dated timeline. The single most useful panel on a judicial or
@@ -202,6 +202,16 @@ export const Chiffre: React.FC<{
 /** Dispatch on `motion.kind`. The shape was validated by the pipeline at the
  *  visual-plan checkpoint, so an unknown kind here means the two drifted. */
 export const MotionGraphic: React.FC<{
+  motion: Record<string, unknown>;
+  style: MotionStyle;
+  fond?: string | null;
+}> = ({ motion, style, fond }) => (
+  <Scene style={style} image={fond}>
+    <Panneau motion={motion} style={style} />
+  </Scene>
+);
+
+const Panneau: React.FC<{
   motion: Record<string, unknown>;
   style: MotionStyle;
 }> = ({ motion, style }) => {

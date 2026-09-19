@@ -182,6 +182,30 @@ montage:
     famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
     cascade_s: 0.4
 
+    # La scène derrière le panneau. Sans elle, un panneau est un rectangle
+    # noir avec du texte : il se lit comme une diapositive posée à côté du
+    # film. Avec l'image du plan précédent dessous — assombrie, floutée,
+    # désaturée jusqu'à n'être qu'une texture — il redevient un plan.
+    #
+    # Le spectateur n'identifie pas l'image. Il ne voit pas non plus le fond
+    # changer de nature toutes les dix secondes, et c'est tout l'enjeu.
+    scene:
+      # 14 % : assez pour que le cadre ne soit pas mort, assez peu pour que
+      # le texte garde son contraste sans ombre portée.
+      opacite: 0.14
+      flou_px: 28
+      # Presque monochrome. Une texture colorée redeviendrait une image, et
+      # l'œil essaierait de la lire au lieu de lire le panneau.
+      saturation: 0.3
+      echelle: 1.12
+      # Un filet d'accent qui se trace en haut du cadre. C'est la signature
+      # du template, et la seule chose qui soit purement décorative ici.
+      filet: true
+      # Le même traitement que les plans photographiques, en plus discret :
+      # c'est ce qui fait que panneaux et archives appartiennent au même film.
+      grain: 0.04
+      vignette: 0.42
+
   palette:
     fond: "#000000"
     sous_titre: "#f4f6fa"

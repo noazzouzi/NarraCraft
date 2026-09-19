@@ -304,6 +304,24 @@ montage:
     # Secondes pendant lesquelles chaque élément apparaît, en cascade.
     cascade_s: 0.45
 
+    # La scène derrière un panneau. Un rectangle de couleur unie avec du
+    # texte dessus se lit comme une diapositive posée à côté du film ; la
+    # même chose sur l'image du plan voisin, floutée et désaturée jusqu'à
+    # n'être qu'une texture, redevient un plan.
+    #
+    # Le pipeline choisit l'image — celle du plan qui précède, à défaut
+    # celle du suivant — et le moteur ne fait que l'appliquer, comme pour
+    # tout le reste de la direction artistique.
+    scene:
+      # Mettre à 0 désactive la texture, et le panneau redevient uni.
+      opacite: 0.12
+      flou_px: 28
+      saturation: 0.35
+      echelle: 1.12
+      filet: false
+      grain: 0.03
+      vignette: 0.38
+
   # Lit sonore de fond. Ni rythme ni mélodie : tout ce qui en a entre en
   # concurrence avec la voix off, et le spectateur suit l'un ou l'autre,
   # jamais les deux. On cherche l'inverse — quelque chose qu'on ne remarque

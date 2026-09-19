@@ -35,6 +35,9 @@ export type Clip = {
   ratio: number | null;
   mouvement: Mouvement;
   motion: Record<string, unknown> | null;
+  /** Pour un panneau graphique : l'image du plan voisin, posée derrière lui
+   *  en texture. Choisie par le pipeline, jamais par le moteur. */
+  fond_image: string | null;
   intention: string;
   /** A sentence burned over the shot — the hook, and chapter cards. Read
    *  while the voice says something else, so it is never a subtitle. */
@@ -73,6 +76,17 @@ export type MotionStyle = {
   attenue: string;
   famille: string;
   cascade_s: number;
+  /** La scène derrière le panneau : ce qui le rattache au film au lieu de
+   *  le poser à côté. Entièrement décidée par le template. */
+  scene?: {
+    opacite?: number;
+    flou_px?: number;
+    saturation?: number;
+    echelle?: number;
+    filet?: boolean;
+    grain?: number;
+    vignette?: number;
+  };
 };
 
 /** How hard the transitions hit. Set by the template, applied by the

@@ -64,7 +64,13 @@ const Contenu: React.FC<PlanProps> = ({ clip, palette, motionStyle, traitement }
   const rotation = at(0, rotation_deg);
 
   if (clip.type === "motion" && clip.motion) {
-    return <MotionGraphic motion={clip.motion} style={motionStyle} />;
+    return (
+      <MotionGraphic
+        motion={clip.motion}
+        style={motionStyle}
+        fond={clip.fond_image}
+      />
+    );
   }
 
   // Archive footage already moves. Adding a camera move on top gives two

@@ -57,7 +57,6 @@ export const Journal: React.FC<{
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: style.fond,
         fontFamily: style.famille,
         alignItems: "center",
         justifyContent: "center",

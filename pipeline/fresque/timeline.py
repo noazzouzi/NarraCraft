@@ -255,6 +255,30 @@ def build(
         if subtitles_on:
             subtitles.extend(_subtitles(beat, fps, per_line))
 
+    # Chaque panneau graphique reçoit l'image du plan photographique le plus
+    # proche, qui lui servira de texture de fond. C'est ce qui rattache un
+    # panneau au film au lieu de le poser à côté — et c'est une décision du
+    # pipeline, pas du moteur de rendu, au même titre qu'une coupe.
+    #
+    # Le plan qui précède d'abord : le spectateur vient de le voir, la
+    # continuité est immédiate. À défaut le suivant, pour qu'un panneau en
+    # ouverture ne se retrouve pas sur du noir.
+    if config.get("montage", "motion", "scene", "opacite", default=0):
+        derniere: str | None = None
+        for clip in clips:
+            if clip["type"] != "motion":
+                derniere = clip.get("image") or derniere
+            clip["fond_image"] = derniere if clip["type"] == "motion" else None
+        suivante: str | None = None
+        for clip in reversed(clips):
+            if clip["type"] != "motion":
+                suivante = clip.get("image") or suivante
+            elif not clip["fond_image"]:
+                clip["fond_image"] = suivante
+    else:
+        for clip in clips:
+            clip["fond_image"] = None
+
     duration_frames = max(
         (c["debut_frame"] + c["duree_frames"] for c in clips), default=0
     )

@@ -55,7 +55,6 @@ export const Document: React.FC<{
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: style.fond,
         alignItems: "center",
         justifyContent: "center",
         overflow: "hidden",

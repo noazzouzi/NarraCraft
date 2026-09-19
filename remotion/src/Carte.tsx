@@ -76,7 +76,7 @@ export const Carte: React.FC<{
   };
 
   return (
-    <AbsoluteFill style={{ backgroundColor: style.fond, fontFamily: style.famille }}>
+    <AbsoluteFill style={{ fontFamily: style.famille }}>
       <svg width={width} height={height} style={{ opacity: apparition }}>
         {COUNTRIES.features.map((pays_: any, index: number) => {
           const nom = String(pays_.properties?.name ?? "").toLowerCase();

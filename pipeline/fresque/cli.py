@@ -440,7 +440,9 @@ def _stage_public_dir(project: Project) -> Path:
     # of the way in and asks for a file that was never copied.
     wanted: set[str] = set()
     for clip in timeline["clips"]:
-        for cle in ("image", "video"):
+        # `fond_image` compte : un panneau graphique s'appuie dessus, et elle
+        # n'est pas forcément l'image d'un autre plan retenu.
+        for cle in ("image", "video", "fond_image"):
             if clip.get(cle):
                 wanted.add(clip[cle])
     if timeline.get("audio"):
