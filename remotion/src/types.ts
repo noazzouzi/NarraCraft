@@ -11,10 +11,19 @@ export type Mouvement = {
   fin: Etat;
 };
 
+/** How a shot arrives. Chosen by the pipeline from the shot's place in the
+ *  story, never by the renderer. */
+export type Entree = {
+  type: "coupe" | "flash" | "glisse" | "fondu_noir" | "ouverture";
+  duree_frames: number;
+};
+
 export type Clip = {
   id: string;
   beat: string;
+  acte: string;
   type: "archive" | "generated" | "motion" | "video";
+  entree: Entree;
   debut_frame: number;
   duree_frames: number;
   image: string | null;
@@ -85,6 +94,9 @@ export type Timeline = {
   template: string | null;
   style: Style;
   clips: Clip[];
+  /** Transition sounds, synthesised locally by `fresque.sons`. They lead
+   *  their cut rather than landing on it. */
+  sons: { fichier: string; debut_frame: number; gain: number }[];
   sous_titres: SousTitre[];
   credits: { asset: string; credit: string; url: string; licence: string }[];
 };

@@ -69,6 +69,55 @@ def _movement(shot: Shot) -> dict[str, Any]:
     }
 
 
+#: How a shot arrives, and the sound that leads it in. The renderer knows how
+#: to draw each of these and nothing else.
+#:
+#: They are entry effects rather than cross-dissolves on purpose: clips are
+#: contiguous, non-overlapping sequences, and keeping them that way is what
+#: makes the timeline readable by something other than Remotion. A hard cut
+#: with a whoosh under it is also more alive than a dissolve, which is what
+#: was actually asked for.
+TRANSITIONS = {
+    "coupe": None,
+    "flash": "souffle",
+    "glisse": "souffle_inverse",
+    "fondu_noir": "impact",
+    "ouverture": "sub",
+}
+
+
+def _transition(position: int, clip_beat: str, clip_act: str,
+                previous: dict[str, Any] | None, shot_type: str,
+                previous_type: str | None) -> str:
+    """Pick how this shot arrives, from where it sits in the story.
+
+    The rule is deliberately coarse, because a fine one would be a taste
+    engine and taste is not what code is for here. What the code knows for
+    certain is the structure: whether the idea continues, changes, or the act
+    turns over. That is enough to stop every cut looking the same, which was
+    the actual complaint.
+    """
+    if position == 0:
+        return "ouverture"
+    if previous is None:
+        return "coupe"
+
+    if clip_act != previous.get("acte"):
+        return "fondu_noir"
+
+    # A graphic panel is a different medium arriving; sliding it in says so,
+    # and a hard cut into one reads as a glitch.
+    if "motion" in (shot_type, previous_type):
+        return "glisse"
+
+    if clip_beat != previous["beat"]:
+        return "flash"
+
+    # Inside a beat the idea continues, so the cut is bare. This is most of
+    # them, and it is what makes the flashes count.
+    return "coupe"
+
+
 def _subtitle_lines(words: list[dict[str, Any]], per_line: int) -> list[list[dict[str, Any]]]:
     """Group words into subtitle lines, breaking on punctuation where possible.
 
@@ -120,11 +169,18 @@ def build(
     shots: list[Shot],
     assets: dict[str, dict[str, Any]],
     audio: str | None = None,
+    sons_dir: str | None = None,
 ) -> dict[str, Any]:
     fps = int(config.get("montage", "fps", default=30))
     width, height = config.get("montage", "resolution", default=[1920, 1080])
     per_line = int(config.get("montage", "sous_titres", "mots_par_ligne", default=7))
     subtitles_on = bool(config.get("montage", "sous_titres", "actifs", default=True))
+
+    transition_s = float(config.get("montage", "transitions", "duree_s", default=0.3))
+    fondu_noir_s = float(config.get("montage", "transitions", "fondu_noir_s", default=0.55))
+    amorce_s = float(config.get("montage", "transitions", "amorce_s", default=0.12))
+    gain = float(config.get("montage", "transitions", "gain", default=0.22))
+    sons_on = bool(config.get("montage", "transitions", "sons", default=True)) and sons_dir
 
     beats = alignment["beats"]
     total_s = float(alignment["duree_totale_s"])
@@ -156,10 +212,23 @@ def build(
             height_px = int(asset.get("hauteur") or 0)
 
             est_video = asset.get("media") == "video"
+            arrivee = _transition(
+                len(clips), beat["id"], beat.get("acte", ""),
+                clips[-1] if clips else None, shot.type,
+                clips[-1]["type"] if clips else None,
+            )
             clips.append({
                 "id": shot.id,
                 "beat": beat["id"],
+                "acte": beat.get("acte", ""),
                 "type": shot.type,
+                "entree": {
+                    "type": arrivee,
+                    "duree_frames": round(
+                        (fondu_noir_s if arrivee in ("fondu_noir", "ouverture")
+                         else transition_s) * fps
+                    ),
+                },
                 "debut_frame": start_frame,
                 "duree_frames": end_frame - start_frame,
                 "image": None if est_video else asset.get("fichier"),
@@ -189,6 +258,22 @@ def build(
         (c["debut_frame"] + c["duree_frames"] for c in clips), default=0
     )
 
+    # The sound leads the cut rather than landing on it: the ear announces to
+    # the eye what is coming. Clamped at zero, so the opening sound is not
+    # pushed off the front of the film.
+    sound_track: list[dict[str, Any]] = []
+    if sons_on:
+        amorce = round(amorce_s * fps)
+        for clip in clips:
+            name = TRANSITIONS[clip["entree"]["type"]]
+            if not name:
+                continue
+            sound_track.append({
+                "fichier": f"{sons_dir}/{name}.wav",
+                "debut_frame": max(clip["debut_frame"] - amorce, 0),
+                "gain": gain,
+            })
+
     return {
         "version": 1,
         "fps": fps,
@@ -208,6 +293,7 @@ def build(
             "motion": config.get("montage", "motion", default={}),
         },
         "clips": clips,
+        "sons": sound_track,
         "sous_titres": subtitles,
         "credits": [
             {

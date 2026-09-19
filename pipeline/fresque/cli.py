@@ -279,10 +279,19 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     if project.assets.is_file():
         assets = json.loads(project.assets.read_text(encoding="utf-8")).get("assets", {})
 
+    # Generated here rather than in their own command: they are deterministic
+    # and cost nothing, so a step that can be forgotten is a step that should
+    # not exist.
+    from . import sons as sons_mod
+
+    sons_dir = "04-audio/sons"
+    sons_mod.build(project.root / sons_dir)
+
     voix = project.audio_dir / "voix.wav"
     timeline = timeline_mod.build(
         alignment, plan, assets,
         audio="04-audio/voix.wav" if voix.is_file() else None,
+        sons_dir=sons_dir,
     )
     timeline_mod.write(timeline, project.timeline)
 
@@ -293,6 +302,15 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     print(f"  {timeline['duree_frames']} frames à {timeline['fps']} fps "
           f"= {align.format_duration(timeline['duree_s'])}")
     print(f"  audio : {timeline['audio'] or 'aucun (muet)'}")
+
+    arrivees: dict[str, int] = {}
+    for clip in timeline["clips"]:
+        kind = clip["entree"]["type"]
+        arrivees[kind] = arrivees.get(kind, 0) + 1
+    print("  transitions : " + " · ".join(
+        f"{kind} {count}" for kind, count in sorted(arrivees.items())
+    ))
+    print(f"  {len(timeline['sons'])} son(s) de transition")
     if timeline["source_timings"] == "estimate":
         print("  ⚠ construit sur des timings estimés")
     if problems:
@@ -346,6 +364,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     ]
     if args.scale != 1.0:
         command.append(f"--scale={args.scale}")
+    if args.frames:
+        command.append(f"--frames={args.frames}")
     if args.browser:
         command.append(f"--browser-executable={args.browser}")
 
@@ -378,6 +398,8 @@ def _stage_public_dir(project: Project) -> Path:
                 wanted.add(clip[cle])
     if timeline.get("audio"):
         wanted.add(timeline["audio"])
+    for son in timeline.get("sons", []):
+        wanted.add(son["fichier"])
 
     staging = project.root / ".render"
     if staging.exists():
@@ -487,6 +509,11 @@ def main(argv: list[str] | None = None) -> int:
     render_cmd.add_argument(
         "--scale", type=float, default=1.0,
         help="facteur de résolution, par ex. 0.5 pour une copie de visionnage",
+    )
+    render_cmd.add_argument(
+        "--frames", default=None, metavar="DEBUT-FIN",
+        help="ne rendre qu'un intervalle, par ex. 0-450 — de quoi vérifier "
+             "une ouverture ou une transition sans rendre le film entier",
     )
     render_cmd.add_argument(
         "--crf", type=int, default=None, help="qualité d'encodage (défaut : config)"

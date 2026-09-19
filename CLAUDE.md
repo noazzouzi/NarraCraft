@@ -41,6 +41,32 @@ du batch non-supervisé, il suffira d'écrire un runner API qui produit les
 mêmes fichiers. Ne jamais coupler une étape LLM à la suivante autrement que
 par son fichier de sortie.
 
+## Rythme, ouverture, transitions
+
+Trois règles de montage vivent dans le code plutôt que dans les skills,
+parce qu'un premier documentaire complet a montré que la prose ne suffit pas.
+
+**La durée d'un plan a un plafond.** `montage.duree_plan_max_s`. Vérifié deux
+fois : par `shots.density()` au checkpoint 2, depuis le compte de mots, donc
+avant toute dépense ; puis par `timeline.check()` sur l'audio réel, qui est le
+seul endroit où un montage lent est vraiment attrapable. Les deux regardent le
+plan le plus **lourd** du beat, jamais la moyenne.
+
+**Le premier plan porte le sujet et une phrase.** `shots.ouverture()` refuse
+un documentaire qui ouvre sur un panneau graphique ou sans `accroche`, et
+`fresque shots` sort en erreur. C'est la seule chose qui mérite de faire
+échouer un checkpoint : tout le reste ne concerne que les spectateurs qui ont
+passé les quinze premières secondes.
+
+**La manière dont un plan arrive est calculée, pas choisie.**
+`timeline._transition()` la déduit de la place du plan dans le récit — même
+beat, beat suivant, acte suivant, panneau graphique — et rien d'autre. Un LLM
+ne décide d'aucune transition, au même titre qu'il ne calcule aucun timecode.
+
+Les sons de transition sont **synthétisés localement** par `fresque.sons`, à
+partir d'une graine fixe. Aucun téléchargement, aucune licence à suivre,
+aucun réseau — et des fichiers identiques d'une machine à l'autre.
+
 ## Voix et alignement
 
 La voix et l'alignement mot-à-mot sont **deux étapes distinctes**, et c'est

@@ -881,6 +881,84 @@ def test_motion_clip_needs_no_image_in_the_timeline(tmp_path):
     assert timeline_mod.check(timeline) == []
 
 
+def _timeline_de(tmp_path, actes: list[tuple[str, list[str]]], shots: list[Shot],
+                 **kwargs):
+    """Build a timeline from a script described as [(acte, [beats])]."""
+    lignes = ["# T", ""]
+    numero = 1
+    for titre, beats in actes:
+        lignes += [f"## Acte {titre} — A", ""]
+        for _ in beats:
+            lignes += [f"### B{numero:03d}", "> intention: x", "mot " * 20, ""]
+            numero += 1
+    script_path = tmp_path / "02-script.md"
+    script_path.write_text("\n".join(lignes), encoding="utf-8")
+    script = script_parser.parse(script_path)
+    return timeline_mod.build(align.estimate(script), shots, {}, **kwargs)
+
+
+def test_transitions_follow_the_structure_of_the_story():
+    """Le code choisit d'après la place du plan, pas au hasard ni à l'identique."""
+    from fresque.timeline import _transition
+
+    assert _transition(0, "B001", "I", None, "archive", None) == "ouverture"
+
+    # Même beat, même acte : l'idée continue, la coupe est nue.
+    precedent = {"beat": "B001", "acte": "I", "type": "archive"}
+    assert _transition(1, "B001", "I", precedent, "archive", "archive") == "coupe"
+
+    # Beat suivant : nouvelle idée.
+    assert _transition(2, "B002", "I", precedent, "archive", "archive") == "flash"
+
+    # Acte suivant : une respiration, qui prime sur le changement de beat.
+    assert _transition(3, "B009", "II", precedent, "archive", "archive") == "fondu_noir"
+
+    # Un panneau graphique est un autre médium qui arrive.
+    assert _transition(4, "B001", "I", precedent, "motion", "archive") == "glisse"
+    assert _transition(4, "B001", "I", {**precedent, "type": "motion"},
+                       "archive", "motion") == "glisse"
+
+
+def test_transition_sounds_lead_their_cut(tmp_path):
+    """Le son précède la coupe : l'oreille annonce à l'oeil ce qui arrive."""
+    shots = [
+        Shot(index=0, beat="B001", type="archive", requete="x"),
+        Shot(index=1, beat="B002", type="archive", requete="y"),
+    ]
+    timeline = _timeline_de(tmp_path, [("I", ["B001", "B002"])], shots,
+                            sons_dir="04-audio/sons")
+
+    sons = timeline["sons"]
+    assert sons, "des transitions sonores sont attendues"
+    # L'ouverture est calée à zéro, faute de pouvoir démarrer avant le film.
+    assert sons[0]["debut_frame"] == 0
+    coupe = timeline["clips"][1]["debut_frame"]
+    assert 0 < sons[1]["debut_frame"] < coupe
+
+    # Aucun son n'est produit quand aucun dossier n'est fourni : la timeline
+    # reste lisible par un moteur qui n'en veut pas.
+    muet = _timeline_de(tmp_path, [("I", ["B001", "B002"])], shots)
+    assert muet["sons"] == []
+
+
+def test_every_transition_names_a_sound_that_exists(tmp_path):
+    """Un nom de son inventé ne casserait qu'au rendu, une heure plus tard."""
+    from fresque import sons as sons_mod
+    from fresque.timeline import TRANSITIONS
+
+    attendus = {n for n in TRANSITIONS.values() if n}
+    assert attendus <= set(sons_mod.SONS)
+
+    produits = sons_mod.build(tmp_path / "sons")
+    assert attendus <= set(produits)
+
+    # Idempotent : un fichier déjà là est conservé, sinon Remotion le
+    # recopierait dans son bundle à chaque rendu.
+    avant = (tmp_path / "sons" / "souffle.wav").stat().st_mtime_ns
+    sons_mod.build(tmp_path / "sons")
+    assert (tmp_path / "sons" / "souffle.wav").stat().st_mtime_ns == avant
+
+
 def test_a_shot_held_too_long_is_reported(tmp_path):
     """Le plafond de durée est vérifié sur la timeline, donc sur l'audio réel.
 

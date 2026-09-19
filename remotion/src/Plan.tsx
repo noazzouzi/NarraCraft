@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { Entree, enveloppe } from "./Entree";
 import { MotionGraphic } from "./Motion";
 import { Traitement } from "./Traitement";
 import type { Clip, MotionStyle, Palette } from "./types";
@@ -15,16 +16,35 @@ const EASINGS: Record<string, (t: number) => number> = {
  *  and they are often the only image of a given subject. */
 const MIN_FILL_RATIO = 1.15;
 
-/** One shot: a still image given a slow, authored-looking camera move.
- *
- *  The move is fully described by the timeline, so this component decides
- *  nothing about pacing — it only plays back what the pipeline computed. */
-export const Plan: React.FC<{
+type PlanProps = {
   clip: Clip;
   palette: Palette;
   motionStyle: MotionStyle;
   traitement: { grain?: number; vignette?: number };
-}> = ({ clip, palette, motionStyle, traitement }) => {
+};
+
+/** One shot, with the way it arrives wrapped around it.
+ *
+ *  The wrapper is separate from the content because a slide or a punch has
+ *  to move the image itself, while a flash or a fade from black sits over
+ *  it. Both come from the same `entree` the pipeline computed. */
+export const Plan: React.FC<PlanProps> = (props) => {
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      <AbsoluteFill style={enveloppe(props.clip.entree, frame)}>
+        <Contenu {...props} />
+      </AbsoluteFill>
+      <Entree entree={props.clip.entree} />
+    </AbsoluteFill>
+  );
+};
+
+/** The shot itself: a still image given a slow, authored-looking camera move.
+ *
+ *  The move is fully described by the timeline, so this component decides
+ *  nothing about pacing — it only plays back what the pipeline computed. */
+const Contenu: React.FC<PlanProps> = ({ clip, palette, motionStyle, traitement }) => {
   const frame = useCurrentFrame();
   const { durationInFrames, fps } = useVideoConfig();
   const { debut, fin, rotation_deg, easing } = clip.mouvement;

@@ -224,6 +224,27 @@ montage:
     grain: 0.06
     vignette: 0.25
 
+  # Comment un plan arrive. Une coupe nue lue quinze fois par minute se voit
+  # comme un diaporama qui avance ; la même coupe avec un souffle dessous se
+  # lit comme un montage. C'est le code qui choisit, d'après la place du plan
+  # dans le récit — jamais un LLM, et jamais au hasard.
+  transitions:
+    # Durée de l'effet d'entrée. Au-delà de 0,4 s on regarde la transition
+    # au lieu de l'image.
+    duree_s: 0.3
+    # L'ouverture d'un acte se donne plus de temps : c'est une respiration.
+    fondu_noir_s: 0.55
+    # Le son précède la coupe. C'est contre-intuitif et c'est ce qui se fait :
+    # l'oreille annonce à l'oeil ce qui arrive.
+    amorce_s: 0.12
+    # Niveau des sons de transition, relatif à la voix. Au-dessus de 0,3 ils
+    # passent devant la narration.
+    gain: 0.22
+    # Un son sur chaque coupe serait insupportable : à quinze plans par
+    # minute, ça fait deux cent vingt-cinq sons sur un quart d'heure. Seuls
+    # les changements de beat et d'acte en portent un.
+    sons: true
+
   # Direction artistique. Transportée par la timeline jusqu'au moteur de
   # rendu, qui ne fait que l'appliquer. Un template la redéfinit — c'est ce
   # qui fera qu'un documentaire criminel et un documentaire historique ne se
