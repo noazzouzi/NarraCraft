@@ -7,6 +7,7 @@ duration between its shots.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -224,6 +225,41 @@ def _validate_motion(motion: dict[str, Any] | None, where: str) -> None:
                 raise ShotsError(
                     f"{where} : evenements[{index}] exige `date` et `texte`."
                 )
+
+
+def density(shots: list[Shot], beats: list[Any]) -> list[str]:
+    """Beats whose visual plan would hold one image too long.
+
+    The real check happens on the timeline, once the voice exists and the
+    durations are measured. But by then the archives are downloaded and the
+    generated images are paid for. Estimating from the word count here costs
+    nothing and catches the same problem at the checkpoint, which is the
+    point of having a checkpoint.
+    """
+    from . import config
+
+    wpm = float(config.get("narration", "mots_par_minute", default=140))
+    longest = float(config.get("montage", "duree_plan_max_s", default=10))
+    grouped = by_beat(shots)
+
+    slow: list[str] = []
+    for beat in beats:
+        planned = grouped.get(beat.id, [])
+        if not planned:
+            continue
+        seconds = beat.word_count / wpm * 60
+        # The longest shot of the beat is the one that decides, not the
+        # average: a beat split 1/1/4 still holds its last image forever.
+        weight_total = sum(s.poids for s in planned)
+        held = seconds * max(s.poids for s in planned) / weight_total
+        if held > longest:
+            needed = math.ceil(seconds / longest)
+            slow.append(
+                f"{beat.id} : {len(planned)} plan(s) pour {seconds:.0f} s — "
+                f"un plan tenu ~{held:.1f} s (max {longest:g} s). "
+                f"En prévoir {max(needed, len(planned) + 1)}."
+            )
+    return slow
 
 
 def by_beat(shots: list[Shot]) -> dict[str, list[Shot]]:

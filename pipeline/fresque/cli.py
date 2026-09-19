@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import align, script_parser, shots as shots_mod, timeline as timeline_mod
+from . import align, config, script_parser, shots as shots_mod, timeline as timeline_mod
 from .project import Project
 
 
@@ -99,6 +99,19 @@ def cmd_shots(args: argparse.Namespace) -> int:
     print(f"✓ {len(plan)} plans sur {len(script.beats)} beats")
     for kind, count in sorted(kinds.items()):
         print(f"  {kind:<10} {count}")
+
+    par_minute = len(plan) / (script.word_count / float(
+        config.get("narration", "mots_par_minute", default=140)))
+    vise = float(config.get("visuels", "plans_par_minute", default=8))
+    print(f"  {par_minute:.1f} plans/min (visé : {vise:g})")
+
+    slow = shots_mod.density(plan, script.beats)
+    if slow:
+        print(f"\n  ⚠ {len(slow)} beat(s) tiennent une image trop longtemps :")
+        for line in slow[:12]:
+            print(f"    {line}")
+        if len(slow) > 12:
+            print(f"    … et {len(slow) - 12} autre(s)")
     return 0
 
 
@@ -288,8 +301,6 @@ def cmd_timeline(args: argparse.Namespace) -> int:
 def cmd_render(args: argparse.Namespace) -> int:
     import shutil
     import subprocess
-
-    from . import config
 
     project = Project.open(args.slug)
     if not project.timeline.is_file():

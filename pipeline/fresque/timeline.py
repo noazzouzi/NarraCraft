@@ -230,7 +230,18 @@ def check(timeline: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     clips = timeline["clips"]
     cursor = 0
+    fps = timeline["fps"]
+    longest = float(config.get("montage", "duree_plan_max_s", default=10))
     for clip in clips:
+        # `plans_par_minute` is an intention the visual plan may or may not
+        # honour; this is the same rule measured on the real audio, which is
+        # the only place a slow montage can actually be caught.
+        held = clip["duree_frames"] / fps
+        if held > longest:
+            problems.append(
+                f"{clip['id']} : plan tenu {held:.1f} s (max {longest:g} s) — "
+                "découper le beat en plans supplémentaires."
+            )
         if clip["debut_frame"] != cursor:
             problems.append(
                 f"{clip['id']} : trou ou chevauchement — attendu à la frame "

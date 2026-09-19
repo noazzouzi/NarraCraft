@@ -849,7 +849,7 @@ def test_a_well_formed_timeline_passes(tmp_path):
 
 def test_motion_clip_needs_no_image_in_the_timeline(tmp_path):
     """`check` signale un plan sans visuel — sauf un motion, qui se dessine."""
-    body = "### B001\n> intention: x\n" + "mot " * 40 + "\n"
+    body = "### B001\n> intention: x\n" + "mot " * 20 + "\n"
     script_path = tmp_path / "02-script.md"
     script_path.write_text(f"# T\n\n## Acte I — A\n\n{body}", encoding="utf-8")
     script = script_parser.parse(script_path)
@@ -858,6 +858,44 @@ def test_motion_clip_needs_no_image_in_the_timeline(tmp_path):
                 motion={"kind": "chiffre", "valeur": "20", "libelle": "jours"})
     timeline = timeline_mod.build(align.estimate(script), [shot], {})
     assert timeline_mod.check(timeline) == []
+
+
+def test_a_shot_held_too_long_is_reported(tmp_path):
+    """Le plafond de durée est vérifié sur la timeline, donc sur l'audio réel.
+
+    C'est le seul endroit où un montage lent peut être attrapé : le plan
+    visuel ne connaît que des estimations."""
+    body = "### B001\n> intention: x\n" + "mot " * 60 + "\n"
+    script_path = tmp_path / "02-script.md"
+    script_path.write_text(f"# T\n\n## Acte I — A\n\n{body}", encoding="utf-8")
+    script = script_parser.parse(script_path)
+
+    shot = Shot(index=0, beat="B001", type="motion",
+                motion={"kind": "chiffre", "valeur": "20", "libelle": "jours"})
+    timeline = timeline_mod.build(align.estimate(script), [shot], {})
+    problems = timeline_mod.check(timeline)
+    assert any("plan tenu" in p for p in problems)
+
+
+def test_density_catches_a_beat_planned_with_too_few_shots(tmp_path):
+    """Le même contrôle, mais au checkpoint : avant de payer les images."""
+    from fresque.shots import density
+
+    body = "### B001\n> intention: x\n" + "mot " * 60 + "\n"
+    script_path = tmp_path / "02-script.md"
+    script_path.write_text(f"# T\n\n## Acte I — A\n\n{body}", encoding="utf-8")
+    beats = script_parser.parse(script_path).beats
+
+    seul = [Shot(index=0, beat="B001", type="archive", requete="x")]
+    assert density(seul, beats), "un plan pour soixante mots doit être signalé"
+
+    # Le plan le plus lourd décide, pas la moyenne : découper sans corriger
+    # les poids ne résout rien.
+    desequilibre = [
+        Shot(index=0, beat="B001", type="archive", requete="x", poids=1),
+        Shot(index=1, beat="B001", type="archive", requete="y", poids=9),
+    ]
+    assert density(desequilibre, beats)
 
 
 def test_map_needs_named_markers_with_coordinates(tmp_path):

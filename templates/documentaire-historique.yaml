@@ -43,20 +43,44 @@ meta:
 # --- Écriture ---------------------------------------------------------------
 
 narration:
-  # Registre documentaire posé : on laisse respirer.
-  mots_par_minute: 140
-  pause_entre_actes_s: 1.4
-  pause_phrase_s: 0.5
+  # Débit tendu. Le premier montage à 140 mots/min a été jugé monotone :
+  # le registre sobre ne veut pas dire lent, et une voix off documentaire
+  # française tient très bien 170 sans devenir un reportage télé.
+  #
+  # Mesuré sur un extrait réel du script, avec la voix ff_siwis :
+  #   speed 0.82 → 148 mots/min   (ancien réglage)
+  #   speed 0.92 → 167 mots/min
+  #   speed 0.95 → 170 mots/min   ← retenu
+  #   speed 1.00 → 176 mots/min
+  #   speed 1.15 → 192 mots/min   (articulation qui commence à se dégrader)
+  #
+  # `mots_par_minute` doit rester cohérent avec `voix.kokoro.speed` :
+  # c'est lui qui convertit mots <-> durée dans tout le pipeline.
+  mots_par_minute: 170
+  # Les respirations sont divisées par deux. Elles restent audibles — un
+  # enchaînement à zéro pause sonne synthétique — mais elles ne portent
+  # plus le rythme à elles seules.
+  pause_entre_actes_s: 0.9
+  pause_entre_beats_s: 0.22
+  pause_phrase_s: 0.30
+  pause_virgule_s: 0.12
+
+voix:
+  kokoro:
+    speed: 0.95
 
 structure:
   actes: 4
-  relance_retention_s: 90
-  hook_s: 20
+  # Une relance toutes les minute au plus. À 90 s le spectateur a le temps
+  # de décrocher entre deux changements d'état.
+  relance_retention_s: 60
+  hook_s: 15
 
 controle:
-  # Beats plus longs qu'ailleurs : le format supporte qu'une image tienne,
-  # à condition que le mouvement de caméra travaille.
-  mots_par_beat: [28, 65]
+  # Beats courts. Un beat = une unité de narration, et c'est la maille à
+  # laquelle le montage peut changer d'intention. 45 mots à 170 mots/min
+  # font déjà seize secondes.
+  mots_par_beat: [16, 45]
   interdits:
     - abonnez-vous
     - dans cette vidéo
@@ -76,7 +100,11 @@ controle:
 # --- Visuels ----------------------------------------------------------------
 
 visuels:
-  plans_par_minute: 8
+  # Un changement d'image toutes les quatre secondes environ. À 8 plans par
+  # minute — une image toutes les sept secondes et demie — le montage a été
+  # jugé monotone, et c'est mécaniquement vrai : sur quinze minutes, ça fait
+  # cent vingt images là où un documentaire YouTube en montre le double.
+  plans_par_minute: 15
   generation:
     direction_artistique: >-
       Photographie documentaire d'archive, grain argentique fin,
@@ -86,13 +114,20 @@ visuels:
 # --- Rendu ------------------------------------------------------------------
 
 montage:
-  # Mouvements amples et lents. Le format tient sur la durée des plans.
+  # Un plan tenu plus longtemps que ça est signalé par `fresque timeline`.
+  # C'est le garde-fou mécanique du rythme : la config peut viser quinze
+  # plans par minute, seul l'audio réel dit si le montage les tient.
+  duree_plan_max_s: 6.5
+
+  # Mouvements plus amples qu'avant, parce que les plans sont plus courts.
+  # Un zoom de 4 % étalé sur quatre secondes ne se voit pas : la caméra a
+  # l'air arrêtée, et c'est exactement ce qui faisait diaporama.
   ken_burns:
-    zoom_min: 1.04
-    zoom_max: 1.18
-    easing: easeInOutCubic
-    derive_max_pct: 6
-    micro_rotation_deg: 0.4
+    zoom_min: 1.06
+    zoom_max: 1.30
+    easing: easeOutCubic
+    derive_max_pct: 10
+    micro_rotation_deg: 0.7
 
   traitement:
     grain: 0.06

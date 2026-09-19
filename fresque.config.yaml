@@ -191,6 +191,12 @@ montage:
   # des photographies d'archive : inutilement lourd pour de la diffusion.
   # 22 tient autour de 4 Mbit/s sans différence visible en 1080p.
   crf: 22
+  # Durée au-delà de laquelle un plan est signalé comme trop tenu.
+  # `plans_par_minute` est une intention d'écriture ; ce plafond-ci est
+  # vérifié sur la timeline réelle, donc sur l'audio réel. C'est le seul
+  # des deux qui garantisse quoi que ce soit.
+  duree_plan_max_s: 10
+
   # Mouvement appliqué aux images fixes. Le soin mis ici fait toute la
   # différence entre un zoom moche et un mouvement crédible.
   ken_burns:

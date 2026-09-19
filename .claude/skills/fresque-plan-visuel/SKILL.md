@@ -36,17 +36,28 @@ On ne génère que dans trois cas :
 
 ## Découpage
 
-Viser `plans_par_minute` plans par minute de montage, soit un changement
-d'image toutes les 7 à 8 secondes environ. Un beat de 20 secondes prend donc
-deux ou trois plans.
+Viser `plans_par_minute` plans par minute de montage. **Calculer, ne pas
+estimer** : la durée d'un beat vaut `mots_du_beat / mots_par_minute × 60`, et
+le nombre de plans à lui donner vaut cette durée divisée par
+`montage.duree_plan_max_s`, arrondi au supérieur. Un beat de 40 mots à
+170 mots/min dure quatorze secondes : il lui faut **trois plans**, pas un.
 
-Ce rythme n'est pas cosmétique : une image tenue plus de dix secondes sur une
-narration continue fait décrocher, même avec un mouvement de caméra. À
-l'inverse, descendre sous trois secondes par plan transforme un documentaire
-en bande-annonce.
+Ce rythme n'est pas cosmétique, et c'est l'erreur qui a rendu le premier
+documentaire de ce pipeline monotone : il tournait à 8 plans par minute, une
+image toutes les sept secondes et demie. Une image tenue aussi longtemps sur
+une narration continue fait décrocher, même avec un mouvement de caméra. La
+limite basse existe aussi : sous deux secondes par plan, un documentaire
+devient une bande-annonce.
 
 Répartir les plans d'un beat avec `poids`. Un plan de poids 2 occupe deux
-fois plus de temps qu'un plan de poids 1 dans le même beat.
+fois plus de temps qu'un plan de poids 1 dans le même beat. **Attention au
+poids sur un beat long** : un beat de quatorze secondes découpé 1/1/4 tient
+quand même sa dernière image neuf secondes. C'est le plan le plus lourd qui
+décide, pas la moyenne — et c'est celui-là que le pipeline vérifie.
+
+`python -m fresque shots <slug>` affiche les plans par minute obtenus et
+liste les beats qui tiennent une image trop longtemps. **Corriger jusqu'à ce
+que la liste soit vide** avant de présenter le plan.
 
 ## Mouvement
 
@@ -295,7 +306,8 @@ casse le rythme documentaire.
 Vérifier, puis annoncer à l'utilisateur :
 
 - [ ] Chaque beat est couvert.
-- [ ] Le nombre de plans correspond à `plans_par_minute`, à peu près.
+- [ ] `fresque shots` ne signale plus aucun beat trop tenu.
+- [ ] Le nombre de plans par minute affiché est proche de `plans_par_minute`.
 - [ ] Aucun mouvement répété deux fois de suite.
 - [ ] Les requêtes d'archive suivent les pistes de `01-research.md`.
 - [ ] Les prompts partagent une direction artistique unique.
