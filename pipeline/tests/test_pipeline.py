@@ -1002,3 +1002,63 @@ def test_footage_reuse_keys_on_the_source_url():
     b = LocClip("loc:nsr", "B", "", "https://tile.loc.gov/a.mp4", "PD", 62, 1440, 1080, "nsr")
     c = LocClip("loc:nsr", "C", "", "https://tile.loc.gov/z.mp4", "PD", 62, 1440, 1080, "nsr")
     assert _cle(a) == _cle(b) != _cle(c)
+
+
+# --- Document d'archive ------------------------------------------------------
+
+def test_document_requires_lines(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({"kind": "document"})])
+    with pytest.raises(ShotsError, match="lignes"):
+        load_shots(path, ["B001"])
+
+
+def test_a_full_page_is_refused(tmp_path):
+    """Un spectateur ne lit pas une page entière en huit secondes."""
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "document", "lignes": [f"ligne {i}" for i in range(9)],
+    })])
+    with pytest.raises(ShotsError, match="huit secondes"):
+        load_shots(path, ["B001"])
+
+
+def test_highlight_index_must_exist(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "document", "lignes": ["a", "b"], "surligne": 5,
+    })])
+    with pytest.raises(ShotsError, match="entre 0 et 1"):
+        load_shots(path, ["B001"])
+
+
+def test_unknown_handwriting_style_is_refused(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "document", "lignes": ["a"], "ecriture": "gothique",
+    })])
+    with pytest.raises(ShotsError, match="dactylographie"):
+        load_shots(path, ["B001"])
+
+
+def test_a_well_formed_document_passes(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "document", "ecriture": "officiel",
+        "entete": "Tribunal correctionnel de Paris",
+        "lignes": ["DÉCLARE coupable ;", "LE CONDAMNE à cinq années ;"],
+        "surligne": 1,
+    })])
+    shots = load_shots(path, ["B001"])
+    assert shots[0].motion["surligne"] == 1
+
+
+def test_highlight_is_optional(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "document", "lignes": ["une seule ligne"],
+    })])
+    assert load_shots(path, ["B001"])[0].motion.get("surligne") is None
+
+
+def test_every_motion_kind_is_dispatched_by_the_renderer():
+    """Le pipeline valide des formes que le moteur doit savoir dessiner :
+    si les deux listes divergent, un plan validé produit un panneau vide."""
+    from fresque.shots import MOTION_FIELDS
+    source = Path("remotion/src/Motion.tsx").read_text(encoding="utf-8")
+    for kind in MOTION_FIELDS:
+        assert f'case "{kind}":' in source, kind

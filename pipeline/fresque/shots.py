@@ -35,7 +35,14 @@ MOTION_FIELDS: dict[str, tuple[str, ...]] = {
     # Une une de journal, construite et non photographiée : les unes de
     # presse sont sous droits et quasi jamais disponibles librement.
     "journal": ("journal", "date", "titre"),
+    # Un document officiel, avec un passage surligné. Sur un sujet judiciaire
+    # ou administratif, souvent le plan le plus fort disponible.
+    "document": ("lignes",),
 }
+
+#: Écritures disponibles pour un document. Aucune police n'est embarquée :
+#: ces familles existent sur tout système.
+ECRITURES = {"dactylographie", "officiel"}
 
 
 class ShotsError(ValueError):
@@ -147,6 +154,31 @@ def _validate_motion(motion: dict[str, Any] | None, where: str) -> None:
             f"{where} : motion `{kind}` — champ(s) manquant(s) : "
             f"{', '.join(missing)}."
         )
+
+    if kind == "document":
+        lignes = motion["lignes"]
+        if not isinstance(lignes, list) or not lignes:
+            raise ShotsError(f"{where} : `lignes` doit être une liste non vide.")
+        if len(lignes) > 8:
+            raise ShotsError(
+                f"{where} : {len(lignes)} lignes — un spectateur ne lit pas "
+                "une page entière en huit secondes. En garder au plus huit, "
+                "et surligner celle qui compte."
+            )
+        surligne = motion.get("surligne")
+        if surligne is not None and not (
+            isinstance(surligne, int) and 0 <= surligne < len(lignes)
+        ):
+            raise ShotsError(
+                f"{where} : `surligne` vaut {surligne!r} — attendu un index "
+                f"entre 0 et {len(lignes) - 1}."
+            )
+        ecriture = motion.get("ecriture")
+        if ecriture is not None and ecriture not in ECRITURES:
+            raise ShotsError(
+                f"{where} : `ecriture` {ecriture!r} inconnue "
+                f"(attendu : {', '.join(sorted(ECRITURES))})."
+            )
 
     if kind == "carte":
         marqueurs = motion["marqueurs"]

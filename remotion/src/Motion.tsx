@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { Carte } from "./Carte";
+import { Document } from "./Document";
 import { Journal } from "./Journal";
 import type { MotionStyle } from "./types";
 
@@ -285,6 +286,17 @@ export const MotionGraphic: React.FC<{
           marqueurs={motion.marqueurs as { nom: string; coord: [number, number] }[]}
           relier={motion.relier as boolean | undefined}
           pays={motion.pays as string[] | undefined}
+          style={style}
+        />
+      );
+    case "document":
+      return (
+        <Document
+          entete={motion.entete as string | undefined}
+          reference={motion.reference as string | undefined}
+          lignes={motion.lignes as string[]}
+          surligne={motion.surligne as number | undefined}
+          ecriture={motion.ecriture as string | undefined}
           style={style}
         />
       );

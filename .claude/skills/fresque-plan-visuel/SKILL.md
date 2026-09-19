@@ -256,6 +256,34 @@ Ce panneau en **fabrique** une : il porte le nom du journal et la date comme
 des faits énoncés, il ne reproduit aucune mise en page existante. Ne jamais
 lui donner le nom d'un titre réel avec une une qu'il n'a pas publiée.
 
+**`document`** — une pièce officielle, avec un passage surligné.
+```json
+{"kind": "document", "ecriture": "dactylographie",
+ "entete": "Tribunal correctionnel de Paris",
+ "reference": "Jugement du 25 septembre 2025 — extrait du dispositif",
+ "lignes": [
+   "DÉCLARE le prévenu coupable des faits d'association de malfaiteurs ;",
+   "LE CONDAMNE à la peine de cinq années d'emprisonnement ;"
+ ],
+ "surligne": 1}
+```
+Sur un sujet judiciaire ou administratif, c'est souvent **le plan le plus
+fort disponible** : les mots exacts d'un jugement disent ce qu'aucune façade
+de tribunal ne dira.
+
+Huit lignes maximum — un spectateur ne lit pas une page entière en huit
+secondes. `surligne` désigne l'index de la ligne qui compte, et un
+surligneur la balaie à l'écran : c'est ce qui dit où regarder avant qu'il
+ait fini de décider lui-même.
+
+`ecriture` vaut `dactylographie` (machine à écrire) ou `officiel` (papier
+administratif). Aucune police n'est embarquée, ces familles existent partout.
+
+**Ne jamais inventer le contenu d'une pièce réelle.** Le texte doit venir
+mot pour mot de `01-research.md`, avec sa source. Un document fabriqué qui
+ressemble à une pièce authentique est le pire écart possible sur un sujet
+judiciaire.
+
 Un plan `motion` prend `"mouvement": "static"` — l'animation est interne.
 
 **Combien ?** Trois à cinq par quart d'heure. Ce sont des respirations et des
