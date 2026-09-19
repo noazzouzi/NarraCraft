@@ -52,6 +52,39 @@ STANDARD_WIDTHS = (1920, 1280, 800)
 RELAXED_WIDTH = 1280
 CORE_TERMS = 3
 
+#: Mots trop courts ou trop communs pour porter du sens dans un titre.
+VIDES = {
+    "de", "du", "des", "la", "le", "les", "un", "une", "et", "en", "au", "aux",
+    "dans", "sur", "pour", "par", "avec", "the", "of", "and", "in", "on", "at",
+    "photo", "photographie", "image", "vue", "plan",
+}
+
+
+def _mots_utiles(texte: str) -> set[str]:
+    """Tokens porteurs de sens, sans accents ni casse."""
+    import unicodedata
+    plat = unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode()
+    return {
+        m for m in re.findall(r"[a-z0-9]{4,}", plat.lower())
+        if m not in VIDES
+    }
+
+
+def est_pertinent(requete: str, titre: str, description: str = "") -> bool:
+    """Le résultat partage-t-il au moins un mot porteur avec la requête ?
+
+    Sans ce garde-fou, la relaxation finit par tout accepter : mesuré sur un
+    documentaire entier, elle a proposé une garde d'honneur chinoise pour
+    « code pénal livre » et une tempête bretonne pour « chaise vide salle ».
+    Un titre qui ne partage aucun mot avec la requête est presque toujours
+    hors sujet, et un plan hors sujet coûte plus cher qu'un plan manquant :
+    il passe inaperçu à la relecture.
+    """
+    voulus = _mots_utiles(requete)
+    if not voulus:
+        return True
+    return bool(voulus & _mots_utiles(f"{titre} {description}"))
+
 
 def variants(query: str, min_width: int) -> list[tuple[str, int]]:
     """Progressively looser attempts, most specific first.
@@ -65,7 +98,8 @@ def variants(query: str, min_width: int) -> list[tuple[str, int]]:
     saves a paid generation.
     """
     terms = query.split()
-    core = " ".join(terms[:CORE_TERMS])
+    # Sous trois termes, la requête ne discrimine plus rien.
+    core = " ".join(terms[:CORE_TERMS]) if len(terms) > CORE_TERMS else query
 
     widths = [w for w in STANDARD_WIDTHS if w <= min_width] or [min_width]
     attempts = [(query, widths[0])]
@@ -131,7 +165,7 @@ def search(
     response = _get(http, params, timeout)
     pages = response.json().get("query", {}).get("pages", []) or []
 
-    return _to_candidates(pages, limit=limit, min_width=min_width)
+    return _to_candidates(pages, limit=limit, min_width=min_width, requete=query)
 
 
 def _get(http: requests.Session, params: dict[str, str], timeout: float):
@@ -171,7 +205,8 @@ def _prefer_landscape(candidates: list[Candidate]) -> list[Candidate]:
 
 
 def _to_candidates(
-    pages: Iterable[dict[str, Any]], limit: int, min_width: int
+    pages: Iterable[dict[str, Any]], limit: int, min_width: int,
+    requete: str = "",
 ) -> list[Candidate]:
     candidates: list[Candidate] = []
     for page in pages:
@@ -207,7 +242,11 @@ def _to_candidates(
             extra={"description": _meta(info, "ImageDescription")[:400]},
         )
 
-        if candidate.usable:
+        if candidate.usable and (
+            not requete
+            or est_pertinent(requete, candidate.title,
+                             candidate.extra.get("description", ""))
+        ):
             candidates.append(candidate)
         # Gather more than asked for, so the landscape preference below has
         # something to choose between rather than reordering a single result.

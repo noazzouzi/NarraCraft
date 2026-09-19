@@ -1062,3 +1062,31 @@ def test_every_motion_kind_is_dispatched_by_the_renderer():
     source = Path("remotion/src/Motion.tsx").read_text(encoding="utf-8")
     for kind in MOTION_FIELDS:
         assert f'case "{kind}":' in source, kind
+
+
+def test_staging_exposes_every_media_the_timeline_references(tmp_path, monkeypatch):
+    """Le rendu ne copie que ce qu'on lui liste. Oublier un type de média ne
+    se voit qu'au tiers du rendu, quand le moteur réclame un fichier absent —
+    c'est arrivé avec les rushes vidéo sur le premier documentaire complet."""
+    from fresque import cli as cli_mod
+    from fresque.project import Project
+
+    racine = tmp_path / "projects" / "p"
+    for rel in ("05-visuals/S000.jpg", "05-visuals/rushes/a.mp4", "04-audio/voix.wav"):
+        chemin = racine / rel
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        chemin.write_bytes(b"x")
+    (racine / "06-timeline.json").write_text(json.dumps({
+        "audio": "04-audio/voix.wav",
+        "clips": [
+            {"image": "05-visuals/S000.jpg", "video": None},
+            {"image": None, "video": "05-visuals/rushes/a.mp4"},
+            {"image": None, "video": None},
+        ],
+    }), encoding="utf-8")
+
+    staging = cli_mod._stage_public_dir(Project(slug="p", root=racine))
+    exposes = {str(f.relative_to(staging)) for f in staging.rglob("*") if f.is_file()}
+    assert exposes == {
+        "05-visuals/S000.jpg", "05-visuals/rushes/a.mp4", "04-audio/voix.wav",
+    }

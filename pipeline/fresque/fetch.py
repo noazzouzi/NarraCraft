@@ -120,16 +120,30 @@ def fetch_archives(
     report: Reporter | None = None,
     dry_run: bool = False,
     cascade: tuple[str, ...] = CASCADE,
+    deja: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    """Return (assets by shot id, list of shots left unsourced)."""
+    """Return (assets by shot id, list of shots left unsourced).
+
+    `deja` holds what a previous run already sourced. Those shots are skipped
+    whole: at roughly a second per request and several attempts per shot, a
+    re-run to fix a handful of queries would otherwise re-fetch everything.
+    """
     say = report or (lambda _: None)
     session = requests.Session()
+    deja = deja or {}
 
     assets: dict[str, dict[str, Any]] = {}
     unsourced: list[str] = []
+    repris = 0
 
     for shot in shots:
         if shot.type != "archive":
+            continue
+
+        acquis = deja.get(shot.id)
+        if acquis and (visuals_dir.parent / acquis.get("fichier", "")).is_file() \
+                and acquis.get("requete") == shot.requete:
+            repris += 1
             continue
 
         record = _source_one(shot, visuals_dir, session, cascade, say, dry_run)

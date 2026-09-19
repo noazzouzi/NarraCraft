@@ -114,8 +114,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     print(f"→ {len(archives)} plans d'archive, {len(generated)} à générer")
 
     try:
+        deja = {}
+        if project.assets.is_file() and not args.force:
+            deja = json.loads(project.assets.read_text(encoding="utf-8")).get("assets", {})
         assets, unsourced = fetch_mod.fetch_archives(
-            archives, project.visuals_dir, report=print, dry_run=args.dry_run
+            archives, project.visuals_dir, report=print,
+            dry_run=args.dry_run, deja=deja,
         )
     except fetch_mod.FetchError as error:
         return _fail(str(error))
@@ -333,7 +337,14 @@ def _stage_public_dir(project: Project) -> Path:
     import shutil
 
     timeline = json.loads(project.timeline.read_text(encoding="utf-8"))
-    wanted = {clip["image"] for clip in timeline["clips"] if clip.get("image")}
+    # Every media path the timeline references: stills, footage, and the
+    # voice track. Missing one is not caught until the renderer is a third
+    # of the way in and asks for a file that was never copied.
+    wanted: set[str] = set()
+    for clip in timeline["clips"]:
+        for cle in ("image", "video"):
+            if clip.get(cle):
+                wanted.add(clip[cle])
     if timeline.get("audio"):
         wanted.add(timeline["audio"])
 
@@ -420,6 +431,10 @@ def main(argv: list[str] | None = None) -> int:
     fetch_cmd.add_argument(
         "--dry-run", action="store_true",
         help="chercher et afficher sans rien télécharger",
+    )
+    fetch_cmd.add_argument(
+        "--force", action="store_true",
+        help="re-sourcer même les plans déjà acquis",
     )
     images_cmd = add("images", "Générer les images manquantes (Gemini)", cmd_images)
     images_cmd.add_argument(
