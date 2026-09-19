@@ -174,8 +174,55 @@ def rule_retention(script: Script) -> Iterator[Violation]:
             run, start = 0.0, None
 
 
+def rule_hook(script: Script) -> Iterator[Violation]:
+    """The opening decides whether the rest is watched at all.
+
+    Three things are checkable here, and all three were wrong in the first
+    documentary this pipeline produced: the hook ran long, its first sentence
+    unfolded across three clauses before landing a fact, and it opened on a
+    setting rather than on the person the story is about.
+    """
+    if not script.beats:
+        return
+
+    first = script.beats[0]
+    wpm = float(config.get("narration", "mots_par_minute", default=140))
+    hook_s = float(config.get("structure", "hook_s", default=20))
+    budget = int(hook_s * wpm / 60)
+
+    if first.word_count > budget:
+        yield Violation(
+            first.id, "hook-longueur",
+            f"{first.word_count} mots — le hook vise {hook_s:.0f} s, soit "
+            f"{budget} mots à {wpm:.0f} mots/min. Ce qui dépasse appartient "
+            "au beat suivant.",
+        )
+
+    sentences = [s for s in SENTENCE_SPLIT_RE.split(first.text) if s.strip()]
+    if sentences:
+        limit = int(config.get("structure", "ouverture", "phrase_mots_max", default=20))
+        count = len(_words(sentences[0]))
+        if count > limit:
+            yield Violation(
+                first.id, "hook-phrase",
+                f"première phrase de {count} mots (max {limit}) — le fait qui "
+                "fait rester doit tomber d'un bloc, pas au bout de trois "
+                "subordonnées.",
+                excerpt=sentences[0].strip()[:90],
+            )
+
+    if "?" in first.text:
+        yield Violation(
+            first.id, "hook-question",
+            "le hook pose une question. Il pose un fait : une question "
+            "d'ouverture est la signature sonore du contenu générique, et "
+            "elle ne promet rien de vérifiable.",
+        )
+
+
 RULES: list[Callable[[Script], Iterator[Violation]]] = [
     rule_word_budget,
+    rule_hook,
     rule_beat_length,
     rule_sentence_length,
     rule_tts_hazards,

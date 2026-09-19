@@ -27,6 +27,9 @@ export type Clip = {
   mouvement: Mouvement;
   motion: Record<string, unknown> | null;
   intention: string;
+  /** A sentence burned over the shot — the hook, and chapter cards. Read
+   *  while the voice says something else, so it is never a subtitle. */
+  accroche: string | null;
 };
 
 export type SousTitre = {

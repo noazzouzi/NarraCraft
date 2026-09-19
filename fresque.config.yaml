@@ -61,6 +61,21 @@ structure:
   # Durée cible du hook d'ouverture, avant le premier respire.
   hook_s: 20
 
+  # Le premier plan décide si le deuxième est vu. Mesuré sur le premier
+  # documentaire complet de ce pipeline : il ouvrait sur une façade de
+  # prison pendant que la narration nommait un ancien président. Le
+  # spectateur n'avait rien sur quoi accrocher la phrase.
+  ouverture:
+    # Le premier plan porte une phrase incrustée à l'écran, et ne peut pas
+    # être un panneau graphique. Vérifié par `fresque shots`.
+    accroche_obligatoire: true
+    # Une phrase incrustée se lit en une seconde et demie, pendant que la
+    # voix dit autre chose. Au-delà, personne ne la lit.
+    accroche_mots_max: 12
+    # Longueur de la toute première phrase prononcée. Une phrase d'ouverture
+    # longue se dilue : le fait qui fait rester doit tomber d'un bloc.
+    phrase_mots_max: 20
+
 voix:
   # Deux moteurs, interchangeables. L'alignement est découplé (voir plus bas),
   # donc changer de provider n'impacte rien en aval du montage.

@@ -112,7 +112,13 @@ def cmd_shots(args: argparse.Namespace) -> int:
             print(f"    {line}")
         if len(slow) > 12:
             print(f"    … et {len(slow) - 12} autre(s)")
-    return 0
+
+    # The opening is the one thing worth failing the checkpoint over: every
+    # other shot only matters to viewers who got past it.
+    opening = shots_mod.ouverture(plan)
+    for line in opening:
+        print(f"\n✗ ouverture : {line}", file=sys.stderr)
+    return 1 if opening else 0
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:

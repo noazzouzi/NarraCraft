@@ -59,6 +59,32 @@ décide, pas la moyenne — et c'est celui-là que le pipeline vérifie.
 liste les beats qui tiennent une image trop longtemps. **Corriger jusqu'à ce
 que la liste soit vide** avant de présenter le plan.
 
+## L'ouverture
+
+**Le premier plan du fichier décide si le deuxième est vu.** Deux règles,
+refusées mécaniquement par `fresque shots` :
+
+1. **Il montre le sujet lui-même** — le visage, l'objet, la personne que la
+   voix nomme. Jamais son décor, jamais un panneau graphique. Le premier
+   documentaire de ce pipeline ouvrait sur une façade de prison pendant que
+   la narration nommait un ancien président : rien à quoi accrocher la phrase.
+2. **Il porte une `accroche`** : la phrase choc incrustée en grand à l'écran,
+   `accroche_mots_max` mots au plus. Le brief l'a déjà écrite.
+
+```json
+{"beat":"B001","type":"archive","intention":"le visage, plan serré",
+ "requete":"Nicolas Sarkozy portrait","mouvement":"zoom_in",
+ "accroche":"Condamné, et toujours présumé innocent."}
+```
+
+L'accroche n'est pas un sous-titre : elle apparaît pendant que la voix dit
+autre chose, en haut du cadre, mot par mot. La lecture va plus vite que
+l'écoute, et c'est tout l'intérêt.
+
+Le champ est disponible sur n'importe quel plan, pas seulement le premier.
+S'en servir avec parcimonie — deux ou trois par documentaire, en tête d'acte
+ou sur la révélation du pivot. Au-delà, c'est un diaporama de citations.
+
 ## Mouvement
 
 Le champ `mouvement` prend : `zoom_in`, `zoom_out`, `pan_left`, `pan_right`,
@@ -166,6 +192,8 @@ Annoncer le compte à l'utilisateur au moment de présenter le plan.
 Contraintes vérifiées par le pipeline, qui refusera le fichier sinon :
 
 - **Tout beat du script a au moins un plan.** Aucune exception.
+- **Le premier plan n'est pas un `motion` et porte une `accroche`.**
+- Une `accroche` fait au plus `accroche_mots_max` mots.
 - Les beats sont référencés par leur identifiant exact (`B001`…).
 - `type` vaut `archive`, `generated` ou `motion`.
 - Un plan `archive` a une `requete`, un plan `generated` a un `prompt`.
@@ -305,6 +333,7 @@ casse le rythme documentaire.
 
 Vérifier, puis annoncer à l'utilisateur :
 
+- [ ] Le premier plan montre le sujet et porte son `accroche`.
 - [ ] Chaque beat est couvert.
 - [ ] `fresque shots` ne signale plus aucun beat trop tenu.
 - [ ] Le nombre de plans par minute affiché est proche de `plans_par_minute`.

@@ -65,8 +65,12 @@ ne savait pas au début. S'il n'y a rien, l'angle est mauvais — recommencer.>
 <Qui regarde ça un mardi soir, et pourquoi il ne passe pas à autre chose.>
 
 ## Hook (~<hook_s> s)
-<Le texte réel des premières secondes, ou à défaut son mécanisme précis.
-Pas « on présente le sujet » : la phrase d'ouverture elle-même.>
+<Le texte réel des premières secondes. Pas « on présente le sujet » : la
+phrase d'ouverture elle-même.>
+
+**Accroche** : <la même chose en huit mots, telle qu'elle sera incrustée
+à l'écran.>
+**Premier plan** : <qui ou quoi est à l'image pendant cette phrase.>
 
 ## Structure
 ### Acte I — <titre> (~<n> min)
@@ -102,6 +106,24 @@ où l'on arrête de regarder.
 
 **Le pivot est obligatoire.** S'il n'y en a pas, le documentaire est un
 exposé. Un exposé de 15 minutes ne se regarde pas.
+
+**Le hook nomme et montre ce dont il parle.** Trois contraintes, et elles
+sont vérifiées mécaniquement par `fresque lint` et `fresque shots` :
+
+- **La première phrase pose un fait, en vingt mots au plus.** Pas une
+  question : une question d'ouverture est la signature sonore du contenu
+  générique, et elle ne promet rien de vérifiable.
+- **Le fait est le plus dérangeant dont on dispose**, pourvu qu'il soit
+  sourcé et exact. Un fait tiède ne tient personne.
+- **Le premier plan montre le sujet lui-même**, pas son décor. Un visage,
+  l'objet, la personne nommée dans la phrase. Le premier documentaire de ce
+  pipeline ouvrait sur une façade de prison pendant que la voix nommait un
+  ancien président : le spectateur n'avait rien sur quoi accrocher la
+  phrase. Décrire le premier plan dans le brief — le plan visuel s'y tiendra.
+
+L'**accroche** est la même idée en huit mots, qui sera incrustée en grand à
+l'écran pendant que la voix dit autre chose. La lecture est plus rapide que
+l'écoute : ce qui est écrit à l'image est lu avant que la phrase soit finie.
 
 **Vérifier la faisabilité visuelle avant de valider l'angle.** Un angle
 magnifique sur un sujet sans aucune archive disponible coûtera cher en

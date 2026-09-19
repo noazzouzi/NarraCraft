@@ -175,6 +175,10 @@ def build(
                 "mouvement": _movement(shot),
                 "motion": shot.motion,
                 "intention": shot.intention,
+                # A sentence burned over the image. The viewer reads it while
+                # the voice is saying something else — which is why it is
+                # short, and why it is not a subtitle.
+                "accroche": shot.accroche or None,
             })
             cursor = end
 

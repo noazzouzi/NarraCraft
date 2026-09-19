@@ -38,6 +38,18 @@ Répartir par acte selon le brief. Le noter en tête de fichier.
 premières secondes décident du reste. Un hook réussi pose un fait précis et
 troublant, sans le résoudre, et sans annoncer qu'il va être résolu.
 
+Trois contraintes, vérifiées par `fresque lint` :
+
+- **`B001` tient dans `hook_s`**, soit `hook_s × mots_par_minute / 60` mots.
+  Ce qui dépasse appartient à `B002`.
+- **La première phrase fait vingt mots au plus.** Le fait qui fait rester
+  tombe d'un bloc, pas au bout de trois subordonnées.
+- **Aucune question dans `B001`.** On pose un fait.
+
+Le fait retenu est le plus dérangeant dont on dispose, pourvu qu'il soit
+exact et sourcé dans `01-research.md`. Le brief a déjà choisi lequel et a
+noté l'accroche de huit mots qui l'accompagnera à l'écran : s'y tenir.
+
 **3. Écrire acte par acte**, en gardant le compte de mots.
 
 **4. Placer les relances.** Tous les `relance_retention_s` secondes au

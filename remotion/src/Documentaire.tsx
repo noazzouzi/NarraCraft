@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, staticFile } from "remotion";
+import { Accroche } from "./Accroche";
 import { Plan } from "./Plan";
 import { SousTitre } from "./SousTitre";
 import type { Timeline } from "./types";
@@ -28,6 +29,13 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
             motionStyle={motion}
             traitement={traitement}
           />
+          {clip.accroche ? (
+            <Accroche
+              texte={clip.accroche}
+              typographie={typographie}
+              style={motion}
+            />
+          ) : null}
         </Sequence>
       ))}
 

@@ -483,6 +483,27 @@ def _rules_hit(violations) -> set[str]:
     return {v.rule for v in violations}
 
 
+def test_a_hook_that_opens_on_a_question_is_caught(tmp_path):
+    script = _script_from(
+        _beat("B001", "Que se passe-t-il quand un président entre en prison ? "
+                      + "mot " * 20),
+        tmp_path,
+    )
+    assert "hook-question" in _rules_hit(lint_mod.check(script))
+
+
+def test_a_hook_whose_first_sentence_runs_long_is_caught(tmp_path):
+    longue = " ".join(["mot"] * 28) + ". Court."
+    script = _script_from(_beat("B001", longue), tmp_path)
+    assert "hook-phrase" in _rules_hit(lint_mod.check(script))
+
+
+def test_a_hook_over_its_time_budget_is_caught(tmp_path):
+    body = _beat("B001", "Court. " * 3 + "mot " * 120)
+    script = _script_from(body, tmp_path)
+    assert "hook-longueur" in _rules_hit(lint_mod.check(script))
+
+
 def test_hour_written_in_digits_is_caught(tmp_path):
     script = _script_from(_beat("B001", "Il est 01h23 et " + "mot " * 30), tmp_path)
     assert "synthèse-heure" in _rules_hit(lint_mod.check(script))
@@ -896,6 +917,30 @@ def test_density_catches_a_beat_planned_with_too_few_shots(tmp_path):
         Shot(index=1, beat="B001", type="archive", requete="y", poids=9),
     ]
     assert density(desequilibre, beats)
+
+
+def test_the_opening_shot_must_carry_a_hook_sentence():
+    from fresque.shots import ouverture
+
+    panneau = Shot(index=0, beat="B001", type="motion",
+                   motion={"kind": "chiffre", "valeur": "20", "libelle": "j"})
+    assert ouverture([panneau]), "ouvrir sur un panneau graphique est refusé"
+
+    nu = Shot(index=0, beat="B001", type="archive", requete="x")
+    assert ouverture([nu]), "un premier plan sans accroche est refusé"
+
+    tenu = Shot(index=0, beat="B001", type="archive", requete="x",
+                accroche="Il est entré en prison présumé innocent.")
+    assert ouverture([tenu]) == []
+
+
+def test_a_hook_sentence_longer_than_the_card_is_refused(tmp_path):
+    path = _shots_file(tmp_path, [{
+        "beat": "B001", "type": "archive", "requete": "x",
+        "accroche": "mot " * 30,
+    }])
+    with pytest.raises(ShotsError, match="accroche"):
+        load_shots(path, ["B001"])
 
 
 def test_map_needs_named_markers_with_coordinates(tmp_path):

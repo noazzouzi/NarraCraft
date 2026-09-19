@@ -61,6 +61,10 @@ class Shot:
     mouvement: str = "zoom_in"
     poids: float = 1.0
     motion: dict[str, Any] | None = None
+    #: Une phrase incrustée en grand sur le plan. C'est l'accroche : le
+    #: spectateur lit avant d'avoir fini d'entendre, et il reste pour la
+    #: raison que la phrase lui donne.
+    accroche: str = ""
 
     @property
     def id(self) -> str:
@@ -105,7 +109,11 @@ def load(path: Path, beat_ids: list[str]) -> list[Shot]:
             mouvement=movement,
             poids=float(entry.get("poids", 1.0)),
             motion=entry.get("motion"),
+            accroche=(entry.get("accroche") or "").strip(),
         )
+
+        if shot.accroche:
+            _validate_accroche(shot, where)
 
         if kind == "archive" and not shot.requete:
             raise ShotsError(f"{where} : un plan `archive` exige une `requete`.")
@@ -136,6 +144,62 @@ def load(path: Path, beat_ids: list[str]) -> list[Shot]:
         )
 
     return shots
+
+
+def _validate_accroche(shot: Shot, where: str) -> None:
+    from . import config
+
+    limit = int(config.get("structure", "ouverture", "accroche_mots_max", default=12))
+    count = len(shot.accroche.split())
+    if count > limit:
+        raise ShotsError(
+            f"{where} : accroche de {count} mots (max {limit}) — une phrase "
+            "incrustée se lit en une seconde et demie, pendant que la voix "
+            "dit autre chose. Au-delà, personne ne la lit."
+        )
+    if shot.type == "motion":
+        raise ShotsError(
+            f"{where} : une accroche se pose sur une image, pas sur un "
+            "panneau graphique qui porte déjà son propre texte."
+        )
+
+
+def ouverture(shots: list[Shot]) -> list[str]:
+    """What is wrong with the opening shot, if anything.
+
+    The first shot decides whether anyone sees the second. Measured on the
+    first full documentary this pipeline produced: it opened on a prison
+    façade while the narration named a former president. The viewer had
+    nothing to attach the sentence to.
+
+    This is an editorial contract, not a structural one, so it is reported
+    at the checkpoint rather than raised while parsing — a test fixture with
+    three shots in it has no opening to speak of.
+    """
+    from . import config
+
+    if not config.get("structure", "ouverture", "accroche_obligatoire", default=True):
+        return []
+    if not shots:
+        return []
+
+    limit = config.get("structure", "ouverture", "accroche_mots_max", default=12)
+    problems: list[str] = []
+    first = shots[0]
+
+    if first.type == "motion":
+        problems.append(
+            "le documentaire ouvre sur un panneau graphique. Le premier plan "
+            "montre le sujet — le visage, l'objet, le lieu dont l'histoire "
+            "parle — jamais une abstraction."
+        )
+    if not first.accroche:
+        problems.append(
+            "le premier plan n'a pas d'`accroche`. Il porte la phrase qui "
+            f'fait rester, incrustée à l\'écran : `"accroche": "…"`, au plus '
+            f"{limit} mots, un fait, pas une question."
+        )
+    return problems
 
 
 def _validate_motion(motion: dict[str, Any] | None, where: str) -> None:
