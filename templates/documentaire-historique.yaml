@@ -100,11 +100,15 @@ controle:
 # --- Visuels ----------------------------------------------------------------
 
 visuels:
-  # Un changement d'image toutes les quatre secondes environ. À 8 plans par
-  # minute — une image toutes les sept secondes et demie — le montage a été
-  # jugé monotone, et c'est mécaniquement vrai : sur quinze minutes, ça fait
-  # cent vingt images là où un documentaire YouTube en montre le double.
-  plans_par_minute: 15
+  # Un changement d'image toutes les deux secondes et demie. La valeur est
+  # relevée, pas devinée : les deux documentaires Frontier analysés tiennent
+  # 24,8 et 25,2 plans par minute, avec une médiane de plan à 1,7 et 2,4 s
+  # (`docs/analyse-frontier.md`). Nous étions à 13 sur le montage Sarkozy —
+  # soit la moitié.
+  #
+  # Ce nombre est une intention d'écriture, lue par le skill du plan visuel.
+  # Le plafond qui l'attrape vraiment est `montage.duree_plan_max_s`.
+  plans_par_minute: 25
   generation:
     direction_artistique: >-
       Photographie documentaire d'archive, grain argentique fin,
@@ -115,22 +119,34 @@ visuels:
 
 montage:
   # Un plan tenu plus longtemps que ça est signalé par `fresque timeline`.
-  # C'est le garde-fou mécanique du rythme : la config peut viser quinze
+  # C'est le garde-fou mécanique du rythme : la config peut viser vingt-cinq
   # plans par minute, seul l'audio réel dit si le montage les tient.
-  duree_plan_max_s: 6.5
-  # Un panneau dense — quatre lignes de tableau en cascade — n'est lisible
-  # qu'à partir de sept ou huit secondes. Le plafond des photographies le
-  # rendrait inutilisable.
-  duree_panneau_max_s: 9.0
+  #
+  # 3,5 s laisse de la marge au-dessus de la médiane mesurée chez Frontier
+  # (1,7 à 2,4 s) sans autoriser le plan de six secondes qui a fait juger le
+  # premier montage monotone.
+  duree_plan_max_s: 3.5
+  # Un panneau doit être lu, pas seulement vu : un tableau de quatre lignes
+  # en cascade demande plus de temps qu'une photographie. Il garde donc son
+  # propre plafond, plus haut — mais il descend lui aussi, parce qu'un
+  # panneau tenu neuf secondes arrête le film.
+  duree_panneau_max_s: 5.5
 
-  # Mouvements plus amples qu'avant, parce que les plans sont plus courts.
-  # Un zoom de 4 % étalé sur quatre secondes ne se voit pas : la caméra a
-  # l'air arrêtée, et c'est exactement ce qui faisait diaporama.
+  # Le mouvement suit maintenant la durée du plan (voir `timeline._movement`).
+  # L'ancien réglage — 1,06 → 1,30 quelle que soit la durée — valait 3,5 %/s
+  # sur un plan de 6,5 s, mais 9,4 %/s dès que le plan tombait à 2,4 s. En
+  # accélérant le montage sans y toucher, on aurait transformé chaque plan en
+  # zoom avant brutal.
+  #
+  # 2,8 %/s est le haut de la plage mesurée : ce template assume un mouvement
+  # un peu plus présent que la base, pas trois fois plus rapide.
   ken_burns:
-    zoom_min: 1.06
+    vitesse_pct_s: 2.8
+    echelle_depart: 1.06
     zoom_max: 1.30
-    easing: easeOutCubic
+    derive_pct_s: 3.5
     derive_max_pct: 10
+    easing: easeOutCubic
     micro_rotation_deg: 0.7
 
   traitement:
@@ -170,11 +186,22 @@ montage:
     fondu_entree_s: 0.0
     fondu_sortie_s: 4.0
 
-  # Comment un plan arrive. Le format supporte des flashs, mais moins
-  # appuyés qu'ailleurs : sur une façade en plein soleil, un flash à pleine
-  # force blanchit l'écran.
+  # Comment un plan arrive : rien. Sur vingt et une transitions relevées
+  # dans deux documentaires Frontier, toutes étaient des coupes d'une image,
+  # et l'énergie au-dessus de 3 kHz y est plus faible qu'ailleurs dans le
+  # film — donc ni fondu, ni souffle.
+  #
+  # Nous avions fait l'inverse : 0,3 s de transition et un souffle à chaque
+  # changement de beat. À vingt-cinq plans par minute, ces 0,3 s mangeraient
+  # douze pour cent du temps d'écran.
+  #
+  # `style: coupe` retire le flash et la glisse, donc leurs souffles. Restent
+  # le fondu au noir de changement d'acte et son impact : c'est la seule
+  # respiration du récit, et rien de ce qui a été mesuré ne dit de l'enlever
+  # — les échantillons duraient vingt et trente-quatre secondes et ne
+  # changeaient pas d'acte.
   transitions:
-    duree_s: 0.3
+    style: coupe
     fondu_noir_s: 0.6
     amorce_s: 0.12
     gain: 0.20

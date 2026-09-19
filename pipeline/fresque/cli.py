@@ -415,6 +415,12 @@ def cmd_render(args: argparse.Namespace) -> int:
         command.append(f"--frames={args.frames}")
     if args.browser:
         command.append(f"--browser-executable={args.browser}")
+        # Sans ça, Remotion lance l'exécutable comme un « headless shell »,
+        # un binaire réduit qui n'accepte pas les mêmes arguments. Un
+        # Chromium complet — celui de Playwright, par exemple — meurt
+        # immédiatement, et le message dit seulement « Failed to launch the
+        # browser process », ce qui envoie chercher le problème ailleurs.
+        command.append("--chrome-mode=chrome-for-testing")
 
     print(f"→ rendu vers {output}")
     result = subprocess.run(command, cwd=remotion)

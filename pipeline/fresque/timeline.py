@@ -28,18 +28,39 @@ def _jitter(seed: str, salt: str) -> float:
     return int.from_bytes(digest[:4], "big") / 2**32
 
 
-def _movement(shot: Shot) -> dict[str, Any]:
+def _movement(shot: Shot, duree_s: float) -> dict[str, Any]:
+    """Le mouvement de caméra d'un plan, dérivé de sa durée.
+
+    C'est une **vitesse**, pas une amplitude. Une plage fixe parcourue quelle
+    que soit la durée du plan fait qu'un plan court est traversé à toute
+    allure et qu'un plan long rampe : le même réglage produit deux mouvements
+    qui n'ont rien à voir. En raisonnant en pourcentage par seconde, le
+    mouvement reste le même à l'œil quand on change le rythme du montage —
+    ce qui est exactement ce qu'on vient de faire.
+
+    La valeur par défaut vient d'une mesure : sur les documentaires Frontier,
+    l'échelle croît de 2,1 à 3,1 % par seconde (voir `docs/analyse-frontier.md`).
+    Notre réglage précédent, 1,06 → 1,30 sur un plan de 6,5 s, valait 3,5 %/s
+    — et 9,4 %/s dès que le plan tombait à 2,4 s, soit un zoom qui se voit.
+    """
     kb = config.get("montage", "ken_burns", default={}) or {}
-    zoom_min = float(kb.get("zoom_min", 1.04))
+    depart = float(kb.get("echelle_depart", 1.04))
     zoom_max = float(kb.get("zoom_max", 1.18))
+    vitesse = float(kb.get("vitesse_pct_s", 2.5)) / 100.0
+    derive_s = float(kb.get("derive_pct_s", 3.0)) / 100.0
     drift_max = float(kb.get("derive_max_pct", 6)) / 100.0
     rotation_max = float(kb.get("micro_rotation_deg", 0.4))
     easing = kb.get("easing", "easeInOutCubic")
 
-    span = zoom_max - zoom_min
-    low = zoom_min + span * 0.25 * _jitter(shot.id, "low")
-    high = zoom_max - span * 0.25 * _jitter(shot.id, "high")
-    drift = drift_max * (0.4 + 0.6 * _jitter(shot.id, "drift"))
+    # Le grain varie la vitesse, plus les bornes : un plan reste plus vif ou
+    # plus posé qu'un autre, sans jamais sortir de la plage mesurée.
+    course = vitesse * duree_s * (0.75 + 0.5 * _jitter(shot.id, "vitesse"))
+    low = depart
+    high = min(depart * (1.0 + course), zoom_max)
+    # Une dérive se parcourt elle aussi dans le temps du plan, et reste
+    # bornée : au-delà, le sujet sort du cadre.
+    drift = min(derive_s * duree_s * (0.6 + 0.8 * _jitter(shot.id, "drift")),
+                drift_max)
     rotation = rotation_max * (_jitter(shot.id, "rot") * 2 - 1)
     mid = (low + high) / 2
 
@@ -57,8 +78,9 @@ def _movement(shot: Shot) -> dict[str, Any]:
         start = {"scale": mid, "x": 0.0, "y": -sign * drift}
         end = {"scale": mid, "x": 0.0, "y": sign * drift}
     else:  # static — still never pixel-frozen, which reads as a broken player
+        souffle = 0.004 * duree_s
         start = {"scale": low, "x": 0.0, "y": 0.0}
-        end = {"scale": low + 0.012, "x": 0.0, "y": 0.0}
+        end = {"scale": low + souffle, "x": 0.0, "y": 0.0}
 
     return {
         "kind": kind,
@@ -88,7 +110,7 @@ TRANSITIONS = {
 
 def _transition(position: int, clip_beat: str, clip_act: str,
                 previous: dict[str, Any] | None, shot_type: str,
-                previous_type: str | None) -> str:
+                previous_type: str | None, style: str = "effets") -> str:
     """Pick how this shot arrives, from where it sits in the story.
 
     The rule is deliberately coarse, because a fine one would be a taste
@@ -96,6 +118,20 @@ def _transition(position: int, clip_beat: str, clip_act: str,
     certain is the structure: whether the idea continues, changes, or the act
     turns over. That is enough to stop every cut looking the same, which was
     the actual complaint.
+
+    `style` décide de l'inventaire disponible, et c'est un réglage de
+    template parce que c'est une question de genre :
+
+    - `effets` garde le flash, la glisse et leurs souffles.
+    - `coupe` ne laisse que la coupe franche. Sur vingt et une transitions
+      relevées dans deux documentaires Frontier, **toutes** étaient des
+      coupes d'une image, et l'énergie au-dessus de 3 kHz y est plus faible
+      qu'ailleurs dans le film : ni fondu, ni souffle.
+
+    Le fondu au noir de changement d'acte survit aux deux. Les échantillons
+    mesurés duraient vingt et trente-quatre secondes et ne contenaient aucun
+    changement d'acte : nous n'avons donc rien observé qui dise de le
+    supprimer, et une bascule d'acte reste la seule respiration du récit.
     """
     if position == 0:
         return "ouverture"
@@ -104,6 +140,9 @@ def _transition(position: int, clip_beat: str, clip_act: str,
 
     if clip_act != previous.get("acte"):
         return "fondu_noir"
+
+    if style == "coupe":
+        return "coupe"
 
     # A graphic panel is a different medium arriving; sliding it in says so,
     # and a hard cut into one reads as a glitch.
@@ -182,6 +221,7 @@ def build(
     amorce_s = float(config.get("montage", "transitions", "amorce_s", default=0.12))
     gain = float(config.get("montage", "transitions", "gain", default=0.22))
     sons_on = bool(config.get("montage", "transitions", "sons", default=True)) and sons_dir
+    style_transition = str(config.get("montage", "transitions", "style", default="effets"))
 
     beats = alignment["beats"]
     total_s = float(alignment["duree_totale_s"])
@@ -216,7 +256,7 @@ def build(
             arrivee = _transition(
                 len(clips), beat["id"], beat.get("acte", ""),
                 clips[-1] if clips else None, shot.type,
-                clips[-1]["type"] if clips else None,
+                clips[-1]["type"] if clips else None, style_transition,
             )
             clips.append({
                 "id": shot.id,
@@ -242,7 +282,7 @@ def build(
                 # Also set for footage: archive film is almost always 4:3,
                 # and cropping it to 16:9 costs a quarter of the height.
                 "ratio": round(width_px / height_px, 4) if height_px else None,
-                "mouvement": _movement(shot),
+                "mouvement": _movement(shot, (end_frame - start_frame) / fps),
                 "motion": shot.motion,
                 "intention": shot.intention,
                 # A sentence burned over the image. The viewer reads it while

@@ -1882,3 +1882,85 @@ def test_export_images_are_reduced_to_the_width_they_are_shown_at(tmp_path):
     for image in (tmp_path / "atelier").rglob("05-visuals/*.jpg"):
         with Image.open(image) as ouverte:
             assert ouverte.width <= 320, f"{image.name} n'a pas été réduite"
+
+
+# --- Rythme du montage -------------------------------------------------------
+#
+# Deux propriétés qui viennent d'une mesure, pas d'un goût : voir
+# `docs/analyse-frontier.md`. Elles se perdent au premier réglage changé
+# sans y penser, d'où ces tests.
+
+def test_camera_speed_does_not_depend_on_how_long_the_shot_lasts():
+    """Le mouvement est une vitesse, pas une amplitude.
+
+    L'ancien réglage parcourait 1,06 → 1,30 quelle que soit la durée : un
+    plan de 6,5 s valait 3,5 %/s, mais le même réglage sur un plan de 2,4 s
+    en valait 9,4. Accélérer le montage aurait donc transformé chaque plan
+    en zoom avant brutal, sans qu'aucun réglage de zoom n'ait bougé.
+    """
+    from fresque.timeline import _movement
+
+    shot = Shot(index=0, beat="B001", type="archive", requete="q",
+                intention="i", mouvement="zoom_in")
+    vitesses = []
+    for duree in (1.5, 2.5, 3.5, 6.0, 10.0):
+        mouvement = _movement(shot, duree)
+        debut = mouvement["debut"]["scale"]
+        fin = mouvement["fin"]["scale"]
+        vitesses.append((fin / debut - 1) * 100 / duree)
+
+    assert max(vitesses) - min(vitesses) < 0.05, \
+        f"la vitesse varie avec la durée : {vitesses}"
+    # Et elle reste dans la plage relevée sur les documentaires Frontier.
+    assert 1.8 <= vitesses[0] <= 3.4, vitesses[0]
+
+
+def test_a_long_shot_never_zooms_past_the_ceiling():
+    """Une vitesse constante sur un plan très long finirait en gros plan."""
+    from fresque import config as config_mod
+    from fresque.timeline import _movement
+
+    shot = Shot(index=0, beat="B001", type="archive", requete="q",
+                intention="i", mouvement="zoom_in")
+    plafond = float(config_mod.get("montage", "ken_burns", "zoom_max",
+                                   default=1.18))
+    assert _movement(shot, 120.0)["fin"]["scale"] <= plafond + 1e-6
+
+
+def test_the_cut_only_style_leaves_nothing_but_cuts():
+    """Sur vingt et une transitions relevées dans deux documentaires
+    Frontier, toutes étaient des coupes d'une image. `style: coupe` retire
+    le flash et la glisse — donc leurs souffles, qui n'existent pas non plus
+    dans les échantillons mesurés.
+
+    Le fondu au noir de changement d'acte survit : rien de ce qui a été
+    mesuré ne dit de l'enlever.
+    """
+    from fresque.timeline import _transition
+
+    precedent = {"beat": "B001", "acte": "I", "type": "archive"}
+    # Changement de beat : un flash en style `effets`, rien en style `coupe`.
+    assert _transition(2, "B002", "I", precedent, "archive", "archive") == "flash"
+    assert _transition(2, "B002", "I", precedent, "archive", "archive",
+                       "coupe") == "coupe"
+    # Un panneau graphique ne glisse plus non plus.
+    assert _transition(3, "B001", "I", precedent, "motion", "archive",
+                       "coupe") == "coupe"
+    # Mais l'acte qui tourne garde sa respiration.
+    assert _transition(4, "B009", "II", precedent, "archive", "archive",
+                       "coupe") == "fondu_noir"
+
+
+def test_the_historical_template_cuts_hard_and_fast():
+    """Le template porte le rythme mesuré, et c'est lui qu'on livre."""
+    from fresque import apercu
+
+    effectif = apercu.resume("documentaire-historique")["effectif"]
+    montage = effectif["montage"]
+
+    assert effectif["visuels"]["plans_par_minute"] >= 24
+    assert montage["duree_plan_max_s"] <= 3.5
+    assert montage["duree_panneau_max_s"] <= 5.5
+    assert montage["transitions"]["style"] == "coupe"
+    assert 2.0 <= montage["ken_burns"]["vitesse_pct_s"] <= 3.1, \
+        "hors de la plage relevée chez Frontier"

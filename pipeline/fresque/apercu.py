@@ -246,6 +246,8 @@ def page(nom: str, destination: Path, musique: Path | None = None) -> Path:
     zoom_max = float(kb.get("zoom_max", 1.18))
     part = 100 / zoom_max
     derive = float(kb.get("derive_max_pct", 6))
+    vitesse = float(kb.get("vitesse_pct_s", 2.5))
+    depart = float(kb.get("echelle_depart", 1.04))
 
     lecteur = ""
     if musique and musique.is_file():
@@ -273,10 +275,13 @@ def page(nom: str, destination: Path, musique: Path | None = None) -> Path:
         cadre_style=(f"left:{(100 - part) / 2:.1f}%;top:{(100 - part) / 2:.1f}%;"
                      f"width:{part:.1f}%;height:{part:.1f}%;"),
         legende_kb=(
-            f"Zoom {kb.get('zoom_min')}→{kb.get('zoom_max')} · dérive {derive:g} % "
-            f"· micro-rotation {kb.get('micro_rotation_deg')}° · "
-            f"{kb.get('easing')}. Le pointillé montre ce que la caméra garde "
-            "du cadre au plus serré."),
+            f"Départ ×{depart:g} · +{vitesse:g} %/s, plafonné à ×{zoom_max:g} · "
+            f"dérive {kb.get('derive_pct_s', 3)} %/s, au plus {derive:g} % · "
+            f"micro-rotation {kb.get('micro_rotation_deg')}° · "
+            f"{kb.get('easing')}. Le mouvement est une vitesse : un plan de "
+            f"{(zoom_max / depart - 1) * 100 / vitesse:.0f} s atteint le "
+            "plafond, un plan plus court en fait moins. Le pointillé montre "
+            "ce que la caméra garde du cadre au plus serré."),
         legende_musique=(
             f"Mode {mus.get('mode')} · tonique {mus.get('tonique_hz')} Hz · "
             f"boucle {mus.get('boucle_s')} s · gain {mus.get('gain')} · "

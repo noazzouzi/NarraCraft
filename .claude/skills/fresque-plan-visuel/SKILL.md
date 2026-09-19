@@ -45,9 +45,22 @@ le nombre de plans à lui donner vaut cette durée divisée par
 Ce rythme n'est pas cosmétique, et c'est l'erreur qui a rendu le premier
 documentaire de ce pipeline monotone : il tournait à 8 plans par minute, une
 image toutes les sept secondes et demie. Une image tenue aussi longtemps sur
-une narration continue fait décrocher, même avec un mouvement de caméra. La
-limite basse existe aussi : sous deux secondes par plan, un documentaire
-devient une bande-annonce.
+une narration continue fait décrocher, même avec un mouvement de caméra.
+
+**Il n'y a pas de limite basse crédible.** Ce skill a longtemps affirmé que
+sous deux secondes par plan un documentaire devenait une bande-annonce. La
+mesure dit le contraire : sur deux documentaires Frontier, la durée médiane
+d'un plan est de 1,7 et 2,4 secondes, et le plan le plus court tient cinq
+images — un sixième de seconde (`docs/analyse-frontier.md`). Un plan très
+court est un outil, pas un défaut ; ce qui fatigue, c'est un plan long sur
+une narration qui avance.
+
+Le vrai contrepoids est ailleurs : **si le montage accélère, la narration
+ralentit.** Frontier coupe deux fois plus vite que nous et parle deux fois
+moins vite — environ 70 mots par minute, en phrases de trois à six mots
+séparées par du silence. C'est l'image qui porte le rythme ; la voix lui
+laisse la place. Un plan de 1,7 seconde sur une narration à 170 mots par
+minute ne donne pas du rythme, il donne du bruit.
 
 Répartir les plans d'un beat avec `poids`. Un plan de poids 2 occupe deux
 fois plus de temps qu'un plan de poids 1 dans le même beat. **Attention au

@@ -241,11 +241,21 @@ montage:
 
   # Mouvement appliqué aux images fixes. Le soin mis ici fait toute la
   # différence entre un zoom moche et un mouvement crédible.
+  # Le mouvement est une VITESSE, pas une amplitude. Une plage fixe
+  # (1,04 → 1,18) parcourue quelle que soit la durée du plan donne un
+  # mouvement différent à chaque changement de rythme : posé sur un plan
+  # long, précipité sur un plan court. En pourcentage par seconde, il reste
+  # le même à l'œil quand le montage s'accélère.
+  #
+  # 2,5 %/s est une mesure, pas un goût : les documentaires Frontier
+  # tiennent entre 2,1 et 3,1 %/s (`docs/analyse-frontier.md`).
   ken_burns:
-    zoom_min: 1.04
-    zoom_max: 1.18
+    vitesse_pct_s: 2.5         # croissance d'échelle par seconde
+    echelle_depart: 1.04       # marge pour la dérive et la micro-rotation
+    zoom_max: 1.18             # plafond, atteint seulement par un plan long
+    derive_pct_s: 3.0          # translation par seconde, en % de la largeur
+    derive_max_pct: 6          # au-delà, le sujet sort du cadre
     easing: easeInOutCubic
-    derive_max_pct: 6          # translation max, en % de la largeur
     micro_rotation_deg: 0.4
   traitement:
     grain: 0.06
@@ -256,6 +266,14 @@ montage:
   # lit comme un montage. C'est le code qui choisit, d'après la place du plan
   # dans le récit — jamais un LLM, et jamais au hasard.
   transitions:
+    # Inventaire disponible : `effets` (flash, glisse, souffles) ou `coupe`
+    # (rien que la coupe franche). Le fondu au noir de changement d'acte
+    # survit aux deux.
+    #
+    # Ce n'est pas un goût mais un choix de genre, et il a un coût mesurable :
+    # à vingt-cinq plans par minute, 0,3 s de transition mange douze pour cent
+    # du temps d'écran. Les documentaires qui coupent vite coupent franc.
+    style: effets
     # Durée de l'effet d'entrée. Au-delà de 0,4 s on regarde la transition
     # au lieu de l'image.
     duree_s: 0.3
