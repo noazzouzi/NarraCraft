@@ -425,6 +425,7 @@ def density(shots: list[Shot], beats: list[Any]) -> list[str]:
 
     wpm = float(config.get("narration", "mots_par_minute", default=140))
     longest = float(config.get("montage", "duree_plan_max_s", default=10))
+    panneau = float(config.get("montage", "duree_panneau_max_s", default=longest))
     grouped = by_beat(shots)
 
     slow: list[str] = []
@@ -435,13 +436,17 @@ def density(shots: list[Shot], beats: list[Any]) -> list[str]:
         seconds = beat.word_count / wpm * 60
         # The longest shot of the beat is the one that decides, not the
         # average: a beat split 1/1/4 still holds its last image forever.
+        # A graphic panel gets its own, higher ceiling — see the config.
         weight_total = sum(s.poids for s in planned)
-        held = seconds * max(s.poids for s in planned) / weight_total
-        if held > longest:
-            needed = math.ceil(seconds / longest)
+        pire = max(planned, key=lambda s: s.poids / (
+            panneau if s.type == "motion" else longest))
+        held = seconds * pire.poids / weight_total
+        plafond = panneau if pire.type == "motion" else longest
+        if held > plafond:
+            needed = math.ceil(seconds / plafond)
             slow.append(
                 f"{beat.id} : {len(planned)} plan(s) pour {seconds:.0f} s — "
-                f"un plan tenu ~{held:.1f} s (max {longest:g} s). "
+                f"un plan tenu ~{held:.1f} s (max {plafond:g} s). "
                 f"En prévoir {max(needed, len(planned) + 1)}."
             )
     return slow

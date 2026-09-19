@@ -383,14 +383,16 @@ def check(timeline: dict[str, Any]) -> list[str]:
     cursor = 0
     fps = timeline["fps"]
     longest = float(config.get("montage", "duree_plan_max_s", default=10))
+    panneau = float(config.get("montage", "duree_panneau_max_s", default=longest))
     for clip in clips:
         # `plans_par_minute` is an intention the visual plan may or may not
         # honour; this is the same rule measured on the real audio, which is
         # the only place a slow montage can actually be caught.
         held = clip["duree_frames"] / fps
-        if held > longest:
+        plafond = panneau if clip["type"] == "motion" else longest
+        if held > plafond:
             problems.append(
-                f"{clip['id']} : plan tenu {held:.1f} s (max {longest:g} s) — "
+                f"{clip['id']} : plan tenu {held:.1f} s (max {plafond:g} s) — "
                 "découper le beat en plans supplémentaires."
             )
         if clip["debut_frame"] != cursor:

@@ -231,6 +231,14 @@ montage:
   # des deux qui garantisse quoi que ce soit.
   duree_plan_max_s: 10
 
+  # Les panneaux graphiques ont leur propre plafond, plus haut, et ce n'est
+  # pas une exception de complaisance. Une photographie se périme : passé
+  # quelques secondes le mouvement de caméra est le seul événement, et il
+  # ne dit rien. Un tableau dont les lignes arrivent encore, une barre qui
+  # pousse, un réseau qui se trace sont toujours en train de dire quelque
+  # chose — les couper à la même durée revient à les rendre illisibles.
+  duree_panneau_max_s: 10
+
   # Mouvement appliqué aux images fixes. Le soin mis ici fait toute la
   # différence entre un zoom moche et un mouvement crédible.
   ken_burns:

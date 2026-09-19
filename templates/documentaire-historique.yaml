@@ -118,6 +118,10 @@ montage:
   # C'est le garde-fou mécanique du rythme : la config peut viser quinze
   # plans par minute, seul l'audio réel dit si le montage les tient.
   duree_plan_max_s: 6.5
+  # Un panneau dense — quatre lignes de tableau en cascade — n'est lisible
+  # qu'à partir de sept ou huit secondes. Le plafond des photographies le
+  # rendrait inutilisable.
+  duree_panneau_max_s: 9.0
 
   # Mouvements plus amples qu'avant, parce que les plans sont plus courts.
   # Un zoom de 4 % étalé sur quatre secondes ne se voit pas : la caméra a
