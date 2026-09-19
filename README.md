@@ -7,13 +7,28 @@ avec tes clés API — il n'y a rien à louer et personne pour couper l'accès.
 
 ## Pourquoi ce n'est pas une application
 
-Pas de serveur, pas de base de données, pas d'interface web. Chaque étape lit
-des fichiers et en écrit d'autres dans `projects/<slug>/`.
+Pas de base de données, pas de compte, pas de service. Chaque étape lit des
+fichiers et en écrit d'autres dans `projects/<slug>/`.
 
 Le bénéfice est concret : **tu peux corriger n'importe quel fichier à la main
 et relancer à partir de là.** Le script te déplaît ? Tu l'édites, tu relances
 l'étape suivante. Rien de ce qui était bon n'est refait, rien n'est perdu
 dans un état invisible.
+
+## L'atelier
+
+```bash
+python -m fresque serve          # http://127.0.0.1:4321
+```
+
+Une page pour voir ce qu'on a et lancer ce qui manque : les projets avec leur
+avancement, chaque projet avec ses plans, ses licences et ses alertes, les
+templates avec leur direction artistique.
+
+Ce serveur ne détient rien. Il relit les fichiers à chaque page, et pour agir
+il n'appelle que les commandes ci-dessous — celles-là mêmes qu'on tape au
+terminal. L'arrêter ne perd aucun état ; la sortie de chaque commande reste
+dans `projects/<slug>/journal/`.
 
 ## Installation
 

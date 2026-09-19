@@ -1758,3 +1758,75 @@ def test_review_is_a_projection_not_a_source(tmp_path):
     assert apres - avant <= {"review.html"}
     page = sortie.read_text(encoding="utf-8")
     assert "<script" not in page, "la page doit être statique"
+
+
+# --- Le serveur d'atelier ----------------------------------------------------
+#
+# Ce qui est vérifié ici n'est pas que les pages s'affichent — un coup d'œil
+# le dit mieux — mais les deux propriétés qui rendent un serveur acceptable
+# dans un projet dont le principe fondateur l'interdit : il ne lance que des
+# commandes connues, et il ne garde aucun état qui ne soit dans un fichier.
+
+def test_the_server_only_launches_commands_it_knows():
+    """La liste des commandes est close. Rien de ce que le navigateur
+    envoie ne devient un `argv` sans avoir été reconnu d'abord."""
+    from fresque import serveur
+
+    with pytest.raises(KeyError):
+        serveur.lancer("sarkozy-essai-2min", "rm", {})
+    with pytest.raises(FileNotFoundError):
+        serveur.lancer("../../etc", "status", {})
+
+
+def test_a_text_option_is_matched_before_it_reaches_an_argv():
+    """Une option textuelle arrive du navigateur. Elle est confrontée à un
+    motif, jamais concaténée : `0-450; rm -rf /` doit être refusé."""
+    from fresque import serveur
+
+    with pytest.raises(ValueError):
+        serveur.lancer("sarkozy-essai-2min", "render", {"frames": "0-450; rm -rf /"})
+    with pytest.raises(ValueError):
+        serveur.lancer("sarkozy-essai-2min", "render", {"frames": "$(whoami)"})
+
+
+def test_a_run_interrupted_by_a_restart_is_not_a_success():
+    """Une fiche restée sans code de sortie, sans processus vivant, signale
+    un serveur arrêté en cours de commande. La confondre avec un succès
+    ferait croire qu'une étape est faite alors qu'elle ne l'est pas."""
+    from fresque import serveur
+
+    assert serveur._issue({"code": 0}) == "ok"
+    assert serveur._issue({"code": 2}) == "code 2"
+    assert serveur._issue({"code": None, "vivant": True}) == "en cours"
+    assert serveur._issue({"code": None, "vivant": False}) == "interrompu"
+
+
+def test_the_thumbnail_is_the_opening_shot_not_the_first_file(tmp_path):
+    """Prendre le premier fichier du dossier donnait la même vignette à
+    trois projets, parce qu'une image réutilisée peut arriver en tête du
+    tri. La vignette doit être le visuel du plan d'ouverture."""
+    from fresque import serveur
+
+    projet = tmp_path / "essai"
+    (projet / "05-visuals").mkdir(parents=True)
+    for nom in ("S000.jpg", "aaa-reutilisee.jpg"):
+        (projet / "05-visuals" / nom).write_bytes(b"\xff\xd8\xff")
+    (projet / "05-visuals" / "assets.json").write_text(json.dumps({"assets": {
+        "S000": {"fichier": "05-visuals/S000.jpg"},
+        "S001": {"fichier": "05-visuals/aaa-reutilisee.jpg"},
+    }}), encoding="utf-8")
+
+    assert serveur._vignette(projet) == "05-visuals/S000.jpg"
+
+
+def test_the_workshop_page_holds_no_state_of_its_own():
+    """L'atelier se lit à chaud. Rien n'y est mis en cache, et il ne dépend
+    d'aucune ressource extérieure — comme `review.html`."""
+    from fresque import serveur
+
+    page = serveur.page_atelier()
+    assert "http://" not in page and "https://" not in page, \
+        "aucune ressource ne doit être chargée depuis l'extérieur"
+    for projet in serveur.projets():
+        assert not projet["slug"].startswith("."), \
+            "un dossier caché n'est pas un projet"

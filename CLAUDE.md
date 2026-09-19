@@ -7,13 +7,33 @@ piloté par Claude Code.
 
 **Ce projet n'est pas une application. C'est un atelier de fichiers.**
 
-Il n'y a ni serveur, ni base de données, ni machine à états. Chaque étape lit
-des fichiers et en écrit d'autres dans `projects/<slug>/`. Toute étape est
-donc reprenable, inspectable, et corrigeable à la main.
+Il n'y a ni base de données, ni machine à états. Chaque étape lit des
+fichiers et en écrit d'autres dans `projects/<slug>/`. Toute étape est donc
+reprenable, inspectable, et corrigeable à la main.
 
 Corollaire à respecter absolument : **si une étape a besoin d'un état qui
 n'est pas dans un fichier du projet, le design est faux.** Ne jamais stocker
 un résultat intermédiaire uniquement dans le contexte de la conversation.
+
+### Le serveur, et ce qu'il n'a pas le droit d'être
+
+`fresque serve` ouvre l'atelier dans un navigateur. C'est une exception
+assumée au « pas de serveur » d'origine, et elle ne tient qu'à trois
+conditions, qui ne sont pas négociables :
+
+1. **Il ne mémorise rien.** Chaque page relit les fichiers. Aucun cache,
+   aucun index, aucune session. Le tuer et le relancer ne perd rien.
+2. **Il n'implémente aucune étape.** Pour agir, il lance
+   `python -m fresque <commande>` en sous-processus. Tout ce qu'il sait
+   faire se refait au terminal, à l'identique.
+3. **Toute sortie de commande devient un fichier**, dans
+   `projects/<slug>/journal/`. Ce que le serveur garde en mémoire n'est
+   jamais que la poignée d'un processus vivant.
+
+Le jour où l'on est tenté d'ajouter au serveur un état qui lui est propre —
+une file d'attente, un utilisateur, un cache de rendu — c'est le signe qu'il
+manque un fichier, pas une table. Le pipeline doit rester utilisable sans
+lui.
 
 ## Répartition des rôles
 
@@ -141,7 +161,8 @@ projects/<slug>/
 ├── 05-visuals/       images + assets.json (licences)
 ├── 06-timeline.json  source de vérité du montage
 ├── 07-out/           video.mp4, thumbnail.png, captions.srt
-└── review.html       page de validation (statique, sans serveur)
+├── journal/          sortie des commandes lancées depuis l'atelier
+└── review.html       page de validation (statique, ouvrable en file://)
 ```
 
 Les fichiers numérotés se lisent dans l'ordre. Une étape ne lit **que** les

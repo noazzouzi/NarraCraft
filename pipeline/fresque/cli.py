@@ -479,6 +479,13 @@ def cmd_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    from . import serveur as serveur_mod
+
+    serveur_mod.servir(args.hote, args.port)
+    return 0
+
+
 def cmd_template(args: argparse.Namespace) -> int:
     from . import apercu as apercu_mod
 
@@ -618,6 +625,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     add("status", "État d'avancement du projet", cmd_status)
     add("review", "Construire la page de validation du projet", cmd_review)
+
+    serve_cmd = sub.add_parser(
+        "serve", help="Ouvrir l'atelier dans un navigateur (aucun état gardé)"
+    )
+    serve_cmd.set_defaults(handler=cmd_serve)
+    serve_cmd.add_argument("--port", type=int, default=4321)
+    serve_cmd.add_argument(
+        "--hote", default="127.0.0.1",
+        help="0.0.0.0 pour ouvrir sur le réseau local — le serveur lance des "
+             "commandes, ne l'exposer qu'à un réseau de confiance",
+    )
 
     # No slug: these two describe the installation, not a project.
     doctor_cmd = sub.add_parser(
