@@ -858,3 +858,54 @@ def test_motion_clip_needs_no_image_in_the_timeline(tmp_path):
                 motion={"kind": "chiffre", "valeur": "20", "libelle": "jours"})
     timeline = timeline_mod.build(align.estimate(script), [shot], {})
     assert timeline_mod.check(timeline) == []
+
+
+def test_map_needs_named_markers_with_coordinates(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "carte", "marqueurs": [{"nom": "Paris"}],
+    })])
+    with pytest.raises(ShotsError, match="coord"):
+        load_shots(path, ["B001"])
+
+
+def test_map_coordinates_are_longitude_then_latitude(tmp_path):
+    """Le piège classique : on lit « 48,85 / 2,35 » mais GeoJSON veut la
+    longitude d'abord. Inversé, Paris tombe dans l'océan Indien — ou, ici,
+    hors limites."""
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "carte", "marqueurs": [{"nom": "Paris", "coord": [48.85, 200.0]}],
+    })])
+    with pytest.raises(ShotsError, match="longitude, latitude"):
+        load_shots(path, ["B001"])
+
+
+def test_too_many_markers_are_refused(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "carte",
+        "marqueurs": [{"nom": f"V{i}", "coord": [i, i]} for i in range(6)],
+    })])
+    with pytest.raises(ShotsError, match="chevauchent"):
+        load_shots(path, ["B001"])
+
+
+def test_a_well_formed_map_passes(tmp_path):
+    path = _shots_file(tmp_path, [_motion_shot({
+        "kind": "carte", "titre": "Deux capitales",
+        "marqueurs": [
+            {"nom": "Paris", "coord": [2.35, 48.85]},
+            {"nom": "Tripoli", "coord": [13.19, 32.89]},
+        ],
+        "relier": True, "pays": ["France", "Libya"],
+    })])
+    shots = load_shots(path, ["B001"])
+    assert len(shots[0].motion["marqueurs"]) == 2
+
+
+def test_front_page_requires_paper_date_and_headline(tmp_path):
+    for manquant in ("journal", "date", "titre"):
+        motion = {"kind": "journal", "journal": "Le Quotidien",
+                  "date": "26 septembre 2025", "titre": "Titre"}
+        del motion[manquant]
+        path = _shots_file(tmp_path, [_motion_shot(motion)])
+        with pytest.raises(ShotsError, match=manquant):
+            load_shots(path, ["B001"])

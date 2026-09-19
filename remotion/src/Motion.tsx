@@ -1,5 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { Carte } from "./Carte";
+import { Journal } from "./Journal";
 import type { MotionStyle } from "./types";
 
 const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
@@ -273,6 +275,26 @@ export const MotionGraphic: React.FC<{
           valeur={motion.valeur as string}
           libelle={motion.libelle as string}
           comparaison={motion.comparaison as string | undefined}
+          style={style}
+        />
+      );
+    case "carte":
+      return (
+        <Carte
+          titre={motion.titre as string | undefined}
+          marqueurs={motion.marqueurs as { nom: string; coord: [number, number] }[]}
+          relier={motion.relier as boolean | undefined}
+          pays={motion.pays as string[] | undefined}
+          style={style}
+        />
+      );
+    case "journal":
+      return (
+        <Journal
+          journal={motion.journal as string}
+          date={motion.date as string}
+          titre={motion.titre as string}
+          chapeau={motion.chapeau as string | undefined}
           style={style}
         />
       );

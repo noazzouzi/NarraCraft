@@ -28,6 +28,11 @@ MOTION_FIELDS: dict[str, tuple[str, ...]] = {
     "citation": ("texte", "source"),
     # Un chiffre isolé, et ce à quoi il se compare.
     "chiffre": ("valeur", "libelle"),
+    # Une carte, avec des lieux nommés et un trajet éventuel.
+    "carte": ("marqueurs",),
+    # Une une de journal, construite et non photographiée : les unes de
+    # presse sont sous droits et quasi jamais disponibles librement.
+    "journal": ("journal", "date", "titre"),
 }
 
 
@@ -131,6 +136,32 @@ def _validate_motion(motion: dict[str, Any] | None, where: str) -> None:
             f"{where} : motion `{kind}` — champ(s) manquant(s) : "
             f"{', '.join(missing)}."
         )
+
+    if kind == "carte":
+        marqueurs = motion["marqueurs"]
+        if not isinstance(marqueurs, list) or not marqueurs:
+            raise ShotsError(f"{where} : `marqueurs` doit être une liste non vide.")
+        if len(marqueurs) > 5:
+            raise ShotsError(
+                f"{where} : {len(marqueurs)} marqueurs — au-delà de cinq, les "
+                "étiquettes se chevauchent. Scinder en deux cartes."
+            )
+        for index, marqueur in enumerate(marqueurs):
+            coord = (marqueur or {}).get("coord")
+            if not (marqueur or {}).get("nom") or not isinstance(coord, list) \
+                    or len(coord) != 2:
+                raise ShotsError(
+                    f"{where} : marqueurs[{index}] exige `nom` et "
+                    "`coord: [longitude, latitude]`."
+                )
+            lon, lat = coord
+            # L'ordre est le piège classique : GeoJSON veut longitude
+            # d'abord, alors qu'on lit et qu'on écrit « 48,85 / 2,35 ».
+            if not (-180 <= lon <= 180) or not (-90 <= lat <= 90):
+                raise ShotsError(
+                    f"{where} : marqueurs[{index}] coord {coord} hors limites "
+                    "— l'ordre attendu est [longitude, latitude]."
+                )
 
     if kind == "chronologie":
         events = motion["evenements"]

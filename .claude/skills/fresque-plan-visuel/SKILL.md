@@ -194,6 +194,35 @@ La `source` est obligatoire. Une citation sans source n'est pas utilisable.
 La `comparaison` est facultative mais presque toujours souhaitable : un
 chiffre nu ne laisse aucune trace, à l'écran comme à l'oral.
 
+**`carte`** — une carte cadrée sur les lieux cités, avec un trajet éventuel.
+```json
+{"kind": "carte", "titre": "Deux capitales, 2007",
+ "marqueurs": [
+   {"nom": "Paris", "coord": [2.35, 48.85]},
+   {"nom": "Tripoli", "coord": [13.19, 32.89]}
+ ],
+ "relier": true, "pays": ["France", "Libya"]}
+```
+**`coord` est `[longitude, latitude]`**, dans cet ordre. C'est l'inverse de
+l'habitude française, et c'est l'erreur la plus fréquente : inversé, Paris
+tombe dans l'océan Indien. Le pipeline refuse les valeurs hors limites, mais
+il ne peut pas détecter une inversion qui reste plausible.
+
+Cinq marqueurs maximum, sinon les étiquettes se chevauchent. `pays` met en
+avant des pays entiers — les noms sont ceux de Natural Earth, en anglais
+(`France`, `Libya`, `United States of America`). Le cadrage est automatique.
+
+**`journal`** — une une construite, jamais un fac-similé.
+```json
+{"kind": "journal", "journal": "Le Quotidien", "date": "26 septembre 2025",
+ "titre": "Cinq ans de prison prononcés",
+ "chapeau": "Le tribunal assortit la peine d'une exécution provisoire."}
+```
+Les unes de presse sont sous droits et quasi jamais disponibles librement.
+Ce panneau en **fabrique** une : il porte le nom du journal et la date comme
+des faits énoncés, il ne reproduit aucune mise en page existante. Ne jamais
+lui donner le nom d'un titre réel avec une une qu'il n'a pas publiée.
+
 Un plan `motion` prend `"mouvement": "static"` — l'animation est interne.
 
 **Combien ?** Trois à cinq par quart d'heure. Ce sont des respirations et des

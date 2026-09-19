@@ -9,9 +9,14 @@
   },
   "dependencies": {
     "@remotion/cli": "4.0.409",
+    "@types/d3-geo": "^3.1.1",
+    "@types/topojson-client": "^3.1.5",
+    "d3-geo": "^3.1.1",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "remotion": "4.0.409"
+    "remotion": "4.0.409",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
     "@types/react": "19.2.2",
