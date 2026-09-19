@@ -1716,3 +1716,45 @@ def test_a_panel_that_opens_the_film_borrows_the_shot_that_follows(script):
     assets = {"S001": {"fichier": "05-visuals/S001.jpg"}}
     clips = timeline_mod.build(alignment, shots, assets)["clips"]
     assert clips[0]["fond_image"] == "05-visuals/S001.jpg"
+
+
+def test_review_reports_what_nobody_would_look_for(tmp_path):
+    """La page existe pour faire remonter ce qu'on ne va pas chercher :
+    plans sans visuel, requêtes élargies, attributions dues."""
+    from fresque.review import alertes
+
+    shots = [
+        Shot(index=0, beat="B001", type="archive", requete="q",
+             intention="une façade"),
+        Shot(index=1, beat="B002", type="archive", requete="r", intention="un mur"),
+    ]
+    assets = {
+        "S001": {"fichier": "05-visuals/S001.jpg", "requete": "r",
+                 "requete_effective": "r élargi", "requete_relachee": True,
+                 "licence": "CC BY-SA 3.0", "credit": "un auteur", "titre": "t"},
+    }
+    textes = " ".join(t for _, t, _ in alertes(shots, assets, None))
+
+    assert "sans visuel" in textes          # S000 n'a pas d'asset
+    assert "élargies" in textes
+    assert "crédit" in textes
+    # Une licence CC0 ne crée aucune obligation, elle ne doit pas alerter.
+    assets["S001"]["licence"] = "CC0 1.0"
+    assert "crédit" not in " ".join(t for _, t, _ in alertes(shots, assets, None))
+
+
+def test_review_is_a_projection_not_a_source(tmp_path):
+    """Elle se régénère et n'écrit rien d'autre : aucun état ne doit vivre
+    en dehors des fichiers du projet."""
+    from fresque import review as review_mod
+    from fresque.project import Project
+
+    projet = Project.open("sarkozy-essai-2min")
+    avant = {p.name for p in projet.root.iterdir()}
+    sortie = review_mod.construire("sarkozy-essai-2min")
+    apres = {p.name for p in projet.root.iterdir()}
+
+    assert sortie.name == "review.html"
+    assert apres - avant <= {"review.html"}
+    page = sortie.read_text(encoding="utf-8")
+    assert "<script" not in page, "la page doit être statique"

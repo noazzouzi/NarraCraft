@@ -469,6 +469,16 @@ def _stage_public_dir(project: Project) -> Path:
     return staging
 
 
+def cmd_review(args: argparse.Namespace) -> int:
+    from . import review as review_mod
+
+    sortie = review_mod.construire(args.slug)
+    taille = sortie.stat().st_size / 1024
+    print(f"✓ {sortie.relative_to(config.repo_root())} · {taille:.0f} ko")
+    print(f"  ouvrir : file://{sortie}")
+    return 0
+
+
 def cmd_template(args: argparse.Namespace) -> int:
     from . import apercu as apercu_mod
 
@@ -607,6 +617,7 @@ def main(argv: list[str] | None = None) -> int:
         "--crf", type=int, default=None, help="qualité d'encodage (défaut : config)"
     )
     add("status", "État d'avancement du projet", cmd_status)
+    add("review", "Construire la page de validation du projet", cmd_review)
 
     # No slug: these two describe the installation, not a project.
     doctor_cmd = sub.add_parser(
