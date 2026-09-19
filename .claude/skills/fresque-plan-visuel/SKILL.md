@@ -161,6 +161,39 @@ Contraintes vérifiées par le pipeline, qui refusera le fichier sinon :
 - `poids` est strictement positif.
 - `mouvement` appartient à la liste ci-dessus.
 
+## Plans `video` — métrage d'archive
+
+Du vrai métrage qui bouge, sourcé à la Library of Congress. **C'est ce qui
+distingue le plus un documentaire d'un diaporama** : quinze minutes d'images
+fixes, même bien animées, se reconnaissent immédiatement.
+
+```json
+{"beat":"B004","type":"video","intention":"une prison filmée",
+ "requete":"prison","mouvement":"static"}
+```
+
+`"mouvement": "static"` est obligatoire : le métrage bouge déjà, lui ajouter
+un travelling donne deux mouvements qui se contrarient.
+
+**Requêtes d'un ou deux mots.** La recherche LOC combine les termes comme
+Commons. Mesuré sur le fonds `national-screening-room` : `prison` donne cinq
+clips utilisables sur huit, `city` vingt-huit sur trente, mais `courtroom
+judge` zéro.
+
+**Le rendement dépend surtout de la durée.** Les fichiers sont des films
+entiers, et le pipeline refuse au-delà de quinze minutes — un item de
+vingt-sept minutes pèse un gigaoctet. Certaines requêtes ne ramènent que des
+longs métrages : le pipeline le dit alors explicitement, et il faut
+reformuler vers un sujet plus court.
+
+**Réutiliser.** Plusieurs plans peuvent porter la même `requete` : le
+pipeline télécharge le film une fois et place chaque plan à un point
+d'entrée différent. Un téléchargement, trois plans. En abuser montre
+cependant le même décor trois fois — deux ou trois plans par film au plus.
+
+Le fonds est américain et ancien (1890-1960 pour l'essentiel). Sur un sujet
+français contemporain, il servira d'illustration générique, pas de document.
+
 ## Plans `motion`
 
 Trois panneaux existent. Sur un sujet fait de dates, de chefs d'accusation et

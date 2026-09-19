@@ -140,18 +140,21 @@ visuels:
   # statut vient d'une politique de collection, pas de l'item. La confiance
   # est donc déclarée ici, dans un fichier versionné, jamais devinée en code.
   collections_domaine_public:
-    loc:
+    # Fonds filmés. Seule source gratuite de vrai métrage en 1080p trouvée.
+    loc_video:
       - national-screening-room
+    # Fonds photographiques du même établissement.
+    loc_image:
       - fsa-owi-black-and-white-negatives
       - detroit-publishing-company
       - bain
       - national-photo-company
-      - chronicling-america
     archive_org:
       - prelinger
       - FedFlix
       - universal_newsreels
       - nasa
+
   generation:
     provider: gemini
     model: gemini-3.1-flash-image
@@ -167,6 +170,18 @@ visuels:
     max_images_par_projet: 120
   # Nombre de visuels visé par minute de montage.
   plans_par_minute: 8
+
+# Métrage d'archive. Les fichiers sont des films entiers : mesuré, 1038 Mo
+# pour vingt-sept minutes. Les plafonds sont donc obligatoires, et vérifiés
+# avant le téléchargement, pas après.
+video:
+  duree_max_s: 900             # au-delà, c'est un long métrage, pas un plan
+  taille_max_mo: 400
+  # Un même film sert plusieurs plans à des points d'entrée différents.
+  # C'est ce qui rend le coût acceptable : un téléchargement, trois plans.
+  reutiliser_les_rushes: true
+  # Les films d'archive ouvrent sur des amorces et des cartons de titre.
+  saut_debut_pct: 10
 
 montage:
   resolution: [1920, 1080]

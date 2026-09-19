@@ -135,6 +135,52 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rushes(args: argparse.Namespace) -> int:
+    from . import align as align_mod, fetch as fetch_mod, rushes as rushes_mod
+
+    project = Project.open(args.slug)
+    script = script_parser.parse(project.script)
+    plan = shots_mod.load(project.shots, [b.id for b in script.beats])
+    todo = [s for s in plan if s.type == "video"]
+    if not todo:
+        print("Aucun plan `video` — rien à sourcer.")
+        return 0
+
+    if not project.alignment.is_file():
+        return _fail("alignment.json manquant — lancer `align` ou `voice` d'abord.")
+    alignment = align_mod.load(project.alignment)
+
+    # Screen time per shot decides how far into a film we may start.
+    fenetres = _fenetres(alignment, plan)
+
+    print(f"→ {len(todo)} plan(s) de métrage d'archive")
+    assets, manquants = rushes_mod.fetch_videos(
+        todo, project.root, fenetres, report=print
+    )
+    merged = fetch_mod.merge_assets(project.assets, assets)
+    fetch_mod.write_assets(merged, project.assets)
+    print(f"✓ {len(assets)} plan(s) vidéo → {project.assets.name}")
+    if manquants:
+        print(f"  ⚠ {len(manquants)} sans métrage : {', '.join(manquants)}")
+    return 0
+
+
+def _fenetres(alignment: dict, plan: list) -> dict[str, float]:
+    """Seconds of screen time per shot, from the beat windows."""
+    beats = alignment["beats"]
+    total = float(alignment["duree_totale_s"])
+    grouped = shots_mod.by_beat(plan)
+    fenetres: dict[str, float] = {}
+    for index, beat in enumerate(beats):
+        fin = float(beats[index + 1]["debut_s"]) if index + 1 < len(beats) else total
+        largeur = fin - float(beat["debut_s"])
+        lot = grouped.get(beat["id"], [])
+        poids = sum(s.poids for s in lot) or 1
+        for shot in lot:
+            fenetres[shot.id] = largeur * shot.poids / poids
+    return fenetres
+
+
 def cmd_images(args: argparse.Namespace) -> int:
     from . import fetch as fetch_mod, images as images_mod
 
@@ -380,6 +426,7 @@ def main(argv: list[str] | None = None) -> int:
         "--list-models", action="store_true",
         help="interroger l'API pour connaître les modèles d'image disponibles",
     )
+    add("rushes", "Sourcer le métrage d'archive (Library of Congress)", cmd_rushes)
     add("placeholders", "Générer des visuels de substitution", cmd_placeholders)
     add("timeline", "Construire 06-timeline.json", cmd_timeline)
     render_cmd = add("render", "Rendre la vidéo avec Remotion", cmd_render)

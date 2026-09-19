@@ -155,15 +155,22 @@ def build(
             width_px = int(asset.get("largeur") or 0)
             height_px = int(asset.get("hauteur") or 0)
 
+            est_video = asset.get("media") == "video"
             clips.append({
                 "id": shot.id,
                 "beat": beat["id"],
                 "type": shot.type,
                 "debut_frame": start_frame,
                 "duree_frames": end_frame - start_frame,
-                "image": asset.get("fichier"),
+                "image": None if est_video else asset.get("fichier"),
+                # Archive footage: the file plus where to start inside it.
+                # The clip keeps the beat's window; the source is trimmed.
+                "video": asset.get("fichier") if est_video else None,
+                "depart_s": asset.get("depart_s") if est_video else None,
                 # Lets the renderer letterbox a tall archive document instead
                 # of cropping it to a vertical slice of itself.
+                # Also set for footage: archive film is almost always 4:3,
+                # and cropping it to 16:9 costs a quarter of the height.
                 "ratio": round(width_px / height_px, 4) if height_px else None,
                 "mouvement": _movement(shot),
                 "motion": shot.motion,
@@ -234,7 +241,8 @@ def check(timeline: dict[str, Any]) -> list[str]:
                 f"{clip['id']} : plan de {clip['duree_frames']} frames, "
                 "trop court pour être lisible."
             )
-        if not clip.get("image") and clip["type"] != "motion":
+        if not clip.get("image") and not clip.get("video") \
+                and clip["type"] != "motion":
             problems.append(f"{clip['id']} : aucun visuel associé.")
         cursor = clip["debut_frame"] + clip["duree_frames"]
     return problems

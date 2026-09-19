@@ -14,10 +14,13 @@ export type Mouvement = {
 export type Clip = {
   id: string;
   beat: string;
-  type: "archive" | "generated" | "motion";
+  type: "archive" | "generated" | "motion" | "video";
   debut_frame: number;
   duree_frames: number;
   image: string | null;
+  /** Archive footage, and the second to start at inside the source file. */
+  video: string | null;
+  depart_s: number | null;
   /** Source aspect ratio. Lets the renderer letterbox a tall archive
    *  document instead of cropping it to a vertical slice of itself. */
   ratio: number | null;

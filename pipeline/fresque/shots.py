@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-TYPES = {"archive", "generated", "motion"}
+#: `video` est distinct d'`archive` : le métrage bouge déjà, il n'a pas de
+#: mouvement de caméra à recevoir, et il se source auprès d'autres fonds.
+TYPES = {"archive", "generated", "motion", "video"}
 MOVEMENTS = {
     "zoom_in", "zoom_out", "pan_left", "pan_right",
     "pan_up", "pan_down", "static",
@@ -101,6 +103,15 @@ def load(path: Path, beat_ids: list[str]) -> list[Shot]:
             raise ShotsError(f"{where} : un plan `archive` exige une `requete`.")
         if kind == "generated" and not shot.prompt:
             raise ShotsError(f"{where} : un plan `generated` exige un `prompt`.")
+        if kind == "video":
+            if not shot.requete:
+                raise ShotsError(f"{where} : un plan `video` exige une `requete`.")
+            if movement != "static":
+                raise ShotsError(
+                    f"{where} : un plan `video` prend `\"mouvement\": \"static\"` — "
+                    "le métrage bouge déjà, lui ajouter un travelling donne "
+                    "deux mouvements qui se contrarient."
+                )
         if kind == "motion":
             _validate_motion(shot.motion, where)
         if shot.poids <= 0:

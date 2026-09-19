@@ -909,3 +909,96 @@ def test_front_page_requires_paper_date_and_headline(tmp_path):
         path = _shots_file(tmp_path, [_motion_shot(motion)])
         with pytest.raises(ShotsError, match=manquant):
             load_shots(path, ["B001"])
+
+
+# --- Métrage d'archive ------------------------------------------------------
+
+from fresque.sources.loc import Clip as LocClip, _to_clips as loc_clips, point_de_depart  # noqa: E402
+
+LOC_RESULTS = [
+    {   # Utilisable.
+        "title": "Charleston chain-gang", "date": "1902",
+        "access_restricted": False,
+        "resources": [{"video": "https://tile.loc.gov/a.mp4", "duration": 62,
+                       "width": 1440, "height": 1080, "url": "https://loc.gov/a"}],
+    },
+    {   # Un long métrage, pas un plan.
+        "title": "Court of human relations", "access_restricted": False,
+        "resources": [{"video": "https://tile.loc.gov/b.mp4", "duration": 1628,
+                       "width": 1440, "height": 1080}],
+    },
+    {   # Accès restreint : jamais sourcé.
+        "title": "Restreint", "access_restricted": True,
+        "resources": [{"video": "https://tile.loc.gov/c.mp4", "duration": 40,
+                       "width": 1440, "height": 1080}],
+    },
+    {   # Définition trop basse.
+        "title": "Basse def", "access_restricted": False,
+        "resources": [{"video": "https://tile.loc.gov/d.mp4", "duration": 40,
+                       "width": 640, "height": 480}],
+    },
+]
+
+
+def test_only_short_unrestricted_hd_footage_is_kept():
+    clips, vus, longs = loc_clips(LOC_RESULTS, collection="nsr", max_duree_s=420)
+    assert [c.title for c in clips] == ["Charleston chain-gang"]
+    assert longs == 1
+
+
+def test_licence_is_declared_from_the_collection_not_the_item():
+    """LOC ne publie aucun champ de licence exploitable : la confiance vient
+    de la whitelist de collections, et doit se lire dans l'asset."""
+    clips, _, _ = loc_clips(LOC_RESULTS, collection="national-screening-room",
+                            max_duree_s=420)
+    assert "Domaine public" in clips[0].licence
+    assert "national-screening-room" in clips[0].licence
+
+
+def test_rejected_for_length_is_counted_separately():
+    """« rien trouvé » et « douze films trouvés, tous de vingt minutes »
+    appellent des corrections différentes."""
+    _, _, longs = loc_clips(LOC_RESULTS, collection="nsr", max_duree_s=30)
+    assert longs == 2
+
+
+def test_in_point_skips_the_leader():
+    """Les films d'archive ouvrent sur des amorces et des cartons."""
+    assert point_de_depart(100, 8, rang=0, saut_pct=0.1) == pytest.approx(10.0)
+
+
+def test_successive_shots_from_one_film_start_at_different_points():
+    """Sans cela, réutiliser un rush montre deux fois les mêmes secondes —
+    pire que de ne pas le réutiliser."""
+    departs = [point_de_depart(62, 8, rang=r, saut_pct=0.1) for r in range(4)]
+    assert len(set(round(d, 1) for d in departs)) == 4
+
+
+def test_in_point_never_runs_past_the_end():
+    for duree in (10, 30, 62, 900):
+        depart = point_de_depart(duree, 8, rang=3, saut_pct=0.1)
+        assert 0 <= depart <= max(duree - 8, 0) + 1e-6
+
+
+def test_video_shot_requires_a_query(tmp_path):
+    path = _shots_file(tmp_path, [{"beat": "B001", "type": "video",
+                                   "mouvement": "static"}])
+    with pytest.raises(ShotsError, match="requete"):
+        load_shots(path, ["B001"])
+
+
+def test_video_shot_refuses_a_camera_move(tmp_path):
+    """Le métrage bouge déjà : lui ajouter un travelling donne deux
+    mouvements qui se contrarient."""
+    path = _shots_file(tmp_path, [{"beat": "B001", "type": "video",
+                                   "requete": "prison", "mouvement": "zoom_in"}])
+    with pytest.raises(ShotsError, match="static"):
+        load_shots(path, ["B001"])
+
+
+def test_footage_reuse_keys_on_the_source_url():
+    from fresque.rushes import _cle
+    a = LocClip("loc:nsr", "A", "", "https://tile.loc.gov/a.mp4", "PD", 62, 1440, 1080, "nsr")
+    b = LocClip("loc:nsr", "B", "", "https://tile.loc.gov/a.mp4", "PD", 62, 1440, 1080, "nsr")
+    c = LocClip("loc:nsr", "C", "", "https://tile.loc.gov/z.mp4", "PD", 62, 1440, 1080, "nsr")
+    assert _cle(a) == _cle(b) != _cle(c)

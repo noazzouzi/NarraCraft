@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { MotionGraphic } from "./Motion";
 import { Traitement } from "./Traitement";
 import type { Clip, MotionStyle, Palette } from "./types";
@@ -26,7 +26,7 @@ export const Plan: React.FC<{
   traitement: { grain?: number; vignette?: number };
 }> = ({ clip, palette, motionStyle, traitement }) => {
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
+  const { durationInFrames, fps } = useVideoConfig();
   const { debut, fin, rotation_deg, easing } = clip.mouvement;
 
   const ease = EASINGS[easing] ?? EASINGS.easeInOutCubic;
@@ -44,6 +44,61 @@ export const Plan: React.FC<{
 
   if (clip.type === "motion" && clip.motion) {
     return <MotionGraphic motion={clip.motion} style={motionStyle} />;
+  }
+
+  // Archive footage already moves. Adding a camera move on top gives two
+  // motions fighting each other, so the clip is played straight — only the
+  // film treatment is kept, because the footage is film.
+  if (clip.video) {
+    // Archive film is almost always 4:3. Cropping it to fill a 16:9 frame
+    // costs a quarter of the height and cuts heads off, so anything narrower
+    // than the frame is shown whole over a blurred blow-up of itself — the
+    // same treatment tall documents get.
+    const source = staticFile(clip.video);
+    const depart = Math.round((clip.depart_s ?? 0) * fps);
+    const etroit = clip.ratio !== null && clip.ratio < 1.6;
+
+    if (etroit) {
+      return (
+        <AbsoluteFill style={{ backgroundColor: palette.letterbox, overflow: "hidden" }}>
+          <OffthreadVideo
+            src={source}
+            trimBefore={depart}
+            muted
+            style={{
+              width: "100%", height: "100%", objectFit: "cover",
+              filter: "blur(38px) saturate(0.5) brightness(0.4)",
+              transform: "scale(1.25)",
+            }}
+          />
+          <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
+            <OffthreadVideo
+              src={source}
+              trimBefore={depart}
+              muted
+              style={{
+                height: "100%", width: "auto", maxWidth: "100%",
+                objectFit: "contain",
+                boxShadow: `0 24px 90px ${palette.ombre}`,
+              }}
+            />
+          </AbsoluteFill>
+          <Traitement grain={traitement.grain} vignette={traitement.vignette} />
+        </AbsoluteFill>
+      );
+    }
+
+    return (
+      <AbsoluteFill style={{ backgroundColor: palette.fond }}>
+        <OffthreadVideo
+          src={source}
+          trimBefore={depart}
+          muted
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+        <Traitement grain={traitement.grain} vignette={traitement.vignette} />
+      </AbsoluteFill>
+    );
   }
 
   if (!clip.image) {
