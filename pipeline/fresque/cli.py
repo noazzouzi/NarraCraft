@@ -304,6 +304,20 @@ def cmd_render(args: argparse.Namespace) -> int:
     output = Path(args.output) if args.output else project.out_dir / "video.mp4"
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    if args.scale != 1.0:
+        # Remotion refuses non-integer dimensions, and says so only after
+        # bundling and launching the browser — two minutes in.
+        timeline = json.loads(project.timeline.read_text(encoding="utf-8"))
+        for nom, valeur in (("largeur", timeline["width"]), ("hauteur", timeline["height"])):
+            mis = valeur * args.scale
+            if abs(mis - round(mis)) > 1e-9:
+                entiers = [e for e in (0.25, 0.5, 0.75) if (valeur * e).is_integer()]
+                return _fail(
+                    f"--scale={args.scale} donne une {nom} de {mis:g} px, "
+                    f"et le moteur exige un entier. Essayer : "
+                    + ", ".join(str(e) for e in entiers)
+                )
+
     public_dir = _stage_public_dir(project)
 
     command = [
