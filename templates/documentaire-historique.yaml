@@ -133,16 +133,16 @@ montage:
     grain: 0.06
     vignette: 0.25
 
-  # Lit sonore. Sol grave plutôt que la, et tierce mineure : sur un sujet
-  # judiciaire, le lit doit peser sans commenter. Le gain reste sous le
-  # seuil où l'on entend « de la musique » — à ce niveau on ne le remarque
-  # qu'en l'enlevant, et c'est le but.
+  # Lit sonore. Tierce mineure : sur un sujet judiciaire, le lit doit peser
+  # sans commenter. Le niveau reste sous le seuil où l'on entend « de la
+  # musique » — on ne le remarque qu'en l'enlevant, et c'est le but.
   musique:
     mode: sombre
-    # Sol2, une seconde sous le la de la base : un peu plus lourd, toujours
-    # dans la zone que restitue un haut-parleur d'ordinateur.
-    tonique_hz: 98
-    niveau_relatif_db: -24
+    # Même hauteur que la base : c'est le mode qui assombrit, pas le
+    # registre. Descendre plus bas rendrait le lit inaudible, ce qui a déjà
+    # été essayé deux fois.
+    tonique_hz: 131
+    niveau_relatif_db: -22
     fondu_s: 4.0
 
   # Comment un plan arrive. Le format supporte des flashs, mais moins

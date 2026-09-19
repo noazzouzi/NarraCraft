@@ -176,15 +176,22 @@ def build(directory: Path, force: bool = False) -> dict[str, str]:
 #: Intervalles en demi-tons, depuis la tonique. Le mode change le caractère
 #: du lit sans rien changer au code — c'est ce qui permet à un template de
 #: sonner autrement qu'un autre.
+#
+#: Les partiels montent jusqu'à deux octaves et demie au-dessus de la
+#: tonique, et ce n'est pas un choix musical mais un choix de restitution.
+#: Un lit qui vit sous 250 Hz est mesurable et inaudible : ni un
+#: haut-parleur d'ordinateur ni celui d'un téléphone ne descend là. La
+#: première version s'arrêtait à l'octave-quinte et n'avait que onze pour
+#: cent de son énergie dans la bande que tout le monde restitue.
 MODES = {
-    # Mineur sans tierce : grave, ouvert, ne raconte rien de lui-même.
-    "sobre": (0, 7, 12, 19),
+    # Mineur sans tierce : ouvert, ne raconte rien de lui-même.
+    "sobre": (0, 7, 12, 19, 24, 31),
     # Tierce mineure ajoutée : nettement plus sombre.
-    "sombre": (0, 3, 7, 12, 15),
+    "sombre": (0, 3, 7, 12, 15, 24, 27),
     # Quarte et quinte : tendu, sans être triste.
-    "tendu": (0, 5, 7, 12, 17),
+    "tendu": (0, 5, 7, 12, 17, 24, 29),
     # Tierce majeure : ouvert, presque serein.
-    "clair": (0, 4, 7, 12, 16),
+    "clair": (0, 4, 7, 12, 16, 24, 28),
 }
 
 
@@ -216,9 +223,11 @@ def musique(duree_s: float = 40.0, tonique_hz: float = 55.0,
         # boucle : c'est ce qui rend le raccord inaudible.
         freq = max(round(cible / base), 1) * base
 
-        # Les partiels aigus s'effacent : un bourdon dont les harmoniques
-        # tiennent le même niveau que la fondamentale devient un bourdonnement.
-        poids = 1.0 / (1.0 + rang * 1.4)
+        # Les partiels aigus s'effacent, mais doucement — en fonction de leur
+        # hauteur et non de leur rang. La première version les divisait par
+        # leur rang, ce qui écrasait précisément ceux qui rendent le lit
+        # audible sur un petit haut-parleur.
+        poids = (tonique_hz / freq) ** 0.35
 
         # Deux voix légèrement désaccordées par partiel. Le battement lent
         # qui en résulte est ce qui empêche le lit de sonner comme une

@@ -1542,3 +1542,28 @@ def test_the_bed_gain_is_measured_against_the_voice(tmp_path):
     obtenu = (sons_mod.niveau_pondere_a(x * gains[110.0], r)
               / sons_mod.niveau_pondere_a(v, vr))
     assert 20 * np.log10(obtenu) == pytest.approx(-24, abs=0.5)
+
+
+def test_the_bed_lives_where_speakers_can_reproduce_it():
+    """Deux réglages ont échoué faute de cette vérification.
+
+    Un lit dont l'énergie vit sous 120 Hz est parfaitement mesurable et
+    parfaitement inaudible : ni un haut-parleur d'ordinateur ni celui d'un
+    téléphone ne descend là. Et il ne doit pas pour autant monter dans la
+    zone d'intelligibilité de la parole, qu'il masquerait."""
+    import numpy as np
+
+    from fresque import config as config_mod, sons as sons_mod
+
+    tonique = float(config_mod.get("montage", "musique", "tonique_hz", default=131))
+    for mode in sons_mod.MODES:
+        x = sons_mod.musique(8.0, tonique, mode)
+        f = np.fft.rfftfreq(len(x), 1 / sons_mod.RATE)
+        m = np.abs(np.fft.rfft(x))
+
+        def part(lo, hi):
+            return m[(f >= lo) & (f < hi)].sum() / m.sum()
+
+        assert part(0, 120) < 0.10, f"{mode} : trop d'énergie sous 120 Hz"
+        assert part(250, 900) > 0.25, f"{mode} : pas assez entre 250 et 900 Hz"
+        assert part(900, 4000) < 0.15, f"{mode} : empiète sur la parole"

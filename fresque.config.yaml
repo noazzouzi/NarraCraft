@@ -323,10 +323,10 @@ montage:
     # résout. C'est la seule façon d'y arriver, parce qu'un même gain est
     # inaudible sur un bourdon à 49 Hz et envahissant sur un lit à 300.
     #
-    # Mesuré : -24 dB s'entend nettement sans jamais masquer une consonne.
-    # Vers -32 le lit disparaît sur un haut-parleur d'ordinateur, vers -18
+    # Mesuré : -22 dB s'entend nettement sans jamais masquer une consonne.
+    # Vers -30 le lit disparaît sur un haut-parleur d'ordinateur, vers -16
     # il commence à se disputer la narration.
-    niveau_relatif_db: -24
+    niveau_relatif_db: -22
 
     # Montée au début, descente à la fin. Un lit qui démarre sec s'entend.
     fondu_s: 3.0
@@ -334,12 +334,17 @@ montage:
     # par fondu croisé : chaque partiel compte un nombre entier de cycles.
     boucle_s: 40
 
-    # La2. Le premier réglage descendait à 49 Hz « pour ne jamais croiser
-    # la voix » : à ce point le lit était inaudible, l'oreille y perd une
-    # trentaine de décibels et aucun haut-parleur d'ordinateur ne descend
-    # si bas. 110 Hz reste très en dessous de la zone d'intelligibilité de
-    # la parole tout en étant restitué partout.
-    tonique_hz: 110
+    # Do3. Deux réglages ont échoué avant celui-là, tous deux trop graves :
+    # 49 Hz puis 110 Hz. Mesuré à 110, il restait quinze pour cent de
+    # l'énergie sous 120 Hz, où aucun haut-parleur d'ordinateur ni de
+    # téléphone ne restitue quoi que ce soit — et le reste était trop bas
+    # pour compenser.
+    #
+    # À 131 Hz, avec les partiels qui montent à deux octaves et demie, la
+    # répartition mesurée devient : 3 % sous 120 Hz, 36 % entre 120 et 250,
+    # 39 % entre 250 et 900. Toujours rien dans la zone d'intelligibilité
+    # de la parole, mais restitué par n'importe quel haut-parleur.
+    tonique_hz: 131
     # sobre · sombre · tendu · clair — voir `sons.MODES`.
     mode: sobre
 
