@@ -225,16 +225,20 @@ def cmd_render(args: argparse.Namespace) -> int:
     if not shutil.which("npx"):
         return _fail("npx introuvable — Node est requis pour le rendu.")
 
-    output = project.out_dir / "video.mp4"
+    output = Path(args.output) if args.output else project.out_dir / "video.mp4"
     output.parent.mkdir(parents=True, exist_ok=True)
+
+    public_dir = _stage_public_dir(project)
 
     command = [
         "npx", "remotion", "render", "Documentaire", str(output),
         f"--props={project.timeline}",
-        f"--public-dir={project.root}",
+        f"--public-dir={public_dir}",
         f"--concurrency={args.concurrency}",
-        f"--crf={config.get('montage', 'crf', default=22)}",
+        f"--crf={args.crf if args.crf else config.get('montage', 'crf', default=22)}",
     ]
+    if args.scale != 1.0:
+        command.append(f"--scale={args.scale}")
     if args.browser:
         command.append(f"--browser-executable={args.browser}")
 
@@ -245,6 +249,37 @@ def cmd_render(args: argparse.Namespace) -> int:
     size_mb = output.stat().st_size / 1_048_576
     print(f"✓ {output.name} · {size_mb:.1f} Mo")
     return 0
+
+
+def _stage_public_dir(project: Project) -> Path:
+    """Assemble exactly the files the renderer needs, and nothing else.
+
+    Remotion copies its whole public directory into the bundle. Pointing it at
+    the project root meant copying the per-beat audio, the previous render and
+    every archive alternative — ninety megabytes to draw a ten-megabyte film.
+    """
+    import shutil
+
+    timeline = json.loads(project.timeline.read_text(encoding="utf-8"))
+    wanted = {clip["image"] for clip in timeline["clips"] if clip.get("image")}
+    if timeline.get("audio"):
+        wanted.add(timeline["audio"])
+
+    staging = project.root / ".render"
+    if staging.exists():
+        shutil.rmtree(staging)
+
+    for relative in sorted(wanted):
+        source = project.root / relative
+        if not source.is_file():
+            continue
+        destination = staging / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+    total = sum(f.stat().st_size for f in staging.rglob("*") if f.is_file())
+    print(f"  {len(wanted)} fichier(s) exposés au rendu · {total / 1_048_576:.1f} Mo")
+    return staging
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -325,6 +360,16 @@ def main(argv: list[str] | None = None) -> int:
     render_cmd.add_argument(
         "--browser", default=None,
         help="chemin d'un Chromium existant (évite un téléchargement)",
+    )
+    render_cmd.add_argument(
+        "--output", default=None, help="chemin de sortie (défaut : 07-out/video.mp4)"
+    )
+    render_cmd.add_argument(
+        "--scale", type=float, default=1.0,
+        help="facteur de résolution, par ex. 0.5 pour une copie de visionnage",
+    )
+    render_cmd.add_argument(
+        "--crf", type=int, default=None, help="qualité d'encodage (défaut : config)"
     )
     add("status", "État d'avancement du projet", cmd_status)
 
