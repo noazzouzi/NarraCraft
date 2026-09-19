@@ -70,20 +70,39 @@ def _mots_utiles(texte: str) -> set[str]:
     }
 
 
-def est_pertinent(requete: str, titre: str, description: str = "") -> bool:
-    """Le résultat partage-t-il au moins un mot porteur avec la requête ?
+def _couvre(voulu: str, presents: set[str]) -> bool:
+    """Un mot de la requête est-il présent, au pluriel ou composé près ?
 
-    Sans ce garde-fou, la relaxation finit par tout accepter : mesuré sur un
-    documentaire entier, elle a proposé une garde d'honneur chinoise pour
-    « code pénal livre » et une tempête bretonne pour « chaise vide salle ».
-    Un titre qui ne partage aucun mot avec la requête est presque toujours
-    hors sujet, et un plan hors sujet coûte plus cher qu'un plan manquant :
-    il passe inaperçu à la relecture.
+    Préfixe dans un sens ou dans l'autre : `court` couvre `courthouse` et
+    `courtroom`, `column` couvre `columns`. Quatre caractères au minimum de
+    part et d'autre, sinon `code` couvrirait `codex` autant que n'importe
+    quoi.
+    """
+    return any(
+        mot.startswith(voulu) or voulu.startswith(mot) for mot in presents
+    )
+
+
+def est_pertinent(requete: str, titre: str, description: str = "") -> bool:
+    """Le résultat porte-t-il **tous** les mots porteurs de la requête ?
+
+    La version précédente n'en exigeait qu'un, et c'était trop faible d'un
+    ordre de grandeur. Mesuré sur un plan visuel de cent soixante-seize
+    plans : `law court columns` a rendu la colonne Trajane, `code penal
+    France` une cathédrale allemande, `prison window bars` un musée romain,
+    `cash banknotes` un groupe de musique. Chaque fois un seul mot commun
+    suffisait, et chaque fois l'image passait inaperçue à la relecture parce
+    qu'elle avait l'air d'une image.
+
+    Exiger tous les mots laisse davantage de plans sans image. C'est le bon
+    sens du compromis : un plan manquant est signalé et se corrige, un plan
+    hors sujet part au montage.
     """
     voulus = _mots_utiles(requete)
     if not voulus:
         return True
-    return bool(voulus & _mots_utiles(f"{titre} {description}"))
+    presents = _mots_utiles(f"{titre} {description}")
+    return all(_couvre(voulu, presents) for voulu in voulus)
 
 
 def variants(query: str, min_width: int) -> list[tuple[str, int]]:

@@ -1310,3 +1310,22 @@ def test_two_shots_sharing_a_query_get_two_different_files(tmp_path):
     assert assets["S000"]["url"] != assets["S001"]["url"]
     # Et la recherche n'a été lancée qu'une fois pour les deux plans.
     assert appels == ["palais de justice"]
+
+
+def test_relevance_requires_every_word_of_the_query():
+    """Un seul mot commun était trop faible d'un ordre de grandeur.
+
+    Chacun de ces cas est réel, relevé sur un plan visuel de cent
+    soixante-seize plans où le filtre précédent les avait tous acceptés."""
+    from fresque.sources.wikimedia import est_pertinent
+
+    assert not est_pertinent("law court columns", "Inside the cast of Trajan's column")
+    assert not est_pertinent("code penal France", "Speyer Kaiserdom 2010")
+    assert not est_pertinent("prison window bars", "Museo di Via Tasso - first floor hall")
+    assert not est_pertinent("cash banknotes", "Cash Cash - Club Sutra")
+    assert not est_pertinent("Nicolas Sarkozy Elysee", "Camion canon à eau Police-CRS à Paris")
+
+    # Et ce qui doit passer passe, pluriel et composé compris.
+    assert est_pertinent("prison de la Santé", "Facade Nord de la prison de la Santé")
+    assert est_pertinent("courthouse interior", "Bytom courthouse interior stairs")
+    assert est_pertinent("law court columns", "Court of the Thousand Columns, law")
