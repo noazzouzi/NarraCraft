@@ -218,7 +218,12 @@ montage:
   # Qualité d'encodage H.264. Plus bas = meilleur et plus lourd.
   # Le défaut de Remotion (18) est quasi sans perte et produit ~12 Mbit/s sur
   # des photographies d'archive : inutilement lourd pour de la diffusion.
-  # 22 tient autour de 4 Mbit/s sans différence visible en 1080p.
+  #
+  # Mesuré, et le chiffre dépend beaucoup du montage : 22 donnait 4 Mbit/s
+  # sur un montage à huit plans par minute, et 7,2 Mbit/s à quinze — soit
+  # 777 Mo pour un quart d'heure. Les coupes rapides, les flashs et les
+  # glissements floutés coûtent des bits, et un montage nerveux coûte donc
+  # le double d'un montage lent à qualité égale.
   crf: 22
   # Durée au-delà de laquelle un plan est signalé comme trop tenu.
   # `plans_par_minute` est une intention d'écriture ; ce plafond-ci est
