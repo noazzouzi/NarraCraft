@@ -317,6 +317,9 @@ def build(
         else None,
         "sons": sound_track,
         "sous_titres": subtitles,
+        # Les crédits voyagent avec le montage, pas dans une tête. Une piste
+        # CC-BY n'est libre que si l'attribution suit jusqu'à la description
+        # de la vidéo — la musique y figure donc au même titre qu'une image.
         "credits": [
             {
                 "asset": asset.get("fichier"),
@@ -326,7 +329,14 @@ def build(
             }
             for asset in assets.values()
             if asset.get("credit")
-        ],
+        ] + ([
+            {
+                "asset": musique.get("fichier"),
+                "credit": config.get("montage", "musique", "credit"),
+                "url": config.get("montage", "musique", "page_url"),
+                "licence": config.get("montage", "musique", "licence"),
+            }
+        ] if musique and config.get("montage", "musique", "credit") else []),
     }
 
 

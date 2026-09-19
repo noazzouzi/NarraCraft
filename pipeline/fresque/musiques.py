@@ -159,3 +159,50 @@ def ecrire_licences(pistes: dict[str, Piste], chemin: Path) -> None:
                    ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def preparer_boucle(source: Path, destination: Path, fondu_s: float = 4.0,
+                    force: bool = False) -> Path:
+    """Fait d'un morceau une boucle sans couture, par fondu croisé.
+
+    Le lit synthétique boucle par construction : ses partiels comptent un
+    nombre entier de cycles. Un enregistrement ne peut pas faire ça — sa
+    fin et son début n'ont aucune raison de se raccorder. Sans traitement,
+    une piste de cinquante-quatre secondes claque toutes les cinquante-quatre
+    secondes pendant un quart d'heure, et ce clic devient le seul événement
+    de la bande.
+
+    On replie donc la fin sur le début : la boucle dure `n - fondu`, et ses
+    premières secondes sont le mélange de la tête montante et de la queue
+    descendante. Le raccord tombe alors au milieu d'un fondu, où il ne
+    s'entend plus.
+
+    Boucler et niveler sont des modifications — d'où l'exigence que la
+    licence les autorise, vérifiée au moment du sourcing.
+    """
+    import numpy as np
+    import soundfile as sf
+
+    if destination.is_file() and not force:
+        return destination
+
+    x, rate = sf.read(str(source), always_2d=True, dtype="float64")
+    fondu = int(min(fondu_s, len(x) / 3) * rate)
+    if fondu < 2 or len(x) <= fondu * 2:
+        raise MusiqueError(
+            f"{source.name} est trop court ({len(x) / rate:.0f} s) pour un "
+            f"fondu de {fondu_s:g} s."
+        )
+
+    boucle = x[: len(x) - fondu].copy()
+    montee = np.linspace(0.0, 1.0, fondu)[:, None]
+    boucle[:fondu] = x[:fondu] * montee + x[len(x) - fondu:] * (1.0 - montee)
+
+    crete = np.abs(boucle).max()
+    if crete > 0:
+        # Normalisée ici, nivelée par la timeline contre la voix réelle.
+        boucle = boucle / crete * 0.95
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(str(destination), boucle, rate)
+    return destination

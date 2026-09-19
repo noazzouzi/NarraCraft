@@ -317,6 +317,12 @@ montage:
   musique:
     actif: true
 
+    # `synthese` — le lit calculé par `fresque.sons`, sans réseau ni licence.
+    # `fichier`  — un enregistrement réel, sourcé par `fresque musique`. Sa
+    #              licence est alors obligatoire, et elle voyage jusque dans
+    #              les crédits de la timeline.
+    source: synthese
+
     # Niveau du lit SOUS la voix, en décibels et pondéré A — c'est-à-dire
     # tel que l'oreille l'entend, pas tel qu'un spectre le montre. Le gain
     # n'est donc pas réglé ici : le pipeline mesure les deux pistes et le

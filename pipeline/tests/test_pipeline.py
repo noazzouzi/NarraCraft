@@ -1464,7 +1464,7 @@ def test_template_overview_says_where_each_value_comes_from():
             for _, lignes in donnees["axes"] for chemin, _, source in lignes}
 
     assert plat["narration.mots_par_minute"] == "template"
-    assert plat["montage.musique.mode"] == "template"
+    assert plat["montage.musique.source"] == "template"
     # Hérité : le template ne parle ni de résolution ni de fréquence d'images.
     assert plat["montage.fps"] == "base"
 
@@ -1475,7 +1475,12 @@ def test_template_page_is_static_and_self_contained(tmp_path):
     sortie = apercu_mod.page("documentaire-historique", tmp_path / "t.html")
     page = sortie.read_text(encoding="utf-8")
     assert "<script" not in page, "la page doit être statique"
-    assert "http://" not in page and "https://" not in page
+    # Autonome veut dire : rien à aller chercher au chargement. Une URL
+    # citée dans le texte — le crédit d'une musique, par exemple — n'est
+    # pas une ressource, c'est de l'information.
+    for attribut in ('src="http', "src='http", 'href="http', "href='http",
+                     "@import"):
+        assert attribut not in page, attribut
     # Les couleurs du template y figurent comme pastilles.
     assert "#c9a227" in page
 
@@ -1567,3 +1572,58 @@ def test_the_bed_lives_where_speakers_can_reproduce_it():
         assert part(0, 120) < 0.10, f"{mode} : trop d'énergie sous 120 Hz"
         assert part(250, 900) > 0.25, f"{mode} : pas assez entre 250 et 900 Hz"
         assert part(900, 4000) < 0.15, f"{mode} : empiète sur la parole"
+
+
+def test_a_downloaded_track_is_folded_into_a_seamless_loop(tmp_path):
+    """Un enregistrement ne boucle pas tout seul : sa fin et son début n'ont
+    aucune raison de se raccorder. Sans fondu croisé, une piste de cinquante
+    secondes claque toutes les cinquante secondes."""
+    import numpy as np
+    import soundfile as sf
+
+    from fresque import musiques as musiques_mod
+
+    # Un morceau dont la fin ne raccorde pas du tout avec le début : une
+    # rampe, qui part de -0,9 pour finir à +0,9. Un sinus ne ferait pas
+    # l'affaire, il passe par zéro aux deux bouts et la marche s'y cache.
+    rate = 44100
+    rampe = np.linspace(-0.9, 0.9, rate * 10)
+    brut = np.stack([rampe, rampe], axis=1)
+    source = tmp_path / "source.wav"
+    sf.write(str(source), brut, rate)
+
+    avant = abs(brut[0, 0] - brut[-1, 0])
+    boucle = musiques_mod.preparer_boucle(source, tmp_path / "loop.wav", 2.0, force=True)
+    x, r = sf.read(str(boucle), always_2d=True)
+
+    assert len(x) / r == pytest.approx(8.0, abs=0.01), "la boucle perd le fondu"
+    assert abs(x[0, 0] - x[-1, 0]) < avant / 4
+    assert np.abs(x).max() <= 1.0
+
+
+def test_a_track_too_short_for_its_crossfade_is_refused(tmp_path):
+    import numpy as np
+    import soundfile as sf
+
+    from fresque import musiques as musiques_mod
+
+    sf.write(str(tmp_path / "court.wav"), np.zeros((4410, 2)), 44100)
+    with pytest.raises(musiques_mod.MusiqueError, match="trop court"):
+        musiques_mod.preparer_boucle(
+            tmp_path / "court.wav", tmp_path / "l.wav", 4.0, force=True)
+
+
+def test_a_non_commercial_track_is_refused():
+    """Le filtre serveur porte sur la licence déclarée ; on le double."""
+    from fresque.musiques import Piste
+
+    def piste(licence):
+        return Piste(titre="t", auteur="a", licence=licence, licence_url="",
+                     page_url="p", fichier_url="f", duree_s=100.0,
+                     source="s", credit="c")
+
+    assert piste("CC BY 4.0").utilisable
+    assert piste("CC0 1.0").utilisable
+    assert not piste("CC BY-NC 4.0").utilisable
+    assert not piste("CC BY-ND 4.0").utilisable
+    assert not piste("Tous droits réservés").utilisable

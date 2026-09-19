@@ -137,11 +137,28 @@ montage:
   # sans commenter. Le niveau reste sous le seuil où l'on entend « de la
   # musique » — on ne le remarque qu'en l'enlevant, et c'est le but.
   musique:
-    mode: sombre
-    # Même hauteur que la base : c'est le mode qui assombrit, pas le
-    # registre. Descendre plus bas rendrait le lit inaudible, ce qui a déjà
-    # été essayé deux fois.
-    tonique_hz: 131
+    # Un vrai enregistrement plutôt que le lit synthétique : des cordes
+    # tenues, sans rythme ni mélodie qui accroche, choisies à l'écoute
+    # parmi cinq candidats libres.
+    source: fichier
+    fichier: assets/musiques/documentary-music-strings.mp3
+
+    # CC BY 4.0 : le crédit DOIT figurer dans la description de chaque
+    # vidéo qui l'utilise. Il est repris dans les crédits de la timeline
+    # pour ne pas dépendre d'une mémoire.
+    licence: CC BY 4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    auteur: tyops
+    page_url: https://freesound.org/people/tyops/sounds/631776
+    credit: >-
+      « Documentary Music Strings » par tyops, sous licence CC BY 4.0 —
+      https://freesound.org/people/tyops/sounds/631776
+
+    # Fondu croisé qui replie la fin du morceau sur son début. Sans lui,
+    # une piste de cinquante-quatre secondes claque toutes les
+    # cinquante-quatre secondes pendant un quart d'heure.
+    boucle_fondu_s: 4.0
+
     niveau_relatif_db: -22
     fondu_s: 4.0
 

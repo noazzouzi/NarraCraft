@@ -292,13 +292,33 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     musique = None
     if config.get("montage", "musique", "actif", default=True):
         relatif = f"{sons_dir}/musique.wav"
-        piste = sons_mod.build_musique(
-            project.root / relatif,
-            duree_s=float(config.get("montage", "musique", "boucle_s", default=40)),
-            tonique_hz=float(config.get("montage", "musique", "tonique_hz", default=110)),
-            mode=str(config.get("montage", "musique", "mode", default="sobre")),
-            force=True,
-        )
+        if config.get("montage", "musique", "source", default="synthese") == "fichier":
+            from . import musiques as musiques_mod
+
+            chemin = config.get("montage", "musique", "fichier")
+            if not chemin:
+                return _fail("montage.musique.source vaut `fichier` mais "
+                             "`montage.musique.fichier` n'est pas renseigné.")
+            source = config.repo_root() / chemin
+            if not source.is_file():
+                return _fail(f"musique introuvable : {source}")
+            # Un enregistrement ne boucle pas tout seul : sa fin et son début
+            # n'ont aucune raison de se raccorder. On replie l'un sur l'autre.
+            piste = musiques_mod.preparer_boucle(
+                source, project.root / relatif,
+                fondu_s=float(config.get(
+                    "montage", "musique", "boucle_fondu_s", default=4.0)),
+                force=True,
+            )
+        else:
+            piste = sons_mod.build_musique(
+                project.root / relatif,
+                duree_s=float(config.get("montage", "musique", "boucle_s", default=40)),
+                tonique_hz=float(config.get(
+                    "montage", "musique", "tonique_hz", default=131)),
+                mode=str(config.get("montage", "musique", "mode", default="sobre")),
+                force=True,
+            )
         # Le gain se mesure, il ne se règle pas : le même 0,06 est inaudible
         # sur un bourdon à 49 Hz et envahissant sur un lit à 300.
         niveau_db = float(config.get(

@@ -1,0 +1,16 @@
+{
+  "_lisez_moi": "Licences des musiques de fond. Une piste CC-BY n'est libre que si le crédit la suit : ce fichier voyage avec les mp3 et sert à écrire l'attribution dans la description de chaque vidéo qui l'utilise.",
+  "pistes": {
+    "documentary-music-strings.mp3": {
+      "titre": "Documentary Music Strings",
+      "auteur": "tyops",
+      "licence": "CC BY 4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "page_url": "https://freesound.org/people/tyops/sounds/631776",
+      "fichier_url": "https://cdn.freesound.org/previews/631/631776_3914271-hq.mp3",
+      "duree_s": 53.78,
+      "source": "freesound",
+      "credit": "\"Documentary Music Strings\" by tyops is licensed under CC BY 4.0. To view a copy of this license, visit https://creativecommons.org/licenses/by/4.0/."
+    }
+  }
+}

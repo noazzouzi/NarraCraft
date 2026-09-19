@@ -304,12 +304,17 @@ def niveau_pondere_a(echantillons, rate: int = RATE) -> float:
 
 
 def lire_wav(chemin: Path) -> tuple["np.ndarray", int]:
-    import numpy as np
+    """Lit un fichier audio en mono, quelle que soit sa forme.
 
-    with wave.open(str(chemin)) as fh:
-        rate = fh.getframerate()
-        brut = fh.readframes(fh.getnframes())
-    return np.frombuffer(brut, dtype="<i2").astype("float64") / 32768.0, rate
+    Passe par soundfile plutôt que par `wave` : la voix est mono, mais un
+    lit sonore téléchargé est stéréo, et lire de l'entrelacé comme du mono
+    donnerait un spectre faux — donc un niveau faux.
+    """
+    import numpy as np
+    import soundfile as sf
+
+    x, rate = sf.read(str(chemin), always_2d=True, dtype="float64")
+    return np.asarray(x).mean(axis=1), int(rate)
 
 
 def gain_pour(musique_path: Path, voix_path: Path, niveau_db: float) -> float:
