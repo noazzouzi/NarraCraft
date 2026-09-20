@@ -51,27 +51,35 @@ Deux portes mènent aux mêmes modèles d'image, et le choix est comptable :
 | `visuels.generation.provider` | Ce qu'il faut | Pourquoi |
 |---|---|---|
 | `gemini` | `GEMINI_API_KEY` | le plus simple : une clé, rien d'autre |
-| `vertex` | un projet Google Cloud | le crédit d'essai de 300 $ ne paie **plus** AI Studio depuis le 2 mars 2026, mais il paie Vertex |
+| `vertex` | une clé **ou** un jeton | le crédit d'essai de 300 $ ne paie **plus** AI Studio depuis le 2 mars 2026, mais il paie Vertex |
 
-Pour Vertex, aucun secret n'entre dans `.env` — seulement l'identifiant du
-projet. Le jeton est demandé à la volée :
+Vertex accepte deux justificatifs, et une seule adresse les sert tous les
+deux — mesuré, une clé d'API porte bien un projet
+(`docs/etude-vertex.md`). La clé passe avant le jeton si les deux sont là.
 
 ```bash
+# soit un jeton, qui expire seul et se rattache à des rôles — préférable
 gcloud auth application-default login
-echo "VERTEX_PROJECT=mon-projet" >> .env
-python -m fresque images --list-models     # vérifie tout, sans dépenser
-python -m fresque essai-image "un couloir inondé"   # une image, ~0,03 $
+
+# soit une clé, pour une machine sans session interactive
+echo "VERTEX_API_KEY=…" >> .env
+
+python -m fresque essai-image "un couloir inondé"   # une image, ~0,07 $
 ```
 
-`--list-models` est la commande à lancer d'abord : elle interroge la fiche de
-la région dans le projet, puis celle de chaque modèle. Deux appels gratuits
-qui disent si le jeton, le projet, la région, l'activation de l'API et les
-identifiants de modèles sont bons — avant d'avoir généré la moindre image.
-Elle ne demande aucun projet Fresque.
+`VERTEX_PROJECT` est facultatif : sans lui, le serveur retrouve le projet
+depuis le justificatif. Le nommer rend seulement l'appel lisible dans les
+journaux.
 
-`essai-image` génère ensuite **une** image, sans projet non plus, et imprime
-ses dimensions réelles — le seul endroit où l'on constate si le format
-demandé a été honoré, l'API ne le confirmant nulle part.
+`python -m fresque images --list-models` vérifie gratuitement le jeton, le
+projet, la région, l'activation de l'API et les identifiants de modèles —
+mais **seulement avec un jeton** : la route des fiches de modèle n'accepte
+pas les clés d'API. Avec une clé, la seule vérification est une génération.
+
+`essai-image` génère **une** image, sans projet Fresque, et imprime ses
+dimensions réelles — le seul endroit où l'on constate si le format demandé a
+été honoré. Un modèle peut l'ignorer sans le dire : mesuré,
+`gemini-2.5-flash-image` rend 1344 px quand on lui demande du 2K.
 
 Deux clés optionnelles : **Pexels** (gratuite, pour le métrage vidéo libre)
 et **ElevenLabs** (payante, pour la finition d'une vidéo qu'on publie).

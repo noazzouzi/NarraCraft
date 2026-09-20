@@ -214,17 +214,23 @@ visuels:
     provider: gemini
 
     vertex:
-      # `projet`  — un jeton OAuth, porté par un projet et une région. Rien à
-      #             copier nulle part : `gcloud auth application-default login`
-      #             une fois, et le jeton est obtenu à la demande. C'est le
-      #             mode de production.
-      # `express` — une clé d'API (VERTEX_API_KEY), sans projet ni région.
-      #             Pour les machines où `gcloud` n'a pas de session
-      #             interactive : un conteneur, une CI. Une clé est un secret
-      #             durable qui donne accès au quota du projet — elle se pose
-      #             dans l'environnement, jamais dans un fichier versionné ni
-      #             dans une conversation.
-      mode: projet
+      # Il n'y a plus de `mode`. Il y en a eu deux — `express` et `projet` —
+      # sur la supposition qu'une clé d'API ne pouvait pas porter de projet.
+      # Cinq sondes contre l'API réelle l'ont démentie : les adresses
+      # `projects/{id}/locations/global/...` rendent 200 avec la clé seule.
+      #
+      # Ce qui reste se lit dans l'environnement, pas ici :
+      #   VERTEX_PROJECT   facultatif — sans lui, le serveur retrouve le
+      #                    projet depuis le justificatif ; le nommer rend
+      #                    seulement l'appel lisible dans les journaux.
+      #   une clé d'API    VERTEX_API_KEY, GOOGLE_CLOUD_KEY ou GOOGLE_API_KEY
+      #   à défaut         un jeton OAuth (`gcloud auth application-default
+      #                    login`, ou un compte de service)
+      #
+      # La clé passe avant le jeton : la poser dans l'environnement est un
+      # geste explicite, un jeton peut venir d'une session oubliée ou du
+      # serveur de métadonnées d'une machine. Pour produire, le jeton vaut
+      # mieux — il expire seul et se rattache à des rôles.
 
       # `global` couvre le monde entier et essuie nettement moins de 429
       # qu'une région unique. Le projet ne fait aucun traitement réglementé,

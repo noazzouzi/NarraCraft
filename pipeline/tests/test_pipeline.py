@@ -2568,11 +2568,15 @@ def test_collage_holds_the_screen_as_long_as_a_panel():
 
 # --- Vertex AI ----------------------------------------------------------------
 #
-# Les deux fournisseurs servent les mêmes modèles avec le même corps de
-# requête : le seul endroit où ils diffèrent est l'adresse et
-# l'identification. Ce qui se teste ici, c'est donc cette couture — et le
-# fait que le reste du module ne sache pas laquelle des deux portes il a
-# prise.
+# Une seule adresse, deux façons de présenter ses papiers. Il y a eu deux
+# « modes » ici — `express` et `projet` — sur la supposition qu'une clé d'API
+# ne pouvait pas porter de projet. Cinq sondes contre l'API réelle l'ont
+# démentie (`docs/etude-vertex.md`), et la moitié de ces tests décrivait donc
+# une architecture qui n'avait pas lieu d'être.
+#
+# Ce qui se teste ici : la couture entre `images.py` et Vertex, et le fait que
+# le reste du module ne sache ni quel projet, ni quels papiers, ni quelle
+# porte.
 
 import time as _time  # noqa: E402
 
@@ -2592,8 +2596,22 @@ def par_vertex(monkeypatch):
     monkeypatch.setattr(images_mod.config, "get", truque)
     monkeypatch.setattr(vertex_mod, "jeton", lambda force=False: "JETON")
     monkeypatch.setenv("VERTEX_PROJECT", "mon-projet")
+    # Sans clé : la fixture décrit une machine qui s'identifie par jeton. Une
+    # clé laissée par un autre test changerait les en-têtes sous nos pieds.
+    for nom in vertex_mod.NOMS_CLE:
+        monkeypatch.delenv(nom, raising=False)
     monkeypatch.setattr(vertex_mod, "_cache", None)
     yield
+    monkeypatch.setattr(vertex_mod, "_cache", None)
+
+
+@pytest.fixture
+def sans_papiers(monkeypatch):
+    """Ni clé ni projet dans l'environnement, et rien qui traîne du test
+    précédent."""
+    for nom in (*vertex_mod.NOMS_CLE, "VERTEX_PROJECT",
+                "GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT"):
+        monkeypatch.delenv(nom, raising=False)
     monkeypatch.setattr(vertex_mod, "_cache", None)
 
 
@@ -2609,15 +2627,13 @@ def test_the_global_region_has_no_host_prefix(monkeypatch):
     assert vertex_mod.racine() == "https://europe-west4-aiplatform.googleapis.com/v1"
 
 
-def test_the_project_comes_from_the_environment_never_from_the_repo(monkeypatch):
+def test_the_project_comes_from_the_environment_never_from_the_repo(sans_papiers,
+                                                                    monkeypatch):
     """`fresque.config.yaml` est versionné : un identifiant de compte n'y a
-    pas sa place."""
-    monkeypatch.delenv("VERTEX_PROJECT", raising=False)
-    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
-    monkeypatch.delenv("GCLOUD_PROJECT", raising=False)
+    pas sa place. Et son absence n'est pas une erreur — mesuré, l'adresse
+    globale marche sans lui."""
     monkeypatch.setitem(sys.modules, "google.auth", None)
-    with pytest.raises(vertex_mod.VertexError, match="VERTEX_PROJECT"):
-        vertex_mod.projet()
+    assert vertex_mod.projet() is None
 
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "depuis-gcloud")
     assert vertex_mod.projet() == "depuis-gcloud"
@@ -2660,7 +2676,7 @@ def test_missing_credentials_name_both_remedies(monkeypatch):
     assert "GOOGLE_APPLICATION_CREDENTIALS" in message
 
 
-def test_vertex_is_addressed_with_a_bearer_token_not_a_query_key(par_vertex):
+def test_without_a_key_the_token_is_used(par_vertex):
     acces = images_mod._acces("gemini-3.1-flash-image")
     assert acces.url == (
         "https://aiplatform.googleapis.com/v1/projects/mon-projet"
@@ -2668,7 +2684,8 @@ def test_vertex_is_addressed_with_a_bearer_token_not_a_query_key(par_vertex):
         "/gemini-3.1-flash-image:generateContent"
     )
     assert acces.entetes["Authorization"] == "Bearer JETON"
-    # Une clé dans l'URL serait recopiée dans tous les journaux du proxy.
+    # Rien dans l'URL : un secret en paramètre est recopié par chaque journal
+    # de proxy sur le trajet.
     assert acces.params == {}
 
 
@@ -2784,7 +2801,8 @@ def test_an_unknown_provider_is_refused_by_name(monkeypatch):
         images_mod.fournisseur()
 
 
-def test_the_probe_paths_are_the_ones_the_api_actually_routes():
+def test_the_probe_paths_are_the_ones_the_api_actually_routes(sans_papiers,
+                                                              monkeypatch):
     """Épinglé contre l'API réelle, sondée sans jeton le 2026-09-20.
 
     Deux formes que j'avais écrites de mémoire rendaient un 404 en HTML,
@@ -2804,10 +2822,8 @@ def test_the_probe_paths_are_the_ones_the_api_actually_routes():
     `v1beta1` : les deux sont contre-intuitifs, et aucun test unitaire ne les
     aurait trouvés — seul un appel réel le pouvait.
     """
-    import os
-
-    os.environ["VERTEX_PROJECT"] = "p"
     hote = "https://aiplatform.googleapis.com"
+    monkeypatch.setenv("VERTEX_PROJECT", "p")
     assert vertex_mod._url_region() == f"{hote}/v1/projects/p/locations/global"
     assert vertex_mod._url_fiche("gemini-3.1-flash-image") == (
         f"{hote}/v1beta1/publishers/google/models/gemini-3.1-flash-image")
@@ -2816,7 +2832,7 @@ def test_the_probe_paths_are_the_ones_the_api_actually_routes():
         "/gemini-3.1-flash-image:generateContent")
 
 
-def test_a_refused_project_names_the_two_usual_causes(monkeypatch):
+def test_a_refused_project_names_the_two_usual_causes(sans_papiers, monkeypatch):
     """Un 403 sur Vertex veut dire, neuf fois sur dix, que l'API n'est pas
     activée sur le projet ou que le compte n'a pas le rôle. Les nommer
     épargne une demi-heure dans la console."""
@@ -2834,7 +2850,8 @@ def test_a_refused_project_names_the_two_usual_causes(monkeypatch):
     assert "roles/aiplatform.user" in message
 
 
-def test_model_sheets_are_probed_only_once_the_project_answered(monkeypatch):
+def test_model_sheets_are_probed_only_once_the_project_answered(sans_papiers,
+                                                                monkeypatch):
     """Sonder quatre modèles alors que le jeton est mauvais rend quatre fois
     la même erreur, et aucune ne nomme la vraie cause."""
     monkeypatch.setenv("VERTEX_PROJECT", "p")
@@ -2853,37 +2870,49 @@ def test_model_sheets_are_probed_only_once_the_project_answered(monkeypatch):
     assert len(vus) == 1 + len(vertex_mod.MODELES_CANDIDATS)
 
 
-def test_express_mode_puts_the_key_in_the_query_and_drops_project_and_region(monkeypatch):
-    """En express, ni projet ni région dans l'adresse : la clé porte les deux.
-    Conserver le chemin `projects/…/locations/…` y rendrait un 404 qu'on
-    lirait comme un projet fermé."""
-    reel = images_mod.config.get
+def test_a_key_travels_in_a_header_and_still_names_the_project(par_vertex, monkeypatch):
+    """Mesuré : `projects/{id}/locations/global/...` rend 200 avec la seule
+    clé, en paramètre comme en en-tête. C'est ce qui a supprimé la notion de
+    mode — une clé porte un projet.
 
-    def truque(*keys, default=None):
-        if keys == ("visuels", "generation", "provider"):
-            return "vertex"
-        if keys == ("visuels", "generation", "vertex", "mode"):
-            return "express"
-        return reel(*keys, default=default)
-
-    monkeypatch.setattr(images_mod.config, "get", truque)
-    monkeypatch.setattr(vertex_mod.config, "get", truque)
+    L'en-tête est préféré au `?key=` : les deux rendent 200, mais un secret
+    dans une URL est recopié par chaque journal de proxy sur le trajet."""
     monkeypatch.setenv("VERTEX_API_KEY", "CLE")
 
-    acces = images_mod._acces("gemini-3.1-flash-lite-image")
+    acces = images_mod._acces("gemini-3.1-flash-image")
     assert acces.url == (
-        "https://aiplatform.googleapis.com/v1/publishers/google/models"
-        "/gemini-3.1-flash-lite-image:generateContent")
-    assert acces.params == {"key": "CLE"}
+        "https://aiplatform.googleapis.com/v1/projects/mon-projet"
+        "/locations/global/publishers/google/models"
+        "/gemini-3.1-flash-image:generateContent")
+    assert acces.entetes["x-goog-api-key"] == "CLE"
     assert "Authorization" not in acces.entetes
+    assert acces.params == {}
 
 
-def test_express_state_never_shows_the_key(monkeypatch):
+def test_a_key_beats_an_ambient_token(par_vertex, monkeypatch):
+    """L'explicite l'emporte sur l'ambiant : poser une clé dans
+    l'environnement est un geste, alors qu'un jeton peut venir d'un `gcloud
+    auth login` oublié ou du serveur de métadonnées d'une machine."""
+    monkeypatch.setenv("GOOGLE_CLOUD_KEY", "CLE")
+    entetes = vertex_mod.entetes()
+    assert entetes["x-goog-api-key"] == "CLE"
+    assert "Authorization" not in entetes
+
+
+def test_without_a_project_the_global_address_is_used(sans_papiers, monkeypatch):
+    """Mesuré : l'adresse globale rend 200 avec une clé — le serveur retrouve
+    le projet depuis le justificatif. Ne pas connaître le projet n'est donc
+    pas une erreur, et exiger `VERTEX_PROJECT` refuserait un appel qui marche."""
+    monkeypatch.setenv("VERTEX_API_KEY", "CLE")
+    assert vertex_mod.projet() is None
+    assert vertex_mod.url_modele("gemini-3.1-flash-image") == (
+        "https://aiplatform.googleapis.com/v1/publishers/google/models"
+        "/gemini-3.1-flash-image:generateContent")
+
+
+def test_the_state_never_shows_the_key(sans_papiers, monkeypatch):
     """`fresque images` imprime l'état avant de dépenser. Une clé recopiée là
     finirait dans `journal/`, qui est un fichier du projet."""
-    monkeypatch.setattr(vertex_mod.config, "get",
-                        lambda *k, default=None: "express"
-                        if k[-1] == "mode" else default)
     monkeypatch.setenv("VERTEX_API_KEY", "SECRET-À-NE-PAS-ÉCRIRE")
     rendu = str(vertex_mod.etat())
     assert "SECRET" not in rendu
@@ -2892,24 +2921,16 @@ def test_express_state_never_shows_the_key(monkeypatch):
     assert "VERTEX_API_KEY" in rendu
 
 
-def test_a_missing_express_key_says_not_to_paste_it_in_a_conversation(monkeypatch):
-    monkeypatch.setattr(vertex_mod.config, "get",
-                        lambda *k, default=None: "express"
-                        if k[-1] == "mode" else default)
-    for nom in vertex_mod.NOMS_CLE:
-        monkeypatch.delenv(nom, raising=False)
-    with pytest.raises(vertex_mod.VertexError, match="jamais dans une conversation"):
-        vertex_mod.cle_express()
-
-
-def test_the_key_is_accepted_under_the_names_people_actually_use(monkeypatch):
-    """Un nom qui ne correspond pas rend « clé absente » alors que la clé est
-    là — le pire message possible, parce qu'il envoie la chercher du côté de
-    Google. Relevé en vrai : la clé avait été nommée GOOGLE_CLOUD_KEY."""
-    for nom in vertex_mod.NOMS_CLE:
-        monkeypatch.delenv(nom, raising=False)
+def test_the_key_is_accepted_under_the_names_people_actually_use(sans_papiers,
+                                                                 monkeypatch):
+    """Un nom qui ne correspond pas rendrait « clé absente » alors que la clé
+    est là — le pire message possible, parce qu'il envoie la chercher du côté
+    de Google. Relevé en vrai : la clé avait été nommée GOOGLE_CLOUD_KEY."""
+    assert vertex_mod.cle() is None
+    assert vertex_mod.porteur_de_cle() is None
     monkeypatch.setenv("GOOGLE_CLOUD_KEY", "CLE")
-    assert vertex_mod.cle_express() == "CLE"
+    assert vertex_mod.cle() == "CLE"
+    assert vertex_mod.porteur_de_cle() == "GOOGLE_CLOUD_KEY"
 
 
 def test_every_request_carries_a_role():
@@ -2925,38 +2946,50 @@ def test_every_request_carries_a_role():
     assert corps["contents"][0]["role"] == "user"
 
 
-def test_a_401_on_model_sheets_is_not_reported_as_a_stale_model_id(monkeypatch):
-    """Relevé au premier essai réel : quatre 401 étaient rendus comme « les
-    identifiants de modèle ont peut-être changé ». Un 401 ne dit rien des
-    identifiants — il dit que la requête n'est pas identifiée, et le message
-    envoyait chercher au mauvais endroit."""
-    monkeypatch.setattr(vertex_mod.config, "get",
-                        lambda *k, default=None: "express"
-                        if k[-1] == "mode" else default)
+def test_a_key_cannot_verify_anything_for_free(sans_papiers, monkeypatch):
+    """Mesuré : la route des fiches de modèle rend 401 `CREDENTIALS_MISSING`
+    avec une clé — elle n'accepte qu'un jeton OAuth. C'est une propriété de
+    cette route, pas un défaut de la clé, et la conséquence mérite d'être
+    dite plutôt que laissée à deviner : avec une clé, la seule vérification
+    est une génération."""
     monkeypatch.setenv("VERTEX_API_KEY", "CLE")
 
     class _S:
-        def get(self, url, params=None, headers=None, timeout=None):
-            return _Reponse(401, texte="UNAUTHENTICATED")
+        def get(self, url, headers=None, timeout=None):
+            raise AssertionError("aucune sonde ne devrait partir")
 
     with pytest.raises(vertex_mod.VertexError) as capture:
         vertex_mod.modeles_image(_S())
     message = str(capture.value)
-    assert "MODELES_CANDIDATS" not in message
-    # En express, l'issue est nommée : il n'y a pas de vérification gratuite.
     assert "essai-image" in message
+    assert "MODELES_CANDIDATS" not in message
 
 
-def test_a_404_on_model_sheets_still_points_at_the_identifiers(monkeypatch):
-    """L'autre moitié de la distinction : une route qui répond mais ne
-    connaît pas le modèle, c'est bien l'identifiant qui est en cause."""
-    monkeypatch.setattr(vertex_mod.config, "get",
-                        lambda *k, default=None: "express"
-                        if k[-1] == "mode" else default)
-    monkeypatch.setenv("VERTEX_API_KEY", "CLE")
+def test_a_401_on_model_sheets_is_not_reported_as_a_stale_model_id(sans_papiers,
+                                                                   monkeypatch):
+    """Relevé au premier essai réel : quatre 401 étaient rendus comme « les
+    identifiants de modèle ont peut-être changé ». Un 401 ne dit rien des
+    identifiants — il dit que la requête n'est pas identifiée, et le message
+    envoyait chercher au mauvais endroit."""
+    monkeypatch.setattr(vertex_mod, "entetes", lambda: {})
 
     class _S:
-        def get(self, url, params=None, headers=None, timeout=None):
+        def get(self, url, headers=None, timeout=None):
+            return _Reponse(401, texte="UNAUTHENTICATED")
+
+    with pytest.raises(vertex_mod.VertexError) as capture:
+        vertex_mod.modeles_image(_S())
+    assert "MODELES_CANDIDATS" not in str(capture.value)
+
+
+def test_a_404_on_model_sheets_still_points_at_the_identifiers(sans_papiers,
+                                                               monkeypatch):
+    """L'autre moitié de la distinction : une route qui répond mais ne
+    connaît pas le modèle, c'est bien l'identifiant qui est en cause."""
+    monkeypatch.setattr(vertex_mod, "entetes", lambda: {})
+
+    class _S:
+        def get(self, url, headers=None, timeout=None):
             return _Reponse(404, texte="NOT_FOUND")
 
     with pytest.raises(vertex_mod.VertexError, match="MODELES_CANDIDATS"):

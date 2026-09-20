@@ -16,26 +16,46 @@ les deux portes interchangeables.
 Pour le reste, seules changent l'adresse et l'authentification, et tout ce
 module ne fait que ça — `images.py` ne sait pas quelle porte il a prise.
 
-CE QUI CHANGE VRAIMENT
-======================
-| | AI Studio | Vertex |
-|---|---|---|
-| Adresse | `generativelanguage.googleapis.com` | `aiplatform.googleapis.com` |
-| Identification | `?key=` dans l'URL | `Authorization: Bearer` |
-| Portée | la clé | un projet et une région |
-| Durée de vie | la clé | un jeton d'une heure, renouvelé |
+UNE SEULE ADRESSE, DEUX JUSTIFICATIFS
+=====================================
+Ce module a d'abord porté deux « modes » : `express` (clé d'API, adresse
+globale sans projet) et `projet` (jeton OAuth, adresse portée par un projet).
+C'était une supposition, et elle était fausse. Cinq sondes contre l'API réelle
+(`docs/etude-vertex.md`, section 3) :
 
-Un jeton qui expire est la seule vraie différence de fond : une clé d'API se
-lit une fois et sert toujours, un jeton se redemande. Il est donc résolu à
-chaque appel et mis en cache jusqu'à un peu avant son échéance — sur cent
-images d'un documentaire, redemander un jeton à chaque fois serait cent
-aller-retours pour rien, et n'en redemander jamais ferait échouer la
-soixantième.
+    v1/publishers/…/{m}:generateContent                      clé  → 200
+    v1/projects/{P}/locations/global/publishers/…  ?key=     clé  → 200
+    v1/projects/{P}/locations/global/publishers/…  en-tête   clé  → 200
 
-D'OÙ VIENT LE JETON
-===================
-Deux chemins, essayés dans cet ordre, et aucun des deux n'est une dépendance
-obligatoire du projet :
+**Une clé d'API porte un projet.** Il n'y a donc pas deux modes mais une seule
+adresse et deux façons de présenter ses papiers. Le `mode` a disparu : ce qui
+reste est de savoir si l'on connaît le projet, et avec quoi l'on s'identifie.
+
+La clé voyage en **en-tête** `x-goog-api-key` et non en `?key=`. Les deux
+rendent 200 ; un secret dans une URL est recopié par chaque journal de proxy
+sur le trajet, un en-tête ne l'est pas.
+
+LA RÉGION
+=========
+`global` est le défaut. `us-central1` a été sondée et rend `NOT_FOUND` sur le
+modèle essayé — la requête était bien identifiée, c'est le couple modèle ×
+région qui n'existe pas. Un modèle n'est pas publié partout.
+
+D'OÙ VIENT LE JUSTIFICATIF
+==========================
+Une clé d'abord si elle est là, un jeton sinon. L'ordre n'est pas un jugement
+de valeur : une clé posée dans l'environnement est un geste explicite, alors
+qu'un jeton peut venir d'un `gcloud auth login` oublié ou du serveur de
+métadonnées d'une machine. L'explicite l'emporte sur l'ambiant.
+
+Une clé est un secret durable qui ouvre le quota du projet ; un jeton expire
+seul et se rattache à des rôles. Pour produire, le jeton vaut mieux — mais
+c'est un conseil, pas une contrainte du code.
+
+Le jeton est mis en cache jusqu'à un peu avant son échéance : sur cent images
+d'un documentaire, le redemander à chaque fois serait cent aller-retours pour
+rien, et ne jamais le redemander ferait échouer la soixantième. Deux chemins,
+essayés dans cet ordre, et aucun des deux n'est une dépendance obligatoire :
 
 1. **`google-auth`**, s'il est installé : identifiants par défaut de
    l'application (compte de service via `GOOGLE_APPLICATION_CREDENTIALS`, ou
@@ -88,37 +108,12 @@ MODELES_CANDIDATS = (
 
 TIMEOUT = 30.0
 
-#: Deux façons de s'identifier, et le choix dépend d'où l'on est.
-#:
-#: `projet`  — un jeton OAuth, porté par un projet et une région. C'est le
-#:             mode de production : rien à copier nulle part, le jeton est
-#:             obtenu à la demande et expire tout seul.
-#: `express` — une clé d'API, sans projet ni région dans l'adresse. Utile là
-#:             où `gcloud` n'a pas de session interactive — une machine de
-#:             build, un conteneur — parce qu'une clé se pose dans
-#:             l'environnement alors qu'un `gcloud auth login` ne se fait pas.
-#:
-#: Une clé est un secret durable qui donne accès au quota du projet. Elle vaut
-#: pour un essai ; pour produire, le jeton vaut mieux.
-MODES = ("projet", "express")
-
 
 class VertexError(RuntimeError):
     pass
 
 
-def mode() -> str:
-    valeur = str(config.get("visuels", "generation", "vertex", "mode",
-                            default="projet")).strip() or "projet"
-    if valeur not in MODES:
-        raise VertexError(
-            f"`visuels.generation.vertex.mode` vaut {valeur!r} — attendu "
-            f"{' ou '.join(MODES)}."
-        )
-    return valeur
-
-
-#: Les noms sous lesquels on accepte la clé express.
+#: Les noms sous lesquels on accepte la clé.
 #:
 #: Plusieurs, et c'est délibéré : ce secret est posé à la main dans
 #: l'environnement d'une machine, souvent par quelqu'un qui ne lit pas le
@@ -129,21 +124,23 @@ def mode() -> str:
 NOMS_CLE = ("VERTEX_API_KEY", "GOOGLE_CLOUD_KEY", "GOOGLE_API_KEY")
 
 
-def cle_express() -> str:
+def cle() -> str | None:
+    """La clé d'API, ou `None`. Son absence n'est pas une erreur : c'est le
+    cas normal d'une machine qui s'identifie par un jeton."""
     for nom in NOMS_CLE:
-        cle = os.environ.get(nom, "").strip()
-        if cle:
-            return cle
-    raise VertexError(
-        "clé d'API absente, et `vertex.mode` vaut `express`.\n"
-        f"  · noms acceptés : {', '.join(NOMS_CLE)}\n"
-        "  · la créer : console Google Cloud → API et services → "
-        "Identifiants → Clé d'API\n"
-        "  · la restreindre à l'API Vertex AI\n"
-        "  · en session distante : la poser en variable d'environnement sur "
-        "l'environnement, jamais dans une conversation. Une variable ajoutée "
-        "à un environnement n'atteint que les sessions DÉMARRÉES ENSUITE."
-    )
+        valeur = os.environ.get(nom, "").strip()
+        if valeur:
+            return valeur
+    return None
+
+
+def porteur_de_cle() -> str | None:
+    """Le NOM de la variable qui porte la clé — jamais son contenu.
+
+    C'est l'information utile quand trois noms conviennent, et elle
+    s'affiche sans rien révéler.
+    """
+    return next((n for n in NOMS_CLE if os.environ.get(n, "").strip()), None)
 
 
 def region() -> str:
@@ -159,11 +156,16 @@ def racine() -> str:
     return f"https://{hote}/v1"
 
 
-def projet() -> str:
-    """L'identifiant du projet Google Cloud qui sera facturé.
+def projet() -> str | None:
+    """L'identifiant du projet Google Cloud, ou `None` si on l'ignore.
 
     Il vient de l'environnement et jamais du dépôt : c'est une donnée de
     compte, comme une clé. `fresque.config.yaml` est versionné.
+
+    Son absence n'est PAS une erreur. Mesuré : l'adresse globale, sans projet,
+    rend 200 avec une clé — le serveur retrouve le projet depuis la clé. Le
+    connaître ne sert qu'à le rendre explicite dans l'URL, ce qui vaut mieux
+    quand on veut lire ses journaux, mais ne conditionne rien.
     """
     for nom in ("VERTEX_PROJECT", "GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT"):
         valeur = os.environ.get(nom, "").strip()
@@ -180,12 +182,7 @@ def projet() -> str:
             return str(decouvert)
     except Exception:  # noqa: BLE001 — l'absence de la lib est un cas normal
         pass
-
-    raise VertexError(
-        "projet Google Cloud inconnu.\n"
-        "  · le mettre dans .env : VERTEX_PROJECT=mon-projet\n"
-        "  · ou `gcloud config set project mon-projet`"
-    )
+    return None
 
 
 #: (jeton, échéance). Process-wide, comme le template actif : une commande
@@ -281,15 +278,32 @@ def jeton(force: bool = False) -> str:
 
 
 def entetes() -> dict[str, str]:
-    return {"Authorization": f"Bearer {jeton()}",
-            "Content-Type": "application/json"}
+    """De quoi s'identifier : une clé si elle est là, un jeton sinon.
+
+    La clé part en en-tête `x-goog-api-key`, jamais en `?key=`. Les deux
+    rendent 200 (mesuré) ; un secret dans une URL est recopié par chaque
+    journal de proxy sur le trajet, un en-tête ne l'est pas.
+    """
+    papiers = {"Content-Type": "application/json"}
+    trouvee = cle()
+    if trouvee:
+        papiers["x-goog-api-key"] = trouvee
+    else:
+        papiers["Authorization"] = f"Bearer {jeton()}"
+    return papiers
 
 
 def url_modele(modele: str, methode: str = "generateContent") -> str:
-    if mode() == "express":
-        # Ni projet ni région dans l'adresse : la clé porte les deux.
+    """L'adresse du modèle, portée par le projet quand on le connaît.
+
+    Sans projet, l'adresse globale fait le même travail — le serveur le
+    retrouve depuis le justificatif. Le nommer ne change pas la réponse ;
+    ça rend seulement l'appel lisible dans les journaux.
+    """
+    identifiant = projet()
+    if not identifiant:
         return f"{racine()}/publishers/google/models/{modele}:{methode}"
-    return (f"{racine()}/projects/{projet()}/locations/{region()}"
+    return (f"{racine()}/projects/{identifiant}/locations/{region()}"
             f"/publishers/google/models/{modele}:{methode}")
 
 
@@ -297,27 +311,25 @@ def acces(modele: str, methode: str = "generateContent"
           ) -> tuple[str, dict[str, str], dict[str, str]]:
     """(adresse, en-têtes, paramètres) — tout ce que Vertex impose.
 
-    Rendu d'un bloc pour que `images.py` n'ait pas à savoir qu'il existe deux
-    modes : c'est exactement la même raison qui lui fait ignorer qu'il existe
-    deux fournisseurs.
+    Rendu d'un bloc pour qu'`images.py` n'ait à connaître ni le projet, ni la
+    région, ni la façon dont on s'identifie : la même raison qui lui fait
+    ignorer qu'il existe deux fournisseurs.
     """
-    if mode() == "express":
-        return (url_modele(modele, methode),
-                {"Content-Type": "application/json"},
-                {"key": cle_express()})
     return url_modele(modele, methode), entetes(), {}
 
 
-def _url_region() -> str:
-    """La fiche de la région, dans le projet. Gratuite, et elle prouve le
-    jeton, le projet, la région et l'activation de l'API d'un seul coup."""
-    return f"{racine()}/projects/{projet()}/locations/{region()}"
+def _url_region() -> str | None:
+    """La fiche de la région dans le projet, quand il y a un projet.
+
+    Gratuite, et elle prouve d'un coup le justificatif, le projet, la région
+    et l'activation de l'API.
+    """
+    identifiant = projet()
+    return f"{racine()}/projects/{identifiant}/locations/{region()}" \
+        if identifiant else None
 
 
 def _sonde(session: requests.Session, url: str) -> requests.Response:
-    """Un GET identifié, quel que soit le mode."""
-    if mode() == "express":
-        return session.get(url, params={"key": cle_express()}, timeout=TIMEOUT)
     return session.get(url, headers=entetes(), timeout=TIMEOUT)
 
 
@@ -364,11 +376,25 @@ def modeles_image(session: requests.Session | None = None) -> list[str]:
     """
     http = session or requests.Session()
 
-    # En mode express il n'y a ni projet ni région dans l'adresse : cette
-    # première vérification n'a rien à vérifier et serait un 404 trompeur.
-    if mode() != "express":
+    # Une clé d'API n'a pas cours sur la route des fiches de modèle : mesuré,
+    # elle y rend 401 `CREDENTIALS_MISSING` sur `GetPublisherModel`. C'est une
+    # propriété de cette route, pas un défaut de la clé — et ça veut dire
+    # qu'avec une clé, il n'existe aucune vérification gratuite.
+    if cle():
+        raise VertexError(
+            "aucune vérification gratuite n'est possible avec une clé d'API.\n"
+            "  La route des fiches de modèle n'accepte qu'un jeton OAuth ; "
+            "mesuré, elle rend 401 `CREDENTIALS_MISSING` avec une clé.\n"
+            "  · le seul essai concluant est une génération : "
+            "`fresque essai-image \"...\"`\n"
+            "  · ou s'identifier par un jeton — `gcloud auth "
+            "application-default login` — et relancer cette commande."
+        )
+
+    adresse = _url_region()
+    if adresse:
         try:
-            reponse = http.get(_url_region(), headers=entetes(), timeout=TIMEOUT)
+            reponse = http.get(adresse, headers=entetes(), timeout=TIMEOUT)
         except requests.RequestException as erreur:
             raise VertexError(f"{racine()} injoignable : {erreur}") from erreur
         if reponse.status_code in (401, 403, 404):
@@ -404,17 +430,6 @@ def modeles_image(session: requests.Session | None = None) -> list[str]:
     detail = "\n  ".join(refus)
 
     if codes <= {"401", "403"}:
-        if mode() == "express":
-            raise VertexError(
-                "la fiche publique d'un modèle n'accepte pas une clé d'API : "
-                "les quatre sondes rendent 401.\n  " + detail
-                + "\n\n  Ce n'est PAS un échec de la clé — elle n'a simplement "
-                  "pas cours sur cette route, qui attend un jeton OAuth.\n"
-                  "  En mode `express`, il n'existe donc aucune vérification "
-                  "gratuite : le seul essai concluant est une génération.\n"
-                  "  · `fresque essai-image \"...\"` — une image, quelques "
-                  "centimes."
-            )
         raise VertexError(
             "jeton refusé sur les fiches de modèle (401/403).\n  " + detail
             + "\n  · le jeton a-t-il la portée `cloud-platform` ?"
@@ -429,10 +444,11 @@ def modeles_image(session: requests.Session | None = None) -> list[str]:
 
 
 def etat() -> dict[str, Any]:
-    """De quoi afficher où l'on en est sans rien générer."""
-    if mode() == "express":
-        # On confirme qu'une clé existe sans jamais en montrer un caractère.
-        porteur = next((n for n in NOMS_CLE if os.environ.get(n)), None)
-        return {"mode": "express", "cle": porteur, "racine": racine()}
-    return {"mode": "projet", "projet": projet(), "region": region(),
+    """Ce qui va réellement se passer, sans rien générer ni rien révéler.
+
+    On nomme la variable qui porte la clé, jamais son contenu : cet état est
+    imprimé avant chaque génération et finirait sinon recopié dans
+    `journal/`, qui est un fichier du projet.
+    """
+    return {"cle": porteur_de_cle(), "projet": projet(), "region": region(),
             "racine": racine()}
