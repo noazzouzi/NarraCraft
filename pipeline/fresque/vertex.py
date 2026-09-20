@@ -113,18 +113,32 @@ def mode() -> str:
     return valeur
 
 
+#: Les noms sous lesquels on accepte la clé express.
+#:
+#: Plusieurs, et c'est délibéré : ce secret est posé à la main dans
+#: l'environnement d'une machine, souvent par quelqu'un qui ne lit pas le
+#: code juste avant. Un nom qui ne correspond pas rend « clé absente » alors
+#: que la clé est là — le pire message possible, parce qu'il envoie la
+#: chercher du côté de Google. Le projet suit déjà la même règle pour son
+#: identifiant (`projet()`).
+NOMS_CLE = ("VERTEX_API_KEY", "GOOGLE_CLOUD_KEY", "GOOGLE_API_KEY")
+
+
 def cle_express() -> str:
-    cle = os.environ.get("VERTEX_API_KEY", "").strip()
-    if not cle:
-        raise VertexError(
-            "VERTEX_API_KEY absente, et `vertex.mode` vaut `express`.\n"
-            "  · la créer : console Google Cloud → API et services → "
-            "Identifiants → Clé d'API\n"
-            "  · la restreindre à l'API Vertex AI\n"
-            "  · en session distante : la poser en variable d'environnement "
-            "sur l'environnement, jamais dans une conversation"
-        )
-    return cle
+    for nom in NOMS_CLE:
+        cle = os.environ.get(nom, "").strip()
+        if cle:
+            return cle
+    raise VertexError(
+        "clé d'API absente, et `vertex.mode` vaut `express`.\n"
+        f"  · noms acceptés : {', '.join(NOMS_CLE)}\n"
+        "  · la créer : console Google Cloud → API et services → "
+        "Identifiants → Clé d'API\n"
+        "  · la restreindre à l'API Vertex AI\n"
+        "  · en session distante : la poser en variable d'environnement sur "
+        "l'environnement, jamais dans une conversation. Une variable ajoutée "
+        "à un environnement n'atteint que les sessions DÉMARRÉES ENSUITE."
+    )
 
 
 def region() -> str:
@@ -387,7 +401,7 @@ def etat() -> dict[str, Any]:
     """De quoi afficher où l'on en est sans rien générer."""
     if mode() == "express":
         # On confirme qu'une clé existe sans jamais en montrer un caractère.
-        return {"mode": "express", "cle": bool(os.environ.get("VERTEX_API_KEY")),
-                "racine": racine()}
+        porteur = next((n for n in NOMS_CLE if os.environ.get(n)), None)
+        return {"mode": "express", "cle": porteur, "racine": racine()}
     return {"mode": "projet", "projet": projet(), "region": region(),
             "racine": racine()}

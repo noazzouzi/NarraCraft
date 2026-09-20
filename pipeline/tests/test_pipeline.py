@@ -2870,13 +2870,26 @@ def test_express_state_never_shows_the_key(monkeypatch):
     monkeypatch.setenv("VERTEX_API_KEY", "SECRET-À-NE-PAS-ÉCRIRE")
     rendu = str(vertex_mod.etat())
     assert "SECRET" not in rendu
-    assert "'cle': True" in rendu
+    # On nomme la variable qui la porte, ce qui est l'information utile
+    # quand plusieurs noms sont acceptés.
+    assert "VERTEX_API_KEY" in rendu
 
 
 def test_a_missing_express_key_says_not_to_paste_it_in_a_conversation(monkeypatch):
     monkeypatch.setattr(vertex_mod.config, "get",
                         lambda *k, default=None: "express"
                         if k[-1] == "mode" else default)
-    monkeypatch.delenv("VERTEX_API_KEY", raising=False)
+    for nom in vertex_mod.NOMS_CLE:
+        monkeypatch.delenv(nom, raising=False)
     with pytest.raises(vertex_mod.VertexError, match="jamais dans une conversation"):
         vertex_mod.cle_express()
+
+
+def test_the_key_is_accepted_under_the_names_people_actually_use(monkeypatch):
+    """Un nom qui ne correspond pas rend « clé absente » alors que la clé est
+    là — le pire message possible, parce qu'il envoie la chercher du côté de
+    Google. Relevé en vrai : la clé avait été nommée GOOGLE_CLOUD_KEY."""
+    for nom in vertex_mod.NOMS_CLE:
+        monkeypatch.delenv(nom, raising=False)
+    monkeypatch.setenv("GOOGLE_CLOUD_KEY", "CLE")
+    assert vertex_mod.cle_express() == "CLE"

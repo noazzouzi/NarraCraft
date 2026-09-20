@@ -226,8 +226,10 @@ def _porte() -> str:
     except vertex_mod.VertexError as error:
         return f"Fournisseur : Vertex AI — ⚠ {error}"
     if etat["mode"] == "express":
+        # On nomme la variable qui porte la clé, jamais son contenu : savoir
+        # LAQUELLE a été lue est ce qui manque quand trois noms sont acceptés.
         return ("Fournisseur : Vertex AI · mode express · clé "
-                + ("présente" if etat["cle"] else "ABSENTE"))
+                + (f"lue dans {etat['cle']}" if etat["cle"] else "ABSENTE"))
     return (f"Fournisseur : Vertex AI · projet {etat['projet']} "
             f"· région {etat['region']}")
 
