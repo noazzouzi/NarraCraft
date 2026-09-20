@@ -71,6 +71,7 @@ Les étapes mécaniques s'appellent aussi à la main, sur n'importe quel projet 
 python -m fresque align  <slug>   # timings estimés, sans audio
 python -m fresque shots  <slug>   # valider le plan visuel
 python -m fresque voice  <slug>   # voix Kokoro + timings réels
+python -m fresque aligner <slug>  # position réelle de chaque mot (local)
 python -m fresque fetch  <slug>   # sourcer les archives libres
 python -m fresque timeline <slug> # construire le montage
 python -m fresque render <slug>   # produire le mp4
@@ -109,14 +110,21 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 3a | Voix off Kokoro, durées réelles | fait |
 | 4b | Sourcing Wikimedia Commons + Openverse | fait, vérifié en réel |
 | 4c | Génération d'images Gemini | à venir |
-| 3b | Alignement forcé mot-à-mot | à venir |
+| 3b | Alignement forcé mot-à-mot | fait, vérifié en réel |
 | 6 | Motion graphics : cartes, unes de journaux, archives | à venir |
 | 7 | Page de validation, miniature, export vers éditeur | à venir |
 
-Les durées de beat sont désormais **mesurées sur l'audio Kokoro**, donc les
-coupes tombent exactement là où la narration change. Seule la position d'un
-mot à l'intérieur d'un beat reste estimée, ce qui n'affecte que les
-sous-titres.
+Les durées de beat sont **mesurées sur l'audio Kokoro**, et depuis
+`fresque aligner` la position de chaque mot l'est aussi. L'écart valait la
+peine : l'estimation syllabique tombait à 305 ms de la position réelle en
+médiane, et jusqu'à 1,7 s. L'aligneur tourne en local, gratuitement.
+
+`torch` et `torchaudio` sont **optionnels** — sans eux, le pipeline garde
+les positions estimées et tout le reste fonctionne :
+
+```bash
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
 
 Le sourcing Wikimedia tourne contre l'API réelle : 8 plans sur 8 sourcés,
 licences libres uniquement, sans dépasser les limites de débit du service.

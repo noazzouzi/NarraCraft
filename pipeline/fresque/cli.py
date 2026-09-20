@@ -485,6 +485,47 @@ def cmd_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_aligner(args: argparse.Namespace) -> int:
+    from . import align as align_mod, aligner as aligner_mod
+
+    project = Project.open(args.slug)
+    if not project.alignment.is_file():
+        return _fail("alignment.json manquant — lancer `voice` d'abord.")
+    script = script_parser.parse(project.script)
+    precedent = align_mod.load(project.alignment)
+
+    try:
+        bases = aligner_mod.bases_depuis(precedent)
+        resultat = aligner_mod.force(
+            script, project.audio_dir, bases,
+            report=print if args.verbeux else None,
+        )
+    except aligner_mod.AlignError as erreur:
+        return _fail(str(erreur))
+
+    align_mod.write(resultat, project.alignment)
+    print(f"✓ {project.alignment.relative_to(config.repo_root())} · "
+          f"source `{resultat['source']}`")
+    print(f"  {resultat['nb_mots']} mots sur {resultat['nb_beats']} beats · "
+          f"{align_mod.format_duration(resultat['duree_totale_s'])}")
+    print(f"  confiance la plus basse : {resultat['confiance_min']:.2f}")
+
+    suspects = resultat["mots_invraisemblables"]
+    if suspects:
+        print(f"\n  {len(suspects)} mot(s) posé(s) à une durée invraisemblable — "
+              "soit le texte ne correspond pas à ce qui a été dit, soit la "
+              "voix a avalé le mot :")
+        for entree in suspects[:10]:
+            print(f"    {entree['beat']}  {entree['mot']:<22} "
+                  f"{entree['duree_s']:.2f} s / {entree['syllabes']} syll "
+                  f"= {entree['s_par_syllabe']:.3f}")
+    else:
+        print("  aucun mot posé à une durée invraisemblable.")
+    for ligne in resultat["beats_non_alignes"]:
+        print(f"  ⚠ {ligne}")
+    return 0
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     from . import export as export_mod
 
@@ -644,6 +685,10 @@ def main(argv: list[str] | None = None) -> int:
     render_cmd.add_argument(
         "--crf", type=int, default=None, help="qualité d'encodage (défaut : config)"
     )
+    aligner_cmd = add(
+        "aligner", "Mesurer la position de chaque mot dans l'audio", cmd_aligner)
+    aligner_cmd.add_argument(
+        "--verbeux", action="store_true", help="afficher beat par beat")
     add("status", "État d'avancement du projet", cmd_status)
     add("review", "Construire la page de validation du projet", cmd_review)
 

@@ -112,12 +112,22 @@ le champ `source` dit toujours d'où viennent les nombres :
 |---|---|---|---|
 | `estimate` | estimées | estimées | nul, sans audio |
 | `kokoro` | **mesurées sur l'audio** | estimées par syllabes | nul, local |
-| `forced` | mesurées | mesurées | alignement forcé |
+| `forced` | mesurées | **mesurées** | local, gratuit |
 
 `kokoro` mesure la longueur réelle de la forme d'onde produite — ce n'est pas
 un timestamp rapporté par le moteur. Les coupes du montage tombent donc au bon
-endroit dès maintenant ; seule la position d'un mot *à l'intérieur* d'un beat
+endroit dès `voice` ; seule la position d'un mot *à l'intérieur* d'un beat
 reste approchée, ce qui n'affecte que les sous-titres.
+
+`fresque aligner` remplace cette approximation par une mesure. L'écart
+n'était pas anecdotique : relevé sur un montage réel, la position estimée
+d'un mot tombait à **305 ms** de sa position réelle en médiane, et jusqu'à
+1,7 s. Quatre mots sur cinq étaient décalés de plus de 150 ms. Un
+surlignage mot à mot ne tient pas là-dessus.
+
+L'aligneur tourne en local (modèle MMS, 1,2 Go, téléchargé une fois) et ne
+coûte rien. `torch` et `torchaudio` restent **optionnels** : sans eux le
+pipeline tourne en `kokoro`, comme avant.
 
 ## Templates
 

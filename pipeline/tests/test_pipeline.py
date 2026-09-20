@@ -2136,3 +2136,69 @@ def test_a_single_sentence_beat_is_not_split():
     texte = "Une seule phrase, avec une virgule."
     voice_mod._say_beat(FauxKokoro(), texte, "ff_siwis", 0.75, "fr-fr", 0.70)
     assert appels == [texte]
+
+
+# --- Alignement forcé --------------------------------------------------------
+#
+# Le modèle pèse 1,2 Go : ce qui est testé ici est tout ce qui l'entoure —
+# la préparation du texte, et la règle qui décide qu'un mot est mal posé.
+
+def test_french_numbers_are_spelled_the_way_the_voice_said_them():
+    """L'aligneur ne connaît que `a-z`. Un nombre doit donc être écrit en
+    lettres — et en français, pas en calquant l'anglais : il n'y a ni
+    dizaine à 70 ni à 90."""
+    from fresque.aligner import en_lettres
+
+    assert en_lettres(16) == "seize"
+    assert en_lettres(17) == "dix sept"
+    assert en_lettres(21) == "vingt et un"
+    assert en_lettres(71) == "soixante onze"
+    assert en_lettres(80) == "quatre vingt"
+    assert en_lettres(81) == "quatre vingt un"      # pas « quatre vingt et un »
+    assert en_lettres(93) == "quatre vingt treize"
+    assert en_lettres(99) == "quatre vingt dix neuf"
+    assert en_lettres(1986) == "mille neuf cent quatre vingt six"
+    assert en_lettres(2025) == "deux mille vingt cinq"
+
+
+def test_a_number_becomes_several_alignment_tokens():
+    """« 2025 » occupe quatre mots d'audio. Lui donner un seul jeton — ou un
+    joker — jetterait presque une seconde de son."""
+    from fresque.aligner import jetons
+
+    assert jetons("2025") == ["deux", "mille", "vingt", "cinq"]
+    assert jetons("l'exécution") == ["l'execution"]   # accents dépouillés
+    assert jetons("après-midi") == ["apres", "midi"]
+    assert jetons("Sarkozy") == ["sarkozy"]
+
+
+def test_the_model_score_is_not_used_to_detect_errors():
+    """Mesuré : « Le vingt-cinq septembre » écrit en toutes lettres score
+    0,250 sur « vingt », aussi bas que la version en chiffres (0,278), alors
+    que les deux sont parfaitement placées. Le modèle aligne des lettres, et
+    le g et le t de « vingt » sont muets.
+
+    Un seuil absolu signalait donc du français normal. Ce module ne doit
+    plus en exposer un.
+    """
+    from fresque import aligner as aligner_mod
+
+    assert not hasattr(aligner_mod, "SEUIL_CONFIANCE")
+    assert aligner_mod.DUREE_MIN_S < 0.05
+    bas, haut = aligner_mod.SECONDES_PAR_SYLLABE
+    # La médiane relevée sur un montage réel, 0,14 s/syllabe, doit passer.
+    assert bas < 0.14 < haut
+
+
+def test_forced_alignment_refuses_an_estimate_it_cannot_trust():
+    """`forced` promet des bornes de beat mesurées. Les prendre dans un
+    alignement estimé rendrait cette promesse fausse sans rien dire."""
+    from fresque.aligner import AlignError, bases_depuis
+
+    with pytest.raises(AlignError, match="estimées"):
+        bases_depuis({"source": "estimate", "beats": []})
+
+    mesure = {"source": "kokoro",
+              "beats": [{"id": "B001", "debut_s": 0.0},
+                        {"id": "B002", "debut_s": 4.25}]}
+    assert bases_depuis(mesure) == {"B001": 0.0, "B002": 4.25}
