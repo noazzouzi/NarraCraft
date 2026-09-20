@@ -3040,10 +3040,8 @@ import re  # noqa: E402
 # ne jugent pas la prose, ils empêchent deux artefacts de diverger.
 # --------------------------------------------------------------------------
 
-#: Le fichier est passé de 1795 à ~1550 mots en changeant la moitié de son
-#: contenu — la doctrine d'étape est partie dans les skills et dans `docs/`,
-#: et le démarrage, les commandes et la carte sont entrés. Le budget laisse
-#: une cinquantaine de mots : la prochaine addition devra déplacer d'abord.
+#: Le fichier est reparti de zéro, une consigne à la fois. Le budget est haut
+#: pour laisser la reconstruction se faire ; le resserrer quand elle sera finie.
 BUDGET_MOTS_CLAUDE_MD = 1600
 
 #: Les dossiers du dépôt qu'un chemin cité peut désigner. `projects/` en est
