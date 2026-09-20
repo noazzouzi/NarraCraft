@@ -37,8 +37,13 @@ export const Journal: React.FC<{
   date: string;
   titre: string;
   chapeau?: string;
+  /** Frame — relative au plan — où la narration dit le titre. Calculée par
+   *  `timeline._motion_calee`. Absente, le titre n'est pas surligné : une
+   *  une de journal se lit très bien sans, et un balayage qui tombe au
+   *  hasard ne démontre rien. */
+  surligne_frame?: number;
   style: MotionStyle;
-}> = ({ journal, date, titre, chapeau, style }) => {
+}> = ({ journal, date, titre, chapeau, surligne_frame, style }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -48,6 +53,14 @@ export const Journal: React.FC<{
   });
   const gros = interpolate(
     frame, [fps * 0.55, fps * 1.25], [0, 1],
+    { easing: EASE_OUT, extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
+
+  // Le surligneur, s'il a un instant à respecter. C'est ce qui distingue
+  // une une posée d'une une qu'on lit AVEC le spectateur : le trait passe
+  // sur le titre au moment exact où la voix le dit.
+  const balayage = surligne_frame === undefined ? 0 : interpolate(
+    frame, [surligne_frame, surligne_frame + fps * 0.75], [0, 1],
     { easing: EASE_OUT, extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
 
@@ -91,6 +104,7 @@ export const Journal: React.FC<{
 
         <div
           style={{
+            position: "relative",
             fontSize: 82,
             lineHeight: 1.08,
             fontWeight: 800,
@@ -101,7 +115,21 @@ export const Journal: React.FC<{
             transform: `translateY(${(1 - gros) * 14}px)`,
           }}
         >
-          {titre}
+          {balayage > 0 ? (
+            <div
+              style={{
+                position: "absolute",
+                left: -12,
+                top: 2,
+                bottom: 2,
+                width: `${balayage * 100}%`,
+                maxWidth: "calc(100% + 24px)",
+                backgroundColor: style.accent,
+                opacity: 0.3,
+              }}
+            />
+          ) : null}
+          <span style={{ position: "relative" }}>{titre}</span>
         </div>
 
         {chapeau ? (

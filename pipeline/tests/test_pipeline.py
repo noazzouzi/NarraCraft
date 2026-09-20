@@ -2300,3 +2300,85 @@ def test_the_renderer_is_told_the_measured_colours():
     assert montage["sous_titres"]["surlignage"]["actif"] is True
     assert montage["sous_titres"]["voile"] is False
     assert 90 <= montage["sous_titres"]["ligne_de_base_pct"] <= 92
+
+
+# --- Surligneur calé sur la narration ---------------------------------------
+
+def test_a_highlight_fires_when_the_voice_says_the_line():
+    """Le balayage partait à un instant fixe après l'arrivée du panneau —
+    1,2 s, quel que soit le texte. Il s'allumait donc rarement au moment où
+    la voix disait la ligne. Le plan visuel déclare QUOI ; le code calcule
+    QUAND, depuis `alignment.json`."""
+    from fresque.timeline import _instant_de
+
+    mots = [{"t": "Le", "debut_s": 26.28}, {"t": "tribunal", "debut_s": 26.44},
+            {"t": "ordonne", "debut_s": 26.90}, {"t": "l'exécution", "debut_s": 27.30}]
+
+    assert _instant_de("Le tribunal ordonne", mots) == 26.28
+    assert _instant_de("tribunal ordonne", mots) == 26.44
+    # Les accents et la casse ne doivent pas faire échouer un rapprochement.
+    assert _instant_de("LE TRIBUNAL", mots) == 26.28
+    # Introuvable -> None, jamais un instant inventé.
+    assert _instant_de("la cour d'appel", mots) is None
+
+
+def test_an_unresolved_highlight_is_reported_not_guessed():
+    """Une phrase qui ne se retrouve pas est presque toujours une faute de
+    frappe du plan visuel. On le dit au checkpoint."""
+    from fresque.timeline import _motion_calee, check
+
+    shot = Shot(index=5, beat="B003", type="motion", intention="i",
+                motion={"kind": "document", "lignes": ["a"],
+                        "surligne_a": "la cour d'appel"})
+    beat = {"id": "B003", "mots": [{"t": "Le", "debut_s": 1.0}]}
+    introuvables: list[str] = []
+
+    motion = _motion_calee(shot, beat, debut_frame=0, fps=30,
+                           introuvables=introuvables)
+    assert "surligne_frame" not in motion
+    assert introuvables and "S005" in introuvables[0]
+
+    problemes = check({"clips": [], "fps": 30, "duree_frames": 0,
+                       "surligne_introuvables": introuvables})
+    assert any("surligne_a" in p for p in problemes)
+
+
+def test_the_highlight_frame_is_relative_to_its_shot():
+    """Une séquence Remotion compte à partir de zéro : la frame absolue de
+    la narration doit être ramenée au début du plan."""
+    from fresque.timeline import _motion_calee
+
+    shot = Shot(index=5, beat="B003", type="motion", intention="i",
+                motion={"kind": "document", "lignes": ["a"],
+                        "surligne_a": "Le tribunal"})
+    beat = {"id": "B003", "mots": [{"t": "Le", "debut_s": 26.28},
+                                   {"t": "tribunal", "debut_s": 26.44}]}
+
+    motion = _motion_calee(shot, beat, debut_frame=644, fps=30, introuvables=[])
+    assert motion["surligne_frame"] == round(26.28 * 30) - 644
+
+
+def test_a_highlight_cue_only_belongs_on_a_panel_that_can_use_it(tmp_path, script):
+    from fresque.shots import ShotsError, load as load_shots
+
+    def fichier(motion):
+        chemin = tmp_path / f"s{abs(hash(str(motion)))}.json"
+        chemin.write_text(json.dumps({"shots": [
+            {"beat": b.id, "type": "motion", "intention": "i",
+             "mouvement": "static", "motion": motion}
+            for b in script.beats
+        ]}, ensure_ascii=False), encoding="utf-8")
+        return chemin
+
+    ids = [b.id for b in script.beats]
+    # Un chiffre n'a pas de ligne à surligner.
+    with pytest.raises(ShotsError, match="surligne_a"):
+        load_shots(fichier({"kind": "chiffre", "valeur": "5", "libelle": "ans",
+                            "surligne_a": "Le tribunal"}), ids)
+    # Un mot seul se retrouve trop souvent ailleurs dans le beat.
+    with pytest.raises(ShotsError, match="deux mots"):
+        load_shots(fichier({"kind": "document", "lignes": ["a"],
+                            "surligne_a": "tribunal"}), ids)
+    # Et un document correctement annoté passe.
+    load_shots(fichier({"kind": "document", "lignes": ["a"],
+                        "surligne_a": "Le tribunal"}), ids)

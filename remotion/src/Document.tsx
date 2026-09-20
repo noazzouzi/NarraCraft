@@ -25,9 +25,13 @@ export const Document: React.FC<{
   reference?: string;
   lignes: string[];
   surligne?: number;
+  /** Frame — relative au plan — où la narration dit la ligne surlignée.
+   *  Calculée par `timeline._motion_calee` depuis `alignment.json`. Absente,
+   *  on garde le retard par défaut. */
+  surligne_frame?: number;
   ecriture?: string;
   style: MotionStyle;
-}> = ({ entete, reference, lignes, surligne, ecriture, style }) => {
+}> = ({ entete, reference, lignes, surligne, surligne_frame, ecriture, style }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -45,10 +49,15 @@ export const Document: React.FC<{
     extrapolateRight: "clamp",
   });
 
-  // The sweep starts once the page has settled, so the eye has somewhere to
-  // land first.
+  // Le surligneur passe quand la voix dit la ligne. À défaut d'un instant
+  // calculé, il attend que la page se pose — le comportement d'avant, gardé
+  // pour les panneaux qui ne déclarent pas `surligne_a`.
+  //
+  // Un surligneur qui balaie pendant que la voix parle d'autre chose est un
+  // ornement ; le même, calé, est une démonstration.
+  const depart = surligne_frame ?? fps * 1.2;
   const balayage = interpolate(
-    frame, [fps * 1.2, fps * 2.1], [0, 1],
+    frame, [depart, depart + fps * 0.9], [0, 1],
     { easing: EASE_OUT, extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
 

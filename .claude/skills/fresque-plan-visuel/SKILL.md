@@ -317,7 +317,8 @@ lui donner le nom d'un titre réel avec une une qu'il n'a pas publiée.
    "DÉCLARE le prévenu coupable des faits d'association de malfaiteurs ;",
    "LE CONDAMNE à la peine de cinq années d'emprisonnement ;"
  ],
- "surligne": 1}
+ "surligne": 1,
+ "surligne_a": "Le tribunal le condamne"}
 ```
 Sur un sujet judiciaire ou administratif, c'est souvent **le plan le plus
 fort disponible** : les mots exacts d'un jugement disent ce qu'aucune façade
@@ -327,6 +328,19 @@ Huit lignes maximum — un spectateur ne lit pas une page entière en huit
 secondes. `surligne` désigne l'index de la ligne qui compte, et un
 surligneur la balaie à l'écran : c'est ce qui dit où regarder avant qu'il
 ait fini de décider lui-même.
+
+**`surligne_a` décide de l'instant, et c'est ce qui fait la différence.**
+Y mettre deux ou trois mots de la narration du beat, copiés mot pour mot.
+`timeline` y retrouve la frame dans `alignment.json` et le surligneur passe
+**au moment exact où la voix dit la ligne**. Sans ce champ, le balayage part
+une seconde et demie après l'arrivée du panneau, donc presque jamais au bon
+moment — un ornement au lieu d'une démonstration.
+
+Le même champ marche sur `journal`, où il surligne le titre.
+
+Deux mots au minimum : un mot seul se retrouve trop souvent ailleurs dans
+le beat. S'il ne se retrouve pas du tout, `fresque timeline` le signale et
+le surligneur garde son retard par défaut — il ne devine jamais.
 
 `ecriture` vaut `dactylographie` (machine à écrire) ou `officiel` (papier
 administratif). Aucune police n'est embarquée, ces familles existent partout.

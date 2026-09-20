@@ -258,6 +258,7 @@ const Panneau: React.FC<{
           reference={motion.reference as string | undefined}
           lignes={motion.lignes as string[]}
           surligne={motion.surligne as number | undefined}
+          surligne_frame={motion.surligne_frame as number | undefined}
           ecriture={motion.ecriture as string | undefined}
           style={style}
         />
@@ -329,6 +330,7 @@ const Panneau: React.FC<{
           date={motion.date as string}
           titre={motion.titre as string}
           chapeau={motion.chapeau as string | undefined}
+          surligne_frame={motion.surligne_frame as number | undefined}
           style={style}
         />
       );

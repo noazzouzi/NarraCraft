@@ -262,6 +262,66 @@ def _subtitles(beat: dict[str, Any], fps: int, per_line: int,
     return lines
 
 
+def _mots_nus(texte: str) -> list[str]:
+    """Les mots d'un texte, dépouillés pour être comparables."""
+    import re
+    import unicodedata
+
+    plat = unicodedata.normalize("NFKD", texte.lower())
+    plat = "".join(c for c in plat if not unicodedata.combining(c))
+    return re.findall(r"[a-z0-9']+", plat)
+
+
+def _instant_de(phrase: str, mots: list[dict[str, Any]]) -> float | None:
+    """Quand la narration dit `phrase`, en secondes. `None` si absente.
+
+    Le plan visuel déclare une poignée de mots du beat ; on retrouve leur
+    place dans l'alignement. C'est la même division du travail que partout
+    ailleurs : le jugement dit **quoi**, le code calcule **quand**.
+
+    Le retour `None` est important. Une phrase qui ne se retrouve pas est
+    presque toujours une faute de frappe dans le plan visuel, et on préfère
+    le dire au checkpoint plutôt que de poser le surligneur au hasard.
+    """
+    cible = _mots_nus(phrase)
+    if not cible:
+        return None
+    suite = [_mots_nus(m.get("t", ""))[:1] for m in mots]
+    plats = [s[0] if s else "" for s in suite]
+
+    for debut in range(len(plats) - len(cible) + 1):
+        if plats[debut:debut + len(cible)] == cible:
+            return float(mots[debut]["debut_s"])
+    return None
+
+
+def _motion_calee(shot: Shot, beat: dict[str, Any], debut_frame: int, fps: int,
+                  introuvables: list[str]) -> dict[str, Any] | None:
+    """Le panneau du plan, avec son surligneur calé sur la narration.
+
+    `surligne_a` porte un bout du texte du beat. On en tire la frame, et on
+    la donne au moteur en relatif — il dessine un balayage à partir d'une
+    frame, il ne cherche rien dans un texte.
+
+    Sans `surligne_a`, rien n'est ajouté et le moteur garde son retard par
+    défaut. C'est ce qui permet d'adopter ce calage panneau par panneau.
+    """
+    if shot.motion is None:
+        return None
+    phrase = shot.motion.get("surligne_a")
+    if not phrase:
+        return shot.motion
+
+    instant = _instant_de(str(phrase), beat.get("mots", []))
+    if instant is None:
+        introuvables.append(f"{shot.id} : « {phrase} » absent de {beat['id']}")
+        return shot.motion
+
+    # Relatif au plan : une séquence Remotion compte à partir de zéro.
+    return {**shot.motion,
+            "surligne_frame": max(round(instant * fps) - debut_frame, 0)}
+
+
 def _recoller(lignes: list[dict[str, Any]], seuil_frames: int) -> list[dict[str, Any]]:
     """Tient une ligne jusqu'à la suivante quand le trou est un artefact.
 
@@ -311,6 +371,9 @@ def build(
 
     clips: list[dict[str, Any]] = []
     subtitles: list[dict[str, Any]] = []
+    #: Les `surligne_a` qu'on n'a pas retrouvés dans la narration. Signalés
+    #: par `check()` plutôt que corrigés en silence.
+    introuvables: list[str] = []
 
     for index, beat in enumerate(beats):
         # A beat owns the screen until the next one starts, so the inter-beat
@@ -365,7 +428,7 @@ def build(
                 # and cropping it to 16:9 costs a quarter of the height.
                 "ratio": round(width_px / height_px, 4) if height_px else None,
                 "mouvement": _movement(shot, (end_frame - start_frame) / fps),
-                "motion": shot.motion,
+                "motion": _motion_calee(shot, beat, start_frame, fps, introuvables),
                 "intention": shot.intention,
                 # A sentence burned over the image. The viewer reads it while
                 # the voice is saying something else — which is why it is
@@ -429,6 +492,10 @@ def build(
         "duree_frames": duration_frames,
         "duree_s": round(duration_frames / fps, 3),
         "source_timings": alignment.get("source", "inconnu"),
+        # Un `surligne_a` qui ne se retrouve pas dans la narration est une
+        # faute de frappe du plan visuel. On la porte jusqu'à `check()`
+        # plutôt que de poser le surligneur au hasard.
+        "surligne_introuvables": introuvables,
         "audio": audio,
         "template": config.active_template(),
         # The renderer decides nothing about how it looks: the art direction
@@ -520,6 +587,10 @@ def write(timeline: dict[str, Any], path: Path) -> None:
 def check(timeline: dict[str, Any]) -> list[str]:
     """Structural problems that would show up as visible glitches."""
     problems: list[str] = []
+    for ligne in timeline.get("surligne_introuvables", []):
+        problems.append(
+            f"{ligne} — `surligne_a` doit citer la narration du beat mot pour "
+            "mot ; le surligneur garde son retard par défaut.")
     clips = timeline["clips"]
     cursor = 0
     fps = timeline["fps"]

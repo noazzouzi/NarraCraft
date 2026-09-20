@@ -219,6 +219,40 @@ def ouverture(shots: list[Shot]) -> list[str]:
     return problems
 
 
+#: Les panneaux dont le surlignage peut être calé sur la narration.
+#: Ailleurs, `surligne_a` n'aurait rien à déclencher.
+SURLIGNABLES = ("document", "journal")
+
+
+def _valider_surligne_a(motion: dict[str, Any], where: str) -> None:
+    """`surligne_a` : à quel moment de la narration le surligneur passe.
+
+    Le balayage se déclenchait à un instant fixe après l'arrivée du
+    panneau — une seconde et demie, quel que soit le texte. La ligne
+    s'allumait donc rarement au moment où la voix la disait.
+
+    Le plan visuel déclare **quoi**, jamais **quand** : `surligne_a` porte
+    un bout de la narration du beat, et `timeline` en tire la frame depuis
+    `alignment.json`. Même règle que pour les coupes — aucun timecode ne
+    sort d'un LLM.
+    """
+    valeur = motion.get("surligne_a")
+    if valeur is None:
+        return
+    kind = motion.get("kind")
+    if kind not in SURLIGNABLES:
+        raise ShotsError(
+            f"{where} : `surligne_a` n'a de sens que sur "
+            f"{', '.join(SURLIGNABLES)}, pas sur `{kind}`."
+        )
+    if not isinstance(valeur, str) or len(valeur.split()) < 2:
+        raise ShotsError(
+            f"{where} : `surligne_a` vaut {valeur!r} — attendu au moins deux "
+            "mots de la narration du beat. Un mot seul se retrouve trop "
+            "souvent ailleurs dans le texte."
+        )
+
+
 def _validate_motion(motion: dict[str, Any] | None, where: str) -> None:
     if not motion:
         raise ShotsError(f"{where} : un plan `motion` exige un objet `motion`.")
@@ -261,6 +295,8 @@ def _validate_motion(motion: dict[str, Any] | None, where: str) -> None:
                 f"{where} : `ecriture` {ecriture!r} inconnue "
                 f"(attendu : {', '.join(sorted(ECRITURES))})."
             )
+
+    _valider_surligne_a(motion, where)
 
     if kind == "carte":
         marqueurs = motion["marqueurs"]
