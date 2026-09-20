@@ -1,75 +1,97 @@
 # Essai Vertex AI — mode express
 
 Date : 20 septembre 2026.
-Mode : `visuels.generation.provider: vertex`, `visuels.generation.vertex.mode: express`.
-Modèle demandé : `gemini-3.1-flash-image` (valeur de `visuels.generation.model`).
-Clé : présente dans `GOOGLE_CLOUD_KEY`, 53 caractères. Ni `VERTEX_API_KEY` ni
-`GOOGLE_API_KEY` n'étaient posées. La modification de `fresque.config.yaml` était
-locale et n'est pas commitée.
+Réglage : `visuels.generation.provider: vertex`,
+`visuels.generation.vertex.mode: express`. Modification locale de
+`fresque.config.yaml`, non commitée.
+Clé : présente dans `GOOGLE_CLOUD_KEY`. Ni `VERTEX_API_KEY` ni `GOOGLE_API_KEY`
+n'étaient posées. `VERTEX_PROJECT` non plus — le mode express n'en demande pas.
 
-## Aucune image n'est sortie
+**Vertex AI en mode express produit une image.** Le format demandé est honoré,
+à la grille de définition du modèle près.
 
-Les deux commandes ont échoué, et pas pour la même raison.
+## Premier passage
 
-## `fresque images --list-models`
+Deux défauts relevés, tous deux corrigés sur cette branche avant ce second
+passage :
 
-```
-$ PYTHONPATH=pipeline python3 -m fresque images --list-models
-Fournisseur : Vertex AI · mode express · clé lue dans GOOGLE_CLOUD_KEY
-✗ le projet répond, mais aucun des modèles d'image connus n'a de fiche.
-  gemini-3.1-flash-lite-image → 401
-  gemini-3.1-flash-image → 401
-  gemini-3-pro-image → 401
-  gemini-2.5-flash-image → 401
-  · les identifiants de `vertex.MODELES_CANDIDATS` ont peut-être changé.
-RETURN_CODE=1
-```
+1. `generateContent` répondait 400 — `Please use a valid role: user, model` :
+   le corps de requête n'émettait pas de champ `role` sur `contents`. Vertex
+   l'exige, AI Studio s'en passe.
+2. `fresque images --list-models` attribuait un 401 à des identifiants de
+   modèle périmés. Un 401 dit que la requête n'est pas identifiée, pas que le
+   modèle est inconnu.
 
-Les quatre fiches publiques de modèle
-(`v1beta1/publishers/google/models/<modèle>`, sondées avec `?key=`) rendent 401.
-Le message de sortie attribue l'échec à des identifiants de modèle périmés ;
-un 401 dit autre chose — la requête n'est pas identifiée. Non testé : si ces
-mêmes fiches répondent 200 avec un jeton OAuth (mode `projet`).
-
-## `fresque essai-image`
+## Second passage — la commande
 
 ```
 $ PYTHONPATH=pipeline python3 -m fresque essai-image "Photographie documentaire d'archive, un couloir de tribunal vide, lumière naturelle contrastée, grain argentique" --sortie /tmp/essai
 Fournisseur : Vertex AI · mode express · clé lue dans GOOGLE_CLOUD_KEY
 → gemini-3.1-flash-image · « Photographie documentaire d'archive, un couloir de tribunal vide, lumière naturelle contrastée, grain argentique »
-✗ gemini-3.1-flash-image a répondu 400 : {
-  "error": {
-    "code": 400,
-    "message": "Please use a valid role: user, model.",
-    "status": "INVALID_ARGUMENT"
-  }
-}
+✓ /tmp/essai/S000.png · 1960 Ko · 11.5 s
 
-real	0m0.825s
-RETURN_CODE=1
+real	0m11.840s
+RETURN_CODE=0
 ```
 
-Rien n'a été écrit : `/tmp/essai` n'existe pas.
+Un seul modèle a été appelé, celui de la config : `gemini-3.1-flash-image`.
+Aucun autre n'a été essayé — le premier a réussi.
 
-## Ce que les deux codes de retour disent
+## L'image obtenue
 
-`generateContent` répond 400, pas 401. La clé a donc été acceptée sur cet
-appel, et c'est le corps de la requête qui est refusé : Vertex exige un champ
-`role` sur chaque entrée de `contents`, que `images._corps()` n'émet pas
-(`{"contents": [{"parts": [{"text": prompt}]}]}`, `pipeline/fresque/images.py:218`).
-AI Studio, l'autre porte, s'en passe — c'est la seule divergence de corps
-observée ici, alors que le module `vertex.py` annonce un corps identique sur
-les deux portes.
+| | |
+|---|---|
+| Chemin | `/tmp/essai/S000.png` (hors dépôt, non commitée) |
+| Taille | 2 007 215 octets |
+| Dimensions | 1376 × 768 |
+| Format | PNG, 8 bits par canal, RVB, non entrelacé |
+| Temps | 11,5 s mesurés par la commande, 11,84 s de bout en bout |
+| Modèle | `gemini-3.1-flash-image` |
 
-Le 401 des fiches de modèle et le 400 de la génération ne se contredisent pas
-nécessairement : ce ne sont ni la même version d'API (`v1beta1` contre `v1`),
-ni le même verbe (GET contre POST). Je n'ai pas cherché laquelle de ces
-différences explique le 401, et je n'ai pas vérifié si la clé porte une
-restriction d'API.
+Le contenu correspond au prompt : couloir vide, dallage, portes sombres,
+lumière rasante, noir et blanc granuleux. La direction artistique préfixée
+demande « sans texte ni inscription visible » ; l'image porte deux inscriptions
+gravées sur des portes (« PORTE 14 », « 15 »). Relevé, pas creusé.
 
-## `imageConfig` et le ratio 16:9
+## `imageConfig` : honoré
 
-Non testé. Le 400 reçu ne nomme pas `imageConfig`, donc la reprise sans ce
-champ (`images._sans_image_config()`) ne s'est pas déclenchée, et aucune image
-n'a été produite. On ne sait donc pas si Vertex honore `aspectRatio: "16:9"` et
-`imageSize: "1K"`, ni quelles dimensions il rendrait.
+La config demandait `ratio: "16:9"` et `taille: "1K"`.
+
+| | |
+|---|---|
+| Ratio demandé | 16:9 = 1,7778 |
+| Ratio obtenu | 1376 / 768 = 1,7917 |
+| Écart | +0,8 % |
+
+Deux constats appuient la conclusion :
+
+- **Le champ est passé.** `images.generate()` ne réessaie sans `imageConfig`
+  que sur un 400 nommant ce champ, et le signale alors sur la sortie
+  (`pipeline/fresque/images.py:279`). Ce message n'est pas apparu : la seule
+  requête envoyée portait `aspectRatio: "16:9"` et `imageSize: "1K"`, et elle a
+  été acceptée.
+- **La sortie n'est pas un carré.** 1376 × 768 est un format paysage, et 768 de
+  haut est la définition attendue d'un « 1K » en paysage.
+
+L'écart de 0,8 % s'explique par une grille : 1376 = 43 × 32 et 768 = 24 × 32.
+Un 16:9 exact sur 768 de haut ferait 1365,33 px, qui n'est pas un multiple de
+32. Le modèle semble arrondir au multiple de 32 le plus proche. C'est une
+lecture des deux nombres obtenus, pas une règle vérifiée sur plusieurs
+définitions.
+
+Conséquence pour le montage : le cadre fait 1920 de large, l'image en fait
+1376 — elle sera agrandie d'environ ×1,40 avant le Ken Burns, qui monte lui
+jusqu'à ×1,18. Non mesuré ici.
+
+## Non testé
+
+- Le mode `projet` (jeton OAuth). Rien de ce passage ne dit s'il fonctionne.
+- `fresque images --list-models`, qui rendait quatre 401 au premier passage. La
+  commande n'a pas été relancée : on ne sait pas si elle répond autrement
+  aujourd'hui, ni pourquoi les fiches de modèle refusaient la clé alors que
+  `generateContent` l'accepte.
+- Un appel témoin sans `imageConfig`, qui aurait donné les dimensions par
+  défaut du modèle.
+- Toute autre valeur de `ratio` ou de `taille` : la grille des 32 px n'est
+  déduite que de ce seul couple de nombres.
+- Le coût réel de l'appel. Aucune facturation n'a été consultée.
