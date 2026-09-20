@@ -234,22 +234,39 @@ visuels:
       # Le projet facturé vit dans .env (VERTEX_PROJECT) et jamais ici : ce
       # fichier est versionné, un identifiant de compte n'y a pas sa place.
 
+    # Mesuré sur treize appels réels (`docs/etude-vertex.md`), même prompt,
+    # `taille: 2K` demandée :
+    #
+    #   gemini-3.1-flash-image       2752 × 1536   17,6 s   ← retenu
+    #   gemini-3-pro-image           2752 × 1536   24,1 s   mêmes pixels, plus cher
+    #   gemini-2.5-flash-image       1344 ×  768    7,0 s   ignore 2K EN SILENCE
+    #   gemini-3.1-flash-lite-image  400            0,8 s   ne dépasse pas 1K
+    #
+    # `2.5-flash` est le piège : il ne refuse pas, il rend une définition plus
+    # basse sans le dire. C'est pour ça que `images.generate()` mesure le
+    # fichier qu'il écrit au lieu de croire ce qu'il a demandé.
     model: gemini-3.1-flash-image
     ratio: "16:9"
     # Définition demandée au modèle : 512px · 1K · 2K · 4K. Vide laisse le
     # modèle décider.
     #
     # `1K` était le défaut, sur un raisonnement faux de ma part : « le cadre
-    # fait 1920 de large, donc 2K ne sert qu'à recadrer ». Mesuré sur le
-    # premier appel réel (`docs/essai-vertex.md`) — `1K` rend **1376 × 768**,
-    # pas 1920. Le montage doit donc AGRANDIR de ×1,40 avant même le Ken
-    # Burns, qui monte lui jusqu'à ×1,18 : ×1,65 au total sur une image
-    # générée. C'est visible, et c'est de la douceur payée pour rien.
+    # fait 1920 de large, donc 2K ne sert qu'à recadrer ». Le montage
+    # ne réduisait rien — il agrandissait. Mesuré sur `gemini-3.1-flash-image`,
+    # même prompt, `ratio: 16:9` :
+    #
+    #   1K   1376 ×  768    1,9 Mo   11,7 s   ×0,72 du cadre → à AGRANDIR
+    #   2K   2752 × 1536    8,6 Mo   17,6 s   ×1,43          ← retenu
+    #   4K   5504 × 3072   21,2 Mo   31,0 s   ×2,87          → jeté au montage
+    #
+    # Chaque palier double exactement les deux dimensions. Le cadre fait
+    # 1920 px et le Ken Burns monte à ×1,18, donc il faut environ 2266 px
+    # réels : `1K` est en dessous, `2K` couvre, `4K` est de la définition
+    # payée puis jetée au premier redimensionnement.
     #
     # Le format demandé est honoré à la grille du modèle près : 16:9 rend
-    # 1,7917 (1376/768), soit +0,8 %. Les deux nombres sont des multiples de
-    # 32 — le modèle semble arrondir à cette grille, observation tirée d'un
-    # seul couple de valeurs.
+    # 1,792 aux trois paliers, soit +0,8 %. Toutes les dimensions mesurées
+    # sont des multiples de 32.
     taille: "2K"
     # Préfixée à chaque prompt. Une direction artistique unique pour toute la
     # vidéo compte plus que la qualité d'une image isolée : cinq styles

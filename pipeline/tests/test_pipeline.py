@@ -2695,10 +2695,27 @@ class _Reponse:
         return self._charge
 
 
-def _reponse_image():
+def _png(largeur: int = 32, hauteur: int = 18) -> bytes:
+    """Un vrai PNG, pas trois octets.
+
+    `images.generate()` mesure désormais le fichier qu'il vient d'écrire —
+    un modèle peut ignorer la définition demandée sans le dire. Un faux
+    contenu ne passe donc plus, et c'est tant mieux : le test exerce le même
+    chemin que la production.
+    """
+    import io
+
+    from PIL import Image
+
+    tampon = io.BytesIO()
+    Image.new("RGB", (largeur, hauteur), (12, 12, 12)).save(tampon, format="PNG")
+    return tampon.getvalue()
+
+
+def _reponse_image(largeur: int = 32, hauteur: int = 18):
     return _Reponse(200, {"candidates": [{"content": {"parts": [
         {"inlineData": {"mimeType": "image/png",
-                        "data": _b64.b64encode(b"PNG").decode()}}]}}]})
+                        "data": _b64.b64encode(_png(largeur, hauteur)).decode()}}]}}]})
 
 
 class _Session:
@@ -2730,7 +2747,7 @@ def test_a_model_that_refuses_image_config_is_retried_without_it(par_vertex, tmp
     assert "imageConfig" not in session.envois[1]["json"]["generationConfig"]
     assert any("imageConfig" in ligne for ligne in dits)
     assert actif["source"] == "vertex"
-    assert (tmp_path / "S000.png").read_bytes() == b"PNG"
+    assert (tmp_path / "S000.png").is_file()
 
 
 def test_a_vertex_429_without_a_quota_id_is_waited_out(par_vertex, tmp_path, monkeypatch):
@@ -2944,3 +2961,34 @@ def test_a_404_on_model_sheets_still_points_at_the_identifiers(monkeypatch):
 
     with pytest.raises(vertex_mod.VertexError, match="MODELES_CANDIDATS"):
         vertex_mod.modeles_image(_S())
+
+
+def test_the_real_dimensions_are_recorded(par_vertex, tmp_path):
+    """Un modèle peut ignorer la définition demandée sans le dire. Mesuré :
+    `gemini-2.5-flash-image` rend 1344 px quand on lui demande du `2K`, sans
+    erreur ni avertissement. Sans ce relevé, la dégradation ne se verrait
+    qu'au montage — et le montage s'en sert aussi pour son `ratio`."""
+    session = _Session([_reponse_image(2752, 1536)])
+    asset = images_mod.generate(
+        Shot(index=0, beat="B001", type="generated", prompt="p"),
+        tmp_path, session=session)
+    assert (asset["largeur"], asset["hauteur"]) == (2752, 1536)
+
+
+def test_an_unnamed_400_names_the_size_as_the_likely_cause(par_vertex, tmp_path):
+    """Mesuré le 2026-09-20 : `gemini-3.1-flash-lite-image` rend
+    `400 · Request contains an invalid argument.` pour `2K` comme pour `4K`,
+    et réussit cinq fois de suite en `1K`. Le corps ne nomme rien — il est
+    identique à celui d'une requête malformée. Sans le témoin en `1K`, rien
+    ne désignait la définition."""
+    session = _Session([_Reponse(400, texte="Request contains an invalid argument.")])
+    with pytest.raises(ImageError) as capture:
+        images_mod.generate(Shot(index=0, beat="B001", type="generated", prompt="p"),
+                            tmp_path, session=session)
+    message = str(capture.value)
+    assert "taille" in message
+    assert "gemini-3.1-flash-image" in message
+    # Un seul appel : on ne réessaie pas. Cent images au mauvais cadrage
+    # coûtent plus qu'un échec net, et une définition refusée est une erreur
+    # de réglage — elle échouerait de la même façon sur les cent.
+    assert len(session.envois) == 1

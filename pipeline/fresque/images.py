@@ -230,14 +230,56 @@ def _corps(prompt: str, avec_image_config: bool) -> dict[str, Any]:
 
 
 def _sans_image_config(reponse: requests.Response) -> bool:
-    """Un 400 qui ne porte que sur `imageConfig`.
+    """Un 400 qui NOMME `imageConfig`.
 
-    Tous les modèles d'image ne l'acceptent pas, et l'API le dit en nommant le
-    champ. Réessayer une fois sans lui vaut mieux que de faire échouer le
-    premier plan d'une série payante sur une option de confort — mais on le
-    signale, sinon le format redeviendrait silencieusement celui du modèle.
+    Le champ n'est alors pas compris du tout par ce modèle, et réessayer sans
+    lui vaut mieux que de faire échouer le premier plan d'une série payante
+    sur une option de confort. On le signale, sinon le format redeviendrait
+    silencieusement celui du modèle.
+
+    Cette reprise ne couvre PAS le cas où le champ est compris mais la valeur
+    refusée — voir `_diagnostic()`. Mesuré sur Vertex : un modèle qui ne sait
+    pas faire la définition demandée rend le même 400 qu'une requête
+    malformée, sans nommer quoi que ce soit.
     """
     return reponse.status_code == 400 and "imageConfig" in (reponse.text or "")
+
+
+def _diagnostic(reponse: requests.Response, modele: str, formate: bool) -> str:
+    """Le message d'échec, et ce qu'on peut en dire de plus que l'API.
+
+    Mesuré le 2026-09-20 (`docs/etude-vertex.md`) :
+    `gemini-3.1-flash-lite-image` rend `400 · Request contains an invalid
+    argument.` pour `2K` comme pour `4K`, et réussit cinq fois de suite en
+    `1K`. Le corps ne nomme ni `imageConfig`, ni `imageSize`, ni la valeur
+    attendue — il est identique à celui d'une requête réellement malformée.
+    Sans le témoin en `1K`, rien ne désignait la définition.
+
+    On ne réessaie pas sans le format, et c'est un choix. Une définition
+    refusée est une erreur de RÉGLAGE : elle échoue de la même façon sur les
+    cent images du documentaire. Retomber en silence sur le format du modèle
+    produirait cent images au mauvais cadrage, qu'on découvrirait au montage ;
+    échouer sur la première coûte une correction dans le fichier de config,
+    une fois.
+    """
+    base = f"{modele} a répondu {reponse.status_code} : {reponse.text[:300]}"
+    if reponse.status_code != 400 or not formate:
+        return base
+
+    taille = str(config.get("visuels", "generation", "taille", default="")).strip()
+    ratio = str(config.get("visuels", "generation", "ratio", default="")).strip()
+    return (
+        f"{base}\n"
+        f"  Ce 400 ne nomme aucun champ, mais la requête demandait "
+        f"`taille: \"{taille}\"` et `ratio: \"{ratio}\"`.\n"
+        "  Mesuré : un modèle qui ne sait pas rendre la définition demandée "
+        "répond exactement ceci.\n"
+        "  · baisser `visuels.generation.taille`, ou\n"
+        "  · prendre un modèle qui monte plus haut — `gemini-3.1-flash-image` "
+        "tient `2K`.\n"
+        "  On ne réessaie pas sans le format : cent images au mauvais cadrage "
+        "coûtent plus qu'un échec net."
+    )
 
 
 def generate(
@@ -282,18 +324,32 @@ def generate(
             formate = False
             continue
         if response.status_code >= 400:
-            raise ImageError(
-                f"{model} a répondu {response.status_code} : {response.text[:300]}"
-            )
+            raise ImageError(_diagnostic(response, model, formate))
         break
 
     data, extension = _extract_image(response.json())
     destination_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{shot.id}{extension}"
-    (destination_dir / filename).write_bytes(data)
+    chemin = destination_dir / filename
+    chemin.write_bytes(data)
+
+    # Les dimensions RÉELLES, mesurées sur le fichier — même règle que pour
+    # une archive téléchargée : « une métadonnée est une promesse, le fichier
+    # sur le disque est le fait ».
+    #
+    # Elles ne sont pas décoratives. Un modèle peut ignorer la définition
+    # demandée sans le dire : mesuré, `gemini-2.5-flash-image` rend 1344 px
+    # quand on lui demande du `2K`, sans erreur ni avertissement. Sans ce
+    # relevé, la dégradation ne se verrait qu'au montage. Le montage s'en sert
+    # aussi pour son `ratio`, qui décide du cadrage d'une image non 16:9.
+    from .fetch import real_size
+
+    largeur, hauteur = real_size(chemin)
 
     return {
         "fichier": f"05-visuals/{filename}",
+        "largeur": largeur,
+        "hauteur": hauteur,
         "shot": shot.id,
         "beat": shot.beat,
         "source": fournisseur(),
