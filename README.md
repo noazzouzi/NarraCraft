@@ -59,13 +59,19 @@ projet. Le jeton est demandé à la volée :
 ```bash
 gcloud auth application-default login
 echo "VERTEX_PROJECT=mon-projet" >> .env
-python -m fresque images <slug> --list-models   # vérifie tout, sans dépenser
+python -m fresque images --list-models     # vérifie tout, sans dépenser
+python -m fresque essai-image "un couloir inondé"   # une image, ~0,03 $
 ```
 
 `--list-models` est la commande à lancer d'abord : elle interroge la fiche de
 la région dans le projet, puis celle de chaque modèle. Deux appels gratuits
 qui disent si le jeton, le projet, la région, l'activation de l'API et les
 identifiants de modèles sont bons — avant d'avoir généré la moindre image.
+Elle ne demande aucun projet Fresque.
+
+`essai-image` génère ensuite **une** image, sans projet non plus, et imprime
+ses dimensions réelles — le seul endroit où l'on constate si le format
+demandé a été honoré, l'API ne le confirmant nulle part.
 
 Deux clés optionnelles : **Pexels** (gratuite, pour le métrage vidéo libre)
 et **ElevenLabs** (payante, pour la finition d'une vidéo qu'on publie).

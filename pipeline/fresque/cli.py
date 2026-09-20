@@ -283,8 +283,9 @@ def cmd_essai_image(args: argparse.Namespace) -> int:
 def cmd_images(args: argparse.Namespace) -> int:
     from . import fetch as fetch_mod, images as images_mod
 
-    project = Project.open(args.slug)
-
+    # Lister les modèles ne regarde aucun projet : ouvrir celui-ci d'abord
+    # obligeait à en nommer un pour vérifier une installation, et à en avoir
+    # un avant d'avoir vérifié qu'on pouvait générer quoi que ce soit.
     if args.list_models:
         # Sur Vertex, cette commande ne se contente pas de lister : chaque
         # fiche interrogée vérifie le jeton, le projet, la région et
@@ -300,6 +301,9 @@ def cmd_images(args: argparse.Namespace) -> int:
             print(f"  {name}")
         return 0
 
+    if not args.slug:
+        return _fail("slug manquant — `fresque images <slug>`.")
+    project = Project.open(args.slug)
     script = script_parser.parse(project.script)
     plan = shots_mod.load(project.shots, [b.id for b in script.beats])
     todo = [s for s in plan if s.type == "generated"]
@@ -740,7 +744,12 @@ def main(argv: list[str] | None = None) -> int:
         "--force", action="store_true",
         help="re-sourcer même les plans déjà acquis",
     )
-    images_cmd = add("images", "Générer les images manquantes", cmd_images)
+    images_cmd = add("images", "Générer les images manquantes", cmd_images,
+                     slug=False)
+    images_cmd.add_argument(
+        "slug", nargs="?", default=None,
+        help="le projet (inutile avec --list-models)",
+    )
     images_cmd.add_argument(
         "--list-models", action="store_true",
         help="interroger l'API pour connaître les modèles d'image disponibles",
