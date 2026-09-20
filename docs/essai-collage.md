@@ -330,3 +330,83 @@ disaient que mon banc d'essai était mal réglé.
 ajoutés à `pipeline/requirements.txt`** : ce serait imposer deux gigaoctets
 à qui n'en veut pas. Si la voie locale est retenue, elle devient un extra
 optionnel, exactement comme Kokoro l'est pour la voix.
+
+---
+
+# Qwen-Image en local — la question tranchée, deux problèmes ouverts
+
+Généré sur la machine cible (Radeon RX 7800 XT, ComfyUI) avec le prompt
+long en cinq blocs de `REPRODUIRE.md`. Résultat :
+`docs/essai-collage/D-qwen-local.jpg`, 1024 × 1024.
+
+## Ce qui est réglé : le prompt passe entier
+
+**La scène est là.** Pile de documents, feuille soulevée, marteau, fragment
+de calendrier, flèches vers le bas, ciseaux, accents géométriques, cachet
+rouge, adhésif. Tous les éléments demandés, y compris ceux du troisième
+paragraphe du prompt.
+
+C'est exactement ce que SDXL ne pouvait pas faire : son encodeur CLIP
+coupait à 77 tokens et n'avait vu que le bloc de style. **L'hypothèse T5 est
+vérifiée** — un modèle à 512 tokens reçoit notre structure en cinq blocs.
+
+Le fond aussi : 71 % de l'image est en rouges sang (`#300000`, `#900000`,
+`#600000`). L'instruction de fond plat a porté.
+
+## Ce qui échoue : le lettrage
+
+**La règle de lettrage n'a pas tenu.** « LEOMKIVFAS », « Pro… Cilvin on
+1News », « QJIVI » — du charabia inventé, exactement ce que la règle devait
+empêcher, et ce que Gemini avait évité.
+
+| | Gemini (A) | Qwen (D) |
+|---|---|---|
+| Scène complète | oui | **oui** |
+| Titre net et accentué | oui | — (absent) |
+| Faux texte ailleurs | **aucun** | **plusieurs** |
+
+La règle est donc **spécifique au modèle**, pas universelle. Une formulation
+qui discipline Gemini ne discipline pas Qwen.
+
+**Conséquence directe : composer le titre dans Remotion devient obligatoire,
+plus optionnel.** C'était déjà l'option préférée — accents fiables,
+typographie du template, titre animable. Ça devient la seule qui marche sur
+les deux moteurs.
+
+Et il faut une deuxième ligne de défense contre le faux texte, parce que le
+prompt ne suffit pas : demander explicitement des scraps **sans aucun
+caractère** (formes, trames, bandes de couleur), au lieu de demander du
+texte illisible — un texte « flou » reste du texte pour le modèle.
+
+## Ce qui échoue aussi : la matière
+
+Saturation moyenne **187/255**, contre 95 pour Gemini. Ce n'est pas du
+papier imprimé : c'est de l'illustration vectorielle propre, posée sur une
+table avec une ombre portée, en perspective. Le `NOT 3D / NOT CGI` a tenu —
+rien n'est photoréaliste — mais `halftone print dots`, `print grain`,
+`aged newsprint texture` et `flat even scanned-document light,
+straight-on` n'ont pas porté.
+
+Deux pistes, à essayer dans cet ordre :
+
+1. **Monter le poids des termes de matière** et les mettre en tête du
+   prompt. Sur Qwen l'ordre compte, et notre bloc de style les noie au
+   milieu d'une longue phrase.
+2. **Nommer un procédé d'impression précis** plutôt que des adjectifs :
+   « risograph », « letterpress », « screenprint », qui sont des styles que
+   les modèles connaissent comme tels.
+
+## Ce qui n'a pas été respecté non plus
+
+- **Le format.** 1024 × 1024 au lieu de 16:9. À forcer dans le workflow
+  ComfyUI, pas dans le prompt.
+- **La bande vide du tiers supérieur** : écart-type de luminance 72, donc
+  chargée. La pile de journaux l'occupe. À reformuler, ou à obtenir par
+  composition plutôt que par prompt.
+
+## Où ça laisse la feature
+
+Le point bloquant — « est-ce qu'un modèle local reçoit notre prompt ? » —
+est levé. Les deux points restants sont des réglages de prompt et de
+workflow, pas des impossibilités. Le style collage reste donc classé
+troisième, et il est maintenant réalisable **sans facturation**.
