@@ -195,3 +195,59 @@ hypothèse. Le chantier est bien celui qui était annoncé :
 
 Le bloc de style de A — ses trois premiers paragraphes, qui ne parlent ni
 de Sarkozy ni de tribunal — part tel quel dans le template.
+
+---
+
+# Le modèle de coût, qui décide de la viabilité
+
+L'essai valide le rendu. Il reste à vérifier que le style est payable —
+et ce n'est pas acquis.
+
+## Il n'y a pas de tier gratuit
+
+Vérifié par notre propre appel (`limit: 0`) et confirmé par la
+documentation : Google ne publie aucun tier gratuit pour la sortie image.
+L'application Gemini grand public donne une vingtaine d'images par jour en
+1K, ce qui sert à faire un bake-off à la main — c'est ainsi que les deux
+images de cet essai ont été produites — mais pas à monter un film.
+
+Le crédit de bienvenue de 300 $ de Google Cloud existe toujours (90 jours,
+nouveau compte) et **ne s'applique pas** à l'API Gemini d'AI Studio, qui
+est celle que `images.py` appelle. Il s'applique à Gemini sur Vertex AI,
+qui sert les mêmes modèles derrière une autre URL. Basculer d'endpoint est
+donc une vraie option, et un vrai petit chantier.
+
+## Ce que coûte un film, selon le découpage
+
+Tarif de `gemini-3.1-flash-image` : environ 0,045 $ en 512 px, jusqu'à
+0,15 $ en 4K.
+
+**Une affiche par plan** — le découpage naïf, à 25 plans/minute :
+
+| Prix/image | Film de 15 min (375 affiches) | Essai de 2 min |
+|---|---|---|
+| 0,045 $ | 16,88 $ | 2,25 $ |
+| 0,150 $ | 56,25 $ | 7,50 $ |
+
+Le `README` annonce 2,50 à 4 € par documentaire. Ce découpage-là le fait
+donc exploser d'un facteur cinq à quinze. **Inacceptable en l'état.**
+
+**Une affiche par beat**, avec plusieurs plans qui entrent dedans — ce que
+fait `vox-director` (« one poster per beat »), et ce que nos projets font
+déjà : 2,1 et 2,3 plans par beat mesurés sur les deux montages Sarkozy.
+
+| Prix/image | Film de 15 min (~100 beats) | Essai de 2 min (12 beats) |
+|---|---|---|
+| 0,045 $ | 4,50 $ | 0,54 $ |
+| 0,150 $ | 15,00 $ | 1,80 $ |
+
+C'est une autre affaire, et ça ne demande aucun mécanisme nouveau : nos
+plans portent déjà un `poids` dans le beat, et le mouvement de caméra est
+déjà une vitesse. Trois plans dans la même affiche, ce sont trois cadrages
+et trois mouvements — exactement ce que Frontier fait avec ses plans longs
+qui bougent tout du long.
+
+**Conséquence pour la feature** : le collage impose « une affiche par
+beat, plusieurs plans dedans ». Ce n'est pas une optimisation qu'on
+ajoutera après, c'est la contrainte qui rend le style payable, et elle doit
+être dans le plan visuel dès le départ.
