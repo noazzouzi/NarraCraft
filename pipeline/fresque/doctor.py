@@ -67,6 +67,12 @@ GROUPS = [
     Group("B-roll générique — Pixabay", [
         Host("pixabay.com", "recherche et fichiers", "fetch"),
     ], optional=True, fichiers_ailleurs="même hôte que la recherche"),
+    Group("Génération d'images — Vertex AI", [
+        Host("aiplatform.googleapis.com", "génération (région `global`)", "images"),
+        Host("oauth2.googleapis.com", "renouvellement du jeton d'accès", "images"),
+    ], optional=True, fichiers_ailleurs=(
+        "l'image revient encodée dans la réponse : aucun hôte de fichiers"
+    )),
     Group("Génération d'images — Gemini", [
         Host("generativelanguage.googleapis.com", "génération", "images"),
     ], fichiers_ailleurs="images renvoyées dans la réponse"),

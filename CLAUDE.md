@@ -52,8 +52,10 @@ dans ce genre de pipeline.
 Il n'y a **pas de clé API Anthropic** dans ce projet. Claude Code *est* le
 runtime LLM : les étapes de jugement sont des Skills exécutées dans la
 session. La seule API payante systématiquement appelée par du code est
-Gemini (images) ; la voix tourne en local par défaut (Kokoro), ElevenLabs
-n'étant qu'une option de finition.
+celle des images — servie par AI Studio ou par Vertex AI, au choix, et ce
+choix est comptable et non technique : mêmes modèles, même corps de requête,
+mais seul Vertex accepte le crédit d'essai Google Cloud. La voix tourne en
+local par défaut (Kokoro), ElevenLabs n'étant qu'une option de finition.
 
 Conséquence à garder en tête pour toute évolution : chaque étape LLM doit
 produire un **fichier au format stable et documenté**. Le jour où l'on veut

@@ -1,26 +1,39 @@
-"""Image generation with the Gemini API.
+"""Génération d'images — deux portes vers les mêmes modèles.
 
-Only what the archives could not provide is generated. Each shot's prompt is
-prefixed with the project's art direction, because five images in five
-different styles destroy the illusion faster than one mediocre image does.
+On ne génère que ce que les archives n'ont pas fourni. Le prompt de chaque
+plan est préfixé de la direction artistique du projet : cinq images dans cinq
+styles différents détruisent l'illusion bien plus vite qu'une image moyenne.
 
-The exact model names are discovered from the live API rather than hardcoded
-from memory — `list_models()` exists for that, and the CLI exposes it.
+Les noms de modèles sont découverts auprès de l'API vivante plutôt que tenus
+de mémoire — `list_models()` est là pour ça, et la CLI l'expose.
+
+DEUX FOURNISSEURS, UN SEUL CORPS DE REQUÊTE
+===========================================
+`visuels.generation.provider` vaut `gemini` (AI Studio) ou `vertex`. Les deux
+servent les mêmes modèles, avec le même corps de requête et la même forme de
+réponse. Seules changent l'adresse et l'identification, et c'est tout ce que
+`_acces()` résout — le reste de ce module ne sait pas quelle porte il a prise.
+
+Le choix n'est pas technique, il est comptable : le crédit d'essai Google
+Cloud de 300 $ ne paie plus AI Studio pour les comptes ouverts après le
+2 mars 2026, mais il paie Vertex. Voir `vertex.py`.
 """
 from __future__ import annotations
 
 import base64
 import os
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 import requests
 
-from . import config
+from . import config, vertex
 from .shots import Shot
 
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
+FOURNISSEURS = ("gemini", "vertex")
 TIMEOUT = 120.0
 
 IMAGE_MIMES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
@@ -31,6 +44,39 @@ BACKOFF_S = 20.0
 
 class ImageError(RuntimeError):
     pass
+
+
+def fournisseur() -> str:
+    nom = str(config.get("visuels", "generation", "provider",
+                         default="gemini")).strip()
+    if nom not in FOURNISSEURS:
+        raise ImageError(
+            f"`visuels.generation.provider` vaut {nom!r} — attendu "
+            f"{' ou '.join(FOURNISSEURS)}."
+        )
+    return nom
+
+
+@dataclass(frozen=True)
+class Acces:
+    """Où frapper, et avec quoi. Le seul endroit où les deux portes diffèrent."""
+
+    url: str
+    entetes: dict[str, str] = field(default_factory=dict)
+    params: dict[str, str] = field(default_factory=dict)
+
+
+def _acces(modele: str, methode: str = "generateContent") -> Acces:
+    if fournisseur() == "vertex":
+        try:
+            return Acces(url=vertex.url_modele(modele, methode),
+                         entetes=vertex.entetes())
+        except vertex.VertexError as erreur:
+            # Remontée sous le type du module : `generate_all` et la CLI
+            # n'ont pas à connaître les deux familles d'erreurs.
+            raise ImageError(str(erreur)) from erreur
+    return Acces(url=f"{API_ROOT}/models/{modele}:{methode}",
+                 params={"key": api_key()})
 
 
 def api_key() -> str:
@@ -56,6 +102,20 @@ def list_models(session: requests.Session | None = None) -> list[dict[str, Any]]
 
 
 def image_models(session: requests.Session | None = None) -> list[str]:
+    """Les modèles d'image que CE compte peut réellement servir.
+
+    Vertex n'expose pas de catalogue équivalent à celui d'AI Studio : on y
+    sonde une fiche de modèle par identifiant candidat, ce qui est gratuit et
+    vérifie d'un coup le jeton, le projet, la région et le modèle. C'est donc
+    aussi la commande qui dit si une installation Vertex est bonne, avant
+    d'avoir dépensé un centime.
+    """
+    if fournisseur() == "vertex":
+        try:
+            return vertex.modeles_image(session)
+        except vertex.VertexError as erreur:
+            raise ImageError(str(erreur)) from erreur
+
     names = []
     for model in list_models(session):
         name = model.get("name", "").removeprefix("models/")
@@ -135,37 +195,82 @@ def _extract_image(payload: dict[str, Any]) -> tuple[bytes, str]:
     raise ImageError(f"aucune image dans la réponse ({detail})")
 
 
+def _corps(prompt: str, avec_image_config: bool) -> dict[str, Any]:
+    """Le corps de la requête, identique sur les deux portes.
+
+    `imageConfig` porte le format. Il était réglé dans
+    `visuels.generation.ratio` depuis le début et **n'était jamais envoyé** :
+    le modèle rendait donc du carré pendant que la config annonçait 16:9, et
+    le montage recadrait. C'est exactement le défaut relevé sur les essais
+    locaux, à ceci près qu'ici il venait de notre code.
+    """
+    generation: dict[str, Any] = {"responseModalities": ["IMAGE"]}
+    if avec_image_config:
+        image: dict[str, Any] = {}
+        ratio = str(config.get("visuels", "generation", "ratio", default="")).strip()
+        if ratio:
+            image["aspectRatio"] = ratio
+        taille = str(config.get("visuels", "generation", "taille", default="")).strip()
+        if taille:
+            image["imageSize"] = taille
+        if image:
+            generation["imageConfig"] = image
+    return {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": generation}
+
+
+def _sans_image_config(reponse: requests.Response) -> bool:
+    """Un 400 qui ne porte que sur `imageConfig`.
+
+    Tous les modèles d'image ne l'acceptent pas, et l'API le dit en nommant le
+    champ. Réessayer une fois sans lui vaut mieux que de faire échouer le
+    premier plan d'une série payante sur une option de confort — mais on le
+    signale, sinon le format redeviendrait silencieusement celui du modèle.
+    """
+    return reponse.status_code == 400 and "imageConfig" in (reponse.text or "")
+
+
 def generate(
     shot: Shot,
     destination_dir: Path,
     model: str | None = None,
     session: requests.Session | None = None,
+    report: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Generate one image and write it. Returns its asset record."""
     http = session or requests.Session()
+    say = report or (lambda _: None)
     model = model or str(
         config.get("visuels", "generation", "model", default="gemini-2.5-flash-image")
     )
     prompt = build_prompt(shot)
-
-    body = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseModalities": ["IMAGE"]},
-    }
-    url = f"{API_ROOT}/models/{model}:generateContent"
+    acces = _acces(model)
+    formate = True
 
     # A per-minute quota clears on its own; anything else is pointless to retry.
     for attempt in range(MINUTE_QUOTA_RETRIES + 1):
         response = http.post(
-            url, params={"key": api_key()}, json=body, timeout=TIMEOUT
+            acces.url, params=acces.params, headers=acces.entetes,
+            json=_corps(prompt, formate), timeout=TIMEOUT,
         )
         if response.status_code == 429:
             payload = response.json() if response.content else {}
             kind, _ = quota_kind(payload)
-            if kind == "minute" and attempt < MINUTE_QUOTA_RETRIES:
+            # Vertex ne détaille pas ses quotas comme AI Studio : sa réponse
+            # ne porte pas de `quotaId`. Un 429 y est le plus souvent une
+            # saturation passagère, donc il mérite la même attente qu'un
+            # quota à la minute plutôt qu'un échec sec.
+            patienter = kind == "minute" or (
+                kind == "inconnu" and fournisseur() == "vertex")
+            if patienter and attempt < MINUTE_QUOTA_RETRIES:
                 time.sleep(BACKOFF_S * (2 ** attempt))
                 continue
             _raise_for_quota(payload, model)
+        if formate and _sans_image_config(response):
+            say(f"  · {model} n'accepte pas `imageConfig` — format laissé "
+                "au modèle, le recadrage se fera au montage.")
+            formate = False
+            continue
         if response.status_code >= 400:
             raise ImageError(
                 f"{model} a répondu {response.status_code} : {response.text[:300]}"
@@ -181,7 +286,7 @@ def generate(
         "fichier": f"05-visuals/{filename}",
         "shot": shot.id,
         "beat": shot.beat,
-        "source": "gemini",
+        "source": fournisseur(),
         "modele": model,
         "prompt": prompt,
         # Generated images carry no third-party rights, but the field stays
@@ -216,7 +321,8 @@ def generate_all(
 
     for index, shot in enumerate(todo, start=1):
         try:
-            assets[shot.id] = generate(shot, destination_dir, session=http)
+            assets[shot.id] = generate(shot, destination_dir, session=http,
+                                       report=say)
             say(f"  ✓ {shot.id} ({index}/{len(todo)})")
         except QuotaExhausted as error:
             # Nothing will succeed today — stop rather than burn through the

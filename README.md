@@ -43,8 +43,29 @@ curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-fil
 curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
 ```
 
-Une seule clé est nécessaire : **Gemini**, pour les images. La voix tourne en
-local avec Kokoro, gratuitement et sans limite.
+Une seule clé est nécessaire, pour les images. La voix tourne en local avec
+Kokoro, gratuitement et sans limite.
+
+Deux portes mènent aux mêmes modèles d'image, et le choix est comptable :
+
+| `visuels.generation.provider` | Ce qu'il faut | Pourquoi |
+|---|---|---|
+| `gemini` | `GEMINI_API_KEY` | le plus simple : une clé, rien d'autre |
+| `vertex` | un projet Google Cloud | le crédit d'essai de 300 $ ne paie **plus** AI Studio depuis le 2 mars 2026, mais il paie Vertex |
+
+Pour Vertex, aucun secret n'entre dans `.env` — seulement l'identifiant du
+projet. Le jeton est demandé à la volée :
+
+```bash
+gcloud auth application-default login
+echo "VERTEX_PROJECT=mon-projet" >> .env
+python -m fresque images <slug> --list-models   # vérifie tout, sans dépenser
+```
+
+`--list-models` est la commande à lancer d'abord : elle interroge la fiche de
+la région dans le projet, puis celle de chaque modèle. Deux appels gratuits
+qui disent si le jeton, le projet, la région, l'activation de l'API et les
+identifiants de modèles sont bons — avant d'avoir généré la moindre image.
 
 Deux clés optionnelles : **Pexels** (gratuite, pour le métrage vidéo libre)
 et **ElevenLabs** (payante, pour la finition d'une vidéo qu'on publie).

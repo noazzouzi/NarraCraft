@@ -205,9 +205,30 @@ visuels:
       - nasa
 
   generation:
+    # `gemini`  — AI Studio, une clé d'API dans .env. Le plus simple.
+    # `vertex`  — Google Cloud, un projet et un jeton. Les mêmes modèles.
+    #
+    # Le choix n'est pas technique, il est comptable : depuis le 2 mars 2026,
+    # le crédit d'essai Google Cloud de 300 $ ne paie plus AI Studio, mais il
+    # paie Vertex. À 0,0336 $ l'image, 300 $ valent près de neuf mille images.
     provider: gemini
+
+    vertex:
+      # `global` couvre le monde entier et essuie nettement moins de 429
+      # qu'une région unique. Le projet ne fait aucun traitement réglementé,
+      # donc la seule réserve attachée à ce point d'entrée — ne pas savoir où
+      # le calcul a lieu — ne nous concerne pas.
+      region: global
+      # Le projet facturé vit dans .env (VERTEX_PROJECT) et jamais ici : ce
+      # fichier est versionné, un identifiant de compte n'y a pas sa place.
+
     model: gemini-3.1-flash-image
     ratio: "16:9"
+    # Définition demandée au modèle : 512px · 1K · 2K · 4K. Vide laisse le
+    # modèle décider. Au-delà de 1K on paie plus cher une définition que le
+    # montage réduit aussitôt — le cadre fait 1920 de large et le Ken Burns
+    # monte à ×1,18, donc 2K ne sert que si l'on recadre fort.
+    taille: "1K"
     # Préfixée à chaque prompt. Une direction artistique unique pour toute la
     # vidéo compte plus que la qualité d'une image isolée : cinq styles
     # différents détruisent l'illusion, une image moyenne non.

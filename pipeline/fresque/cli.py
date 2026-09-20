@@ -206,17 +206,45 @@ def _fenetres(alignment: dict, plan: list) -> dict[str, float]:
     return fenetres
 
 
+def _porte() -> str:
+    """Par quelle porte on passe, et sur quel compte ça se facture.
+
+    Deux fournisseurs servent les mêmes modèles ; se tromper de porte coûte
+    de l'argent sur le mauvais projet, ou échoue après coup. Autant le dire
+    avant, en une ligne.
+    """
+    from . import images as images_mod, vertex as vertex_mod
+
+    try:
+        nom = images_mod.fournisseur()
+    except images_mod.ImageError as error:
+        return f"⚠ {error}"
+    if nom != "vertex":
+        return "Fournisseur : AI Studio (GEMINI_API_KEY)"
+    try:
+        etat = vertex_mod.etat()
+    except vertex_mod.VertexError as error:
+        return f"Fournisseur : Vertex AI — ⚠ {error}"
+    return (f"Fournisseur : Vertex AI · projet {etat['projet']} "
+            f"· région {etat['region']}")
+
+
 def cmd_images(args: argparse.Namespace) -> int:
     from . import fetch as fetch_mod, images as images_mod
 
     project = Project.open(args.slug)
 
     if args.list_models:
+        # Sur Vertex, cette commande ne se contente pas de lister : chaque
+        # fiche interrogée vérifie le jeton, le projet, la région et
+        # l'identifiant du modèle, gratuitement. C'est donc la commande à
+        # lancer d'abord, avant d'avoir dépensé quoi que ce soit.
+        print(_porte())
         try:
             names = images_mod.image_models()
         except (images_mod.ImageError, Exception) as error:  # noqa: BLE001
             return _fail(str(error))
-        print("Modèles d'image servis par l'API :")
+        print("Modèles d'image servis :")
         for name in names:
             print(f"  {name}")
         return 0
@@ -228,6 +256,8 @@ def cmd_images(args: argparse.Namespace) -> int:
         print("Aucun plan `generated` — rien à produire.")
         return 0
 
+    # Dit avant de dépenser sur quel compte la dépense va tomber.
+    print(_porte())
     print(f"→ {len(todo)} image(s) à générer")
     try:
         assets, failures = images_mod.generate_all(todo, project.visuals_dir, report=print)

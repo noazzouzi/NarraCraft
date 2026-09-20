@@ -393,7 +393,7 @@ def test_exhausted_quota_stops_the_whole_run(monkeypatch, tmp_path):
     minutes and tells the user nothing new."""
     attempts = []
 
-    def boom(shot, destination_dir, model=None, session=None):
+    def boom(shot, destination_dir, model=None, session=None, report=None):
         attempts.append(shot.id)
         raise QuotaExhausted("quota journalier épuisé")
 
@@ -2564,3 +2564,273 @@ def test_collage_holds_the_screen_as_long_as_a_panel():
 
     assert plafond_s("collage") == plafond_s("motion")
     assert plafond_s("archive") <= plafond_s("collage")
+
+
+# --- Vertex AI ----------------------------------------------------------------
+#
+# Les deux fournisseurs servent les mêmes modèles avec le même corps de
+# requête : le seul endroit où ils diffèrent est l'adresse et
+# l'identification. Ce qui se teste ici, c'est donc cette couture — et le
+# fait que le reste du module ne sache pas laquelle des deux portes il a
+# prise.
+
+import time as _time  # noqa: E402
+
+from fresque import vertex as vertex_mod  # noqa: E402
+
+
+@pytest.fixture
+def par_vertex(monkeypatch):
+    """Bascule le fournisseur sans toucher au dépôt, et neutralise le jeton."""
+    reel = images_mod.config.get
+
+    def truque(*keys, default=None):
+        if keys == ("visuels", "generation", "provider"):
+            return "vertex"
+        return reel(*keys, default=default)
+
+    monkeypatch.setattr(images_mod.config, "get", truque)
+    monkeypatch.setattr(vertex_mod, "jeton", lambda force=False: "JETON")
+    monkeypatch.setenv("VERTEX_PROJECT", "mon-projet")
+    monkeypatch.setattr(vertex_mod, "_cache", None)
+    yield
+    monkeypatch.setattr(vertex_mod, "_cache", None)
+
+
+def test_the_global_region_has_no_host_prefix(monkeypatch):
+    """`global` couvre le monde et s'adresse à l'hôte nu ; une région, non.
+    Se tromper là-dessus donne un DNS qui ne résout pas, et le message ne dit
+    pas que la région en est la cause."""
+    monkeypatch.setattr(vertex_mod.config, "get",
+                        lambda *k, default=None: "global")
+    assert vertex_mod.racine() == "https://aiplatform.googleapis.com/v1"
+    monkeypatch.setattr(vertex_mod.config, "get",
+                        lambda *k, default=None: "europe-west4")
+    assert vertex_mod.racine() == "https://europe-west4-aiplatform.googleapis.com/v1"
+
+
+def test_the_project_comes_from_the_environment_never_from_the_repo(monkeypatch):
+    """`fresque.config.yaml` est versionné : un identifiant de compte n'y a
+    pas sa place."""
+    monkeypatch.delenv("VERTEX_PROJECT", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GCLOUD_PROJECT", raising=False)
+    monkeypatch.setitem(sys.modules, "google.auth", None)
+    with pytest.raises(vertex_mod.VertexError, match="VERTEX_PROJECT"):
+        vertex_mod.projet()
+
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "depuis-gcloud")
+    assert vertex_mod.projet() == "depuis-gcloud"
+    monkeypatch.setenv("VERTEX_PROJECT", "explicite")
+    assert vertex_mod.projet() == "explicite"
+
+
+def test_a_valid_token_is_not_fetched_again(monkeypatch):
+    """Sur cent images, redemander un jeton à chaque appel ferait cent
+    aller-retours pour rien — et ne jamais le redemander ferait échouer la
+    soixantième."""
+    appels = []
+
+    def source():
+        appels.append(1)
+        return "T", _time.time() + 3600
+
+    monkeypatch.setattr(vertex_mod, "_cache", None)
+    monkeypatch.setattr(vertex_mod, "_par_bibliotheque", source)
+    monkeypatch.setattr(vertex_mod, "_par_gcloud", lambda: None)
+
+    assert vertex_mod.jeton() == "T"
+    assert vertex_mod.jeton() == "T"
+    assert len(appels) == 1
+
+    # Un jeton dans la marge d'expiration est renouvelé plutôt que servi.
+    monkeypatch.setattr(vertex_mod, "_cache", ("VIEUX", _time.time() + 10))
+    assert vertex_mod.jeton() == "T"
+    assert len(appels) == 2
+
+
+def test_missing_credentials_name_both_remedies(monkeypatch):
+    monkeypatch.setattr(vertex_mod, "_cache", None)
+    monkeypatch.setattr(vertex_mod, "_par_bibliotheque", lambda: None)
+    monkeypatch.setattr(vertex_mod, "_par_gcloud", lambda: None)
+    with pytest.raises(vertex_mod.VertexError) as capture:
+        vertex_mod.jeton()
+    message = str(capture.value)
+    assert "application-default login" in message
+    assert "GOOGLE_APPLICATION_CREDENTIALS" in message
+
+
+def test_vertex_is_addressed_with_a_bearer_token_not_a_query_key(par_vertex):
+    acces = images_mod._acces("gemini-3.1-flash-image")
+    assert acces.url == (
+        "https://aiplatform.googleapis.com/v1/projects/mon-projet"
+        "/locations/global/publishers/google/models"
+        "/gemini-3.1-flash-image:generateContent"
+    )
+    assert acces.entetes["Authorization"] == "Bearer JETON"
+    # Une clé dans l'URL serait recopiée dans tous les journaux du proxy.
+    assert acces.params == {}
+
+
+def test_the_aspect_ratio_is_actually_sent(monkeypatch):
+    """`visuels.generation.ratio` existait depuis le début et n'était jamais
+    envoyé : le modèle rendait du carré pendant que la config annonçait 16:9,
+    et le montage recadrait sans que personne ne l'ait décidé."""
+    corps = images_mod._corps("un prompt", avec_image_config=True)
+    assert corps["generationConfig"]["imageConfig"]["aspectRatio"] == "16:9"
+    assert corps["contents"][0]["parts"][0]["text"] == "un prompt"
+
+    nu = images_mod._corps("un prompt", avec_image_config=False)
+    assert "imageConfig" not in nu["generationConfig"]
+
+
+class _Reponse:
+    def __init__(self, code, charge=None, texte=""):
+        self.status_code = code
+        self._charge = charge or {}
+        self.text = texte
+        self.content = b"x"
+
+    def json(self):
+        return self._charge
+
+
+def _reponse_image():
+    return _Reponse(200, {"candidates": [{"content": {"parts": [
+        {"inlineData": {"mimeType": "image/png",
+                        "data": _b64.b64encode(b"PNG").decode()}}]}}]})
+
+
+class _Session:
+    def __init__(self, reponses):
+        self.reponses = list(reponses)
+        self.envois = []
+
+    def post(self, url, params=None, headers=None, json=None, timeout=None):
+        self.envois.append({"url": url, "headers": headers or {}, "json": json})
+        return self.reponses.pop(0)
+
+
+def test_a_model_that_refuses_image_config_is_retried_without_it(par_vertex, tmp_path):
+    """Tous les modèles ne l'acceptent pas, et l'API le dit en nommant le
+    champ. Faire échouer le premier plan d'une série payante sur une option
+    de confort serait une mauvaise affaire — mais le silence en serait une
+    pire, donc on le signale."""
+    session = _Session([
+        _Reponse(400, texte='Unknown name "imageConfig" at generation_config'),
+        _reponse_image(),
+    ])
+    dits: list[str] = []
+    actif = images_mod.generate(
+        Shot(index=0, beat="B001", type="generated", prompt="p"),
+        tmp_path, session=session, report=dits.append)
+
+    assert len(session.envois) == 2
+    assert "imageConfig" in session.envois[0]["json"]["generationConfig"]
+    assert "imageConfig" not in session.envois[1]["json"]["generationConfig"]
+    assert any("imageConfig" in ligne for ligne in dits)
+    assert actif["source"] == "vertex"
+    assert (tmp_path / "S000.png").read_bytes() == b"PNG"
+
+
+def test_a_vertex_429_without_a_quota_id_is_waited_out(par_vertex, tmp_path, monkeypatch):
+    """Vertex ne détaille pas ses quotas comme AI Studio : sa réponse ne porte
+    pas de `quotaId`. Un 429 y est le plus souvent une saturation passagère,
+    et l'échec sec d'AI Studio y serait le mauvais réflexe."""
+    dodos: list[float] = []
+    monkeypatch.setattr(images_mod.time, "sleep", dodos.append)
+    session = _Session([_Reponse(429, {}), _reponse_image()])
+
+    images_mod.generate(Shot(index=0, beat="B001", type="generated", prompt="p"),
+                        tmp_path, session=session)
+    assert len(session.envois) == 2
+    assert dodos == [images_mod.BACKOFF_S]
+
+
+def test_a_daily_quota_still_fails_loudly_on_vertex(par_vertex, tmp_path):
+    """Un quota journalier ne se vide pas en attendant : attendre une heure
+    dessus est la seule chose à ne pas faire."""
+    charge = {"error": {"details": [
+        {"violations": [{"quotaId": "GenerateContentPerDayPerProject"}]}]}}
+    session = _Session([_Reponse(429, charge)])
+    with pytest.raises(QuotaExhausted):
+        images_mod.generate(Shot(index=0, beat="B001", type="generated", prompt="p"),
+                            tmp_path, session=session)
+
+
+def test_an_unknown_provider_is_refused_by_name(monkeypatch):
+    monkeypatch.setattr(
+        images_mod.config, "get",
+        lambda *keys, default=None: "midjourney"
+        if keys == ("visuels", "generation", "provider") else default)
+    with pytest.raises(ImageError, match="midjourney"):
+        images_mod.fournisseur()
+
+
+def test_the_probe_paths_are_the_ones_the_api_actually_routes():
+    """Épinglé contre l'API réelle, sondée sans jeton le 2026-09-20.
+
+    Deux formes que j'avais écrites de mémoire rendaient un 404 en HTML,
+    c'est-à-dire une route inexistante qu'on aurait lue comme un modèle
+    introuvable ou un projet fermé :
+
+        v1/publishers/google/models                        → 404 HTML
+        v1beta1/projects/p/locations/…/publishers/…/gemini → 404 HTML
+
+    Ce qui répond 401 — donc ce qui existe et demande seulement un jeton :
+
+        v1/projects/p/locations/global                     → 401 JSON
+        v1beta1/publishers/google/models/gemini-…          → 401 JSON
+        v1/projects/p/locations/global/…:generateContent   → 401 JSON (POST)
+
+    La fiche d'un modèle n'est pas portée par le projet et n'existe qu'en
+    `v1beta1` : les deux sont contre-intuitifs, et aucun test unitaire ne les
+    aurait trouvés — seul un appel réel le pouvait.
+    """
+    import os
+
+    os.environ["VERTEX_PROJECT"] = "p"
+    hote = "https://aiplatform.googleapis.com"
+    assert vertex_mod._url_region() == f"{hote}/v1/projects/p/locations/global"
+    assert vertex_mod._url_fiche("gemini-3.1-flash-image") == (
+        f"{hote}/v1beta1/publishers/google/models/gemini-3.1-flash-image")
+    assert vertex_mod.url_modele("gemini-3.1-flash-image") == (
+        f"{hote}/v1/projects/p/locations/global/publishers/google/models"
+        "/gemini-3.1-flash-image:generateContent")
+
+
+def test_a_refused_project_names_the_two_usual_causes(monkeypatch):
+    """Un 403 sur Vertex veut dire, neuf fois sur dix, que l'API n'est pas
+    activée sur le projet ou que le compte n'a pas le rôle. Les nommer
+    épargne une demi-heure dans la console."""
+    monkeypatch.setenv("VERTEX_PROJECT", "p")
+    monkeypatch.setattr(vertex_mod, "entetes", lambda: {})
+
+    class _S:
+        def get(self, url, headers=None, timeout=None):
+            return _Reponse(403, texte="SERVICE_DISABLED")
+
+    with pytest.raises(vertex_mod.VertexError) as capture:
+        vertex_mod.modeles_image(_S())
+    message = str(capture.value)
+    assert "aiplatform.googleapis.com" in message
+    assert "roles/aiplatform.user" in message
+
+
+def test_model_sheets_are_probed_only_once_the_project_answered(monkeypatch):
+    """Sonder quatre modèles alors que le jeton est mauvais rend quatre fois
+    la même erreur, et aucune ne nomme la vraie cause."""
+    monkeypatch.setenv("VERTEX_PROJECT", "p")
+    monkeypatch.setattr(vertex_mod, "entetes", lambda: {})
+    vus: list[str] = []
+
+    class _S:
+        def get(self, url, headers=None, timeout=None):
+            vus.append(url)
+            if "/locations/" in url:
+                return _Reponse(200, {})
+            return _Reponse(200 if "flash-lite" in url else 404, {})
+
+    assert vertex_mod.modeles_image(_S()) == ["gemini-3.1-flash-lite-image"]
+    assert vus[0].endswith("/projects/p/locations/global")
+    assert len(vus) == 1 + len(vertex_mod.MODELES_CANDIDATS)
