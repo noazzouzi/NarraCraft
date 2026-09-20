@@ -2834,3 +2834,49 @@ def test_model_sheets_are_probed_only_once_the_project_answered(monkeypatch):
     assert vertex_mod.modeles_image(_S()) == ["gemini-3.1-flash-lite-image"]
     assert vus[0].endswith("/projects/p/locations/global")
     assert len(vus) == 1 + len(vertex_mod.MODELES_CANDIDATS)
+
+
+def test_express_mode_puts_the_key_in_the_query_and_drops_project_and_region(monkeypatch):
+    """En express, ni projet ni région dans l'adresse : la clé porte les deux.
+    Conserver le chemin `projects/…/locations/…` y rendrait un 404 qu'on
+    lirait comme un projet fermé."""
+    reel = images_mod.config.get
+
+    def truque(*keys, default=None):
+        if keys == ("visuels", "generation", "provider"):
+            return "vertex"
+        if keys == ("visuels", "generation", "vertex", "mode"):
+            return "express"
+        return reel(*keys, default=default)
+
+    monkeypatch.setattr(images_mod.config, "get", truque)
+    monkeypatch.setattr(vertex_mod.config, "get", truque)
+    monkeypatch.setenv("VERTEX_API_KEY", "CLE")
+
+    acces = images_mod._acces("gemini-3.1-flash-lite-image")
+    assert acces.url == (
+        "https://aiplatform.googleapis.com/v1/publishers/google/models"
+        "/gemini-3.1-flash-lite-image:generateContent")
+    assert acces.params == {"key": "CLE"}
+    assert "Authorization" not in acces.entetes
+
+
+def test_express_state_never_shows_the_key(monkeypatch):
+    """`fresque images` imprime l'état avant de dépenser. Une clé recopiée là
+    finirait dans `journal/`, qui est un fichier du projet."""
+    monkeypatch.setattr(vertex_mod.config, "get",
+                        lambda *k, default=None: "express"
+                        if k[-1] == "mode" else default)
+    monkeypatch.setenv("VERTEX_API_KEY", "SECRET-À-NE-PAS-ÉCRIRE")
+    rendu = str(vertex_mod.etat())
+    assert "SECRET" not in rendu
+    assert "'cle': True" in rendu
+
+
+def test_a_missing_express_key_says_not_to_paste_it_in_a_conversation(monkeypatch):
+    monkeypatch.setattr(vertex_mod.config, "get",
+                        lambda *k, default=None: "express"
+                        if k[-1] == "mode" else default)
+    monkeypatch.delenv("VERTEX_API_KEY", raising=False)
+    with pytest.raises(vertex_mod.VertexError, match="jamais dans une conversation"):
+        vertex_mod.cle_express()

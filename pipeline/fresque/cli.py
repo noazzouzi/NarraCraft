@@ -225,8 +225,59 @@ def _porte() -> str:
         etat = vertex_mod.etat()
     except vertex_mod.VertexError as error:
         return f"Fournisseur : Vertex AI — ⚠ {error}"
+    if etat["mode"] == "express":
+        return ("Fournisseur : Vertex AI · mode express · clé "
+                + ("présente" if etat["cle"] else "ABSENTE"))
     return (f"Fournisseur : Vertex AI · projet {etat['projet']} "
             f"· région {etat['region']}")
+
+
+def cmd_essai_image(args: argparse.Namespace) -> int:
+    """Générer UNE image, sans projet, pour vérifier qu'une porte s'ouvre.
+
+    Changer de fournisseur ou de modèle se vérifiait jusqu'ici en lançant un
+    projet entier : on découvrait un jeton refusé après avoir attendu la
+    voix et le sourcing. Une image seule coûte trois centimes et répond en
+    quelques secondes.
+    """
+    import time
+
+    from . import images as images_mod
+    from .shots import Shot
+
+    print(_porte())
+    destination = Path(args.sortie or ".")
+    shot = Shot(index=0, beat="ESSAI", type="generated", prompt=args.prompt)
+
+    modele = args.modele or str(
+        config.get("visuels", "generation", "model", default=""))
+    print(f"→ {modele or 'modèle par défaut'} · « {args.prompt} »")
+
+    debut = time.monotonic()
+    try:
+        asset = images_mod.generate(shot, destination, model=args.modele or None,
+                                    report=print)
+    except images_mod.ImageError as error:
+        return _fail(str(error))
+
+    chemin = destination / Path(asset["fichier"]).name
+    octets = chemin.stat().st_size
+    print(f"✓ {chemin} · {octets / 1024:.0f} Ko · "
+          f"{time.monotonic() - debut:.1f} s")
+    # Les dimensions disent si `imageConfig` a été honoré : l'API ne le
+    # confirme nulle part, et un carré rendu là où la config demande du 16:9
+    # est exactement le défaut qu'on vient de corriger.
+    try:
+        from PIL import Image
+
+        with Image.open(chemin) as vue:
+            attendu = str(config.get("visuels", "generation", "ratio", default=""))
+            reel = vue.width / vue.height
+            print(f"  {vue.width} × {vue.height} (rapport {reel:.2f})"
+                  + (f" · demandé {attendu}" if attendu else ""))
+    except ImportError:
+        pass
+    return 0
 
 
 def cmd_images(args: argparse.Namespace) -> int:
@@ -668,9 +719,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="commande", required=True)
 
-    def add(name: str, help_text: str, handler):
+    def add(name: str, help_text: str, handler, slug: bool = True):
         node = sub.add_parser(name, help=help_text)
-        node.add_argument("slug")
+        if slug:
+            node.add_argument("slug")
         node.set_defaults(handler=handler)
         return node
 
@@ -688,11 +740,18 @@ def main(argv: list[str] | None = None) -> int:
         "--force", action="store_true",
         help="re-sourcer même les plans déjà acquis",
     )
-    images_cmd = add("images", "Générer les images manquantes (Gemini)", cmd_images)
+    images_cmd = add("images", "Générer les images manquantes", cmd_images)
     images_cmd.add_argument(
         "--list-models", action="store_true",
         help="interroger l'API pour connaître les modèles d'image disponibles",
     )
+    essai_cmd = add("essai-image", "Générer une seule image, pour vérifier "
+                    "qu'un fournisseur répond", cmd_essai_image, slug=False)
+    essai_cmd.add_argument("prompt")
+    essai_cmd.add_argument("--modele", default=None,
+                           help="forcer un modèle (défaut : celui de la config)")
+    essai_cmd.add_argument("--sortie", default=None,
+                           help="dossier de destination (défaut : courant)")
     add("rushes", "Sourcer le métrage d'archive (Library of Congress)", cmd_rushes)
     add("placeholders", "Générer des visuels de substitution", cmd_placeholders)
     add("timeline", "Construire 06-timeline.json", cmd_timeline)

@@ -214,6 +214,18 @@ visuels:
     provider: gemini
 
     vertex:
+      # `projet`  — un jeton OAuth, porté par un projet et une région. Rien à
+      #             copier nulle part : `gcloud auth application-default login`
+      #             une fois, et le jeton est obtenu à la demande. C'est le
+      #             mode de production.
+      # `express` — une clé d'API (VERTEX_API_KEY), sans projet ni région.
+      #             Pour les machines où `gcloud` n'a pas de session
+      #             interactive : un conteneur, une CI. Une clé est un secret
+      #             durable qui donne accès au quota du projet — elle se pose
+      #             dans l'environnement, jamais dans un fichier versionné ni
+      #             dans une conversation.
+      mode: projet
+
       # `global` couvre le monde entier et essuie nettement moins de 429
       # qu'une région unique. Le projet ne fait aucun traitement réglementé,
       # donc la seule réserve attachée à ce point d'entrée — ne pas savoir où

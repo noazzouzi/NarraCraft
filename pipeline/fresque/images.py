@@ -69,8 +69,8 @@ class Acces:
 def _acces(modele: str, methode: str = "generateContent") -> Acces:
     if fournisseur() == "vertex":
         try:
-            return Acces(url=vertex.url_modele(modele, methode),
-                         entetes=vertex.entetes())
+            url, entetes, params = vertex.acces(modele, methode)
+            return Acces(url=url, entetes=entetes, params=params)
         except vertex.VertexError as erreur:
             # Remontée sous le type du module : `generate_all` et la CLI
             # n'ont pas à connaître les deux familles d'erreurs.

@@ -83,9 +83,48 @@ MODELES_CANDIDATS = (
 
 TIMEOUT = 30.0
 
+#: Deux façons de s'identifier, et le choix dépend d'où l'on est.
+#:
+#: `projet`  — un jeton OAuth, porté par un projet et une région. C'est le
+#:             mode de production : rien à copier nulle part, le jeton est
+#:             obtenu à la demande et expire tout seul.
+#: `express` — une clé d'API, sans projet ni région dans l'adresse. Utile là
+#:             où `gcloud` n'a pas de session interactive — une machine de
+#:             build, un conteneur — parce qu'une clé se pose dans
+#:             l'environnement alors qu'un `gcloud auth login` ne se fait pas.
+#:
+#: Une clé est un secret durable qui donne accès au quota du projet. Elle vaut
+#: pour un essai ; pour produire, le jeton vaut mieux.
+MODES = ("projet", "express")
+
 
 class VertexError(RuntimeError):
     pass
+
+
+def mode() -> str:
+    valeur = str(config.get("visuels", "generation", "vertex", "mode",
+                            default="projet")).strip() or "projet"
+    if valeur not in MODES:
+        raise VertexError(
+            f"`visuels.generation.vertex.mode` vaut {valeur!r} — attendu "
+            f"{' ou '.join(MODES)}."
+        )
+    return valeur
+
+
+def cle_express() -> str:
+    cle = os.environ.get("VERTEX_API_KEY", "").strip()
+    if not cle:
+        raise VertexError(
+            "VERTEX_API_KEY absente, et `vertex.mode` vaut `express`.\n"
+            "  · la créer : console Google Cloud → API et services → "
+            "Identifiants → Clé d'API\n"
+            "  · la restreindre à l'API Vertex AI\n"
+            "  · en session distante : la poser en variable d'environnement "
+            "sur l'environnement, jamais dans une conversation"
+        )
+    return cle
 
 
 def region() -> str:
@@ -228,14 +267,39 @@ def entetes() -> dict[str, str]:
 
 
 def url_modele(modele: str, methode: str = "generateContent") -> str:
+    if mode() == "express":
+        # Ni projet ni région dans l'adresse : la clé porte les deux.
+        return f"{racine()}/publishers/google/models/{modele}:{methode}"
     return (f"{racine()}/projects/{projet()}/locations/{region()}"
             f"/publishers/google/models/{modele}:{methode}")
+
+
+def acces(modele: str, methode: str = "generateContent"
+          ) -> tuple[str, dict[str, str], dict[str, str]]:
+    """(adresse, en-têtes, paramètres) — tout ce que Vertex impose.
+
+    Rendu d'un bloc pour que `images.py` n'ait pas à savoir qu'il existe deux
+    modes : c'est exactement la même raison qui lui fait ignorer qu'il existe
+    deux fournisseurs.
+    """
+    if mode() == "express":
+        return (url_modele(modele, methode),
+                {"Content-Type": "application/json"},
+                {"key": cle_express()})
+    return url_modele(modele, methode), entetes(), {}
 
 
 def _url_region() -> str:
     """La fiche de la région, dans le projet. Gratuite, et elle prouve le
     jeton, le projet, la région et l'activation de l'API d'un seul coup."""
     return f"{racine()}/projects/{projet()}/locations/{region()}"
+
+
+def _sonde(session: requests.Session, url: str) -> requests.Response:
+    """Un GET identifié, quel que soit le mode."""
+    if mode() == "express":
+        return session.get(url, params={"key": cle_express()}, timeout=TIMEOUT)
+    return session.get(url, headers=entetes(), timeout=TIMEOUT)
 
 
 def _url_fiche(modele: str) -> str:
@@ -281,24 +345,26 @@ def modeles_image(session: requests.Session | None = None) -> list[str]:
     """
     http = session or requests.Session()
 
-    try:
-        reponse = http.get(_url_region(), headers=entetes(), timeout=TIMEOUT)
-    except requests.RequestException as erreur:
-        raise VertexError(f"{racine()} injoignable : {erreur}") from erreur
-    if reponse.status_code in (401, 403, 404):
-        raise _refus(reponse)
-    if reponse.status_code >= 400:
-        raise VertexError(
-            f"région {region()!r} refusée (HTTP {reponse.status_code}) : "
-            f"{reponse.text[:200]}"
-        )
+    # En mode express il n'y a ni projet ni région dans l'adresse : cette
+    # première vérification n'a rien à vérifier et serait un 404 trompeur.
+    if mode() != "express":
+        try:
+            reponse = http.get(_url_region(), headers=entetes(), timeout=TIMEOUT)
+        except requests.RequestException as erreur:
+            raise VertexError(f"{racine()} injoignable : {erreur}") from erreur
+        if reponse.status_code in (401, 403, 404):
+            raise _refus(reponse)
+        if reponse.status_code >= 400:
+            raise VertexError(
+                f"région {region()!r} refusée (HTTP {reponse.status_code}) : "
+                f"{reponse.text[:200]}"
+            )
 
     servis: list[str] = []
     refus: list[str] = []
     for modele in MODELES_CANDIDATS:
         try:
-            fiche = http.get(_url_fiche(modele), headers=entetes(),
-                             timeout=TIMEOUT)
+            fiche = _sonde(http, _url_fiche(modele))
         except requests.RequestException as erreur:
             raise VertexError(f"{_url_fiche(modele)} injoignable : {erreur}") \
                 from erreur
@@ -319,4 +385,9 @@ def modeles_image(session: requests.Session | None = None) -> list[str]:
 
 def etat() -> dict[str, Any]:
     """De quoi afficher où l'on en est sans rien générer."""
-    return {"projet": projet(), "region": region(), "racine": racine()}
+    if mode() == "express":
+        # On confirme qu'une clé existe sans jamais en montrer un caractère.
+        return {"mode": "express", "cle": bool(os.environ.get("VERTEX_API_KEY")),
+                "racine": racine()}
+    return {"mode": "projet", "projet": projet(), "region": region(),
+            "racine": racine()}
