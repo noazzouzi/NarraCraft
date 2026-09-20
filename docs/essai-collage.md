@@ -117,3 +117,81 @@ générées se lit comme un seul film plutôt que comme une banque d'images.
 
 S'il tient, il devient un champ de template, sous `visuels.collage`, et
 rien de plus : un template reste de la donnée.
+
+---
+
+# Résultat
+
+Les deux images sont dans `docs/essai-collage/`. Générées à la main, en
+`gemini-3.1-flash-image`, 1376 × 768.
+
+## Verdict : l'hypothèse tient, et la règle de lettrage est le bon correctif
+
+**A répond oui aux quatre questions.** Papier déchiré, adhésif aux quatre
+coins, points de trame, ombres portées ; les pièces sont à des profondeurs
+distinctes — pile de documents, feuille soulevée, marteau, fragment de
+calendrier, flèches, accents géométriques — chacune avec son bord net.
+Texture gravée sur le marteau et la tranche de la pile : imprimé, pas
+rendu 3D.
+
+**« EXÉCUTION PROVISOIRE » est parfait**, accent compris, en condensé de
+presse charbon sur crème, sur une bande déchirée dans le tiers supérieur.
+Le français accentué n'était pas gagné : il l'est.
+
+**Et la règle de lettrage a tenu.** Tous les autres documents sont de la
+texture pure — barres grises, blocs d'encre, pavés de trame. Aucun mot
+inventé.
+
+**B échoue exactement comme prévu**, et c'est ce qui rend l'essai
+concluant. Avec la formulation de `vox-director`, le modèle fabrique
+« NOMOIGNAGE CHOC » pour témoignage, « COCRY DECISION DELAYED »,
+« P. CISL.E », du faux manuscrit, et mélange anglais et français au
+hasard. Le même charabia que dans leurs propres films de démonstration.
+
+## Un effet de bord qu'on n'attendait pas
+
+B ne perd pas que le texte : **il perd le style**. Mesuré sur les deux
+images réduites :
+
+| | A (avec règle) | B (témoin) |
+|---|---|---|
+| Couleur dominante | `#600000` — **29 %** | gris `#909090` — 22 % |
+| Saturation moyenne | **95**/255 | 48/255 |
+
+A est un collage plat sur fond rouge franc, comme demandé. B est une
+**photographie de papiers sur un bureau en bois**, avec une lumière
+réaliste : deux fois moins saturé, dominé par des gris. Le bloc de style
+demandait pourtant « flat even scanned-document light, straight-on » dans
+les deux cas.
+
+Ce qui l'a fait basculer est le mot **« newspaper clippings »** laissé libre
+dans la scène : il tire le modèle vers la photo de coupures sur une table.
+La règle de lettrage, en imposant « texture only », le ramène au graphisme.
+
+**La règle protège donc deux choses à la fois** — l'honnêteté documentaire
+et la direction artistique. C'est deux raisons de la garder, pas une.
+
+## Ce qui reste à corriger
+
+- **Les chiffres ont survécu.** Le calendrier de A affiche 5 à 28 et un 2
+  entouré, alors que le prompt interdisait explicitement les nombres. Ils
+  sont plausibles — ce n'est pas du charabia — mais la règle n'est pas
+  étanche. Deux options : l'accepter pour les chiffres, ou bannir le
+  calendrier des scènes. À trancher au moment de coder.
+- **Le format n'est pas exactement 16:9** : 1376 × 768 donne 1,792 au lieu
+  de 1,778. Sans conséquence — `06-timeline.json` porte déjà un champ
+  `ratio` par plan et le moteur adapte plutôt que de rogner.
+
+## Ce que ça débloque
+
+Le reclassement du style collage en troisième position n'est plus une
+hypothèse. Le chantier est bien celui qui était annoncé :
+
+1. Un bloc `visuels.collage` dans le template — bloc de style, banque de
+   thèmes, couleur de fond par beat. **De la donnée.**
+2. `images.build_prompt()` compose en cinq parties au lieu d'une ligne, et
+   porte la règle de lettrage. **Une fonction.**
+3. Un bake-off branché sur le checkpoint 2. **Une commande.**
+
+Le bloc de style de A — ses trois premiers paragraphes, qui ne parlent ni
+de Sarkozy ni de tribunal — part tel quel dans le template.
