@@ -177,13 +177,86 @@ autres du PNG. `images.IMAGE_MIMES` couvre déjà les deux et l'extension du
 fichier suit le type réel : rien à changer. À savoir si un jour un traitement
 aval suppose du PNG.
 
-## 3. Non testé
+## 3. Adresses portées par un projet
 
-- **La clé sur une adresse portée par un projet.** `VERTEX_PROJECT` est absent
-  de l'environnement, donc les routes
-  `v1/projects/{id}/locations/{region}/...` — c'est-à-dire tout le mode
-  `projet`, celui de production — n'ont pas pu être appelées. Question
-  ouverte, et la plus importante : seul le mode `express` est mesuré ici.
+Cinq sondes, `gemini-3.1-flash-lite-image`, `1K`, prompt « un mur gris ».
+Seul le code de retour est mesuré ; les images rendues n'ont pas été
+enregistrées. Projet : `project-9a4b121f-1099-45d1-828`, noté `{P}`. Sondes
+lancées depuis un script jetable hors du dépôt, aucun fichier de `pipeline/`
+touché.
+
+| | Forme d'URL | Authentification | Code | `status` |
+|---|---|---|---|---|
+| A | `v1/publishers/.../{m}:generateContent` | `?key=` | **200** | — |
+| B | `v1/projects/{P}/locations/global/publishers/.../{m}:generateContent` | `?key=` | **200** | — |
+| C | idem B | en-tête `x-goog-api-key` | **200** | — |
+| D | `v1/projects/{P}/locations/us-central1/...` sur `us-central1-aiplatform` | `?key=` | **404** | `NOT_FOUND` |
+| E | `v1beta1/publishers/google/models/{m}` (GET) | `?key=` | **401** | `UNAUTHENTICATED` |
+
+A, B et C rendent une image. Aucun corps d'erreur.
+
+Corps de D, verbatim :
+
+```
+{
+  "error": {
+    "code": 404,
+    "message": "Publisher model `projects/project-9a4b121f-1099-45d1-828/locations/us-central1/publishers/google/models/gemini-3.1-flash-lite-image` was not found or your project does not have access to it. Ensure you are using a valid model name and that the model is available in the specified region. For more information, see: https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/locations.",
+    "status": "NOT_FOUND"
+  }
+}
+```
+
+Corps de E, verbatim :
+
+```
+{
+  "error": {
+    "code": 401,
+    "message": "API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication",
+    "status": "UNAUTHENTICATED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "CREDENTIALS_MISSING",
+        "domain": "googleapis.com",
+        "metadata": {
+          "method": "google.cloud.aiplatform.v1beta1.ModelGardenService.GetPublisherModel",
+          "service": "aiplatform.googleapis.com"
+        }
+      }
+    ]
+  }
+}
+```
+
+Deux remarques que le tableau ne porte pas :
+
+- **D n'est pas un refus d'authentification.** Ni `UNAUTHENTICATED` ni
+  `PERMISSION_DENIED` : la requête a été authentifiée, et c'est le couple
+  modèle × région qui est refusé. Ces mesures ne disent pas si `us-central1`
+  échouerait aussi avec un modèle qui y est publié.
+- **E confirme le 401 de l'essai précédent**, avec son motif nommé :
+  `CREDENTIALS_MISSING` sur `ModelGardenService.GetPublisherModel`. Une clé
+  d'API n'a pas cours sur la route des fiches de modèle ; c'est une propriété
+  de cette route, pas de la clé.
+
+**Sur la forme `project-<uuid>` :** aucun signe, ni dans un sens ni dans
+l'autre. Aucune des cinq réponses ne mentionne `express`, un projet géré, ni
+un quota particulier. Le seul mot approchant est `"trafficType":"ON_DEMAND"`
+dans l'`usageMetadata` des succès, qui désigne la facturation à l'appel et non
+un type de compte.
+
+**Conclusion.** La clé porte un projet : les adresses
+`projects/{P}/locations/global/...` rendent 200 avec la clé seule, en
+paramètre comme en en-tête, et l'adresse globale sans projet rend le même 200
+— c'est donc le même projet que la clé désigne déjà côté serveur. Un mode
+unique suffit : le mode `projet` n'a pas besoin d'un autre type de
+justificatif que le mode `express`, seule l'URL change, et la seule chose que
+`VERTEX_PROJECT` ajoute est de rendre le projet explicite dans l'adresse.
+
+## 4. Non testé
+
 - **Le coût réel.** Aucune facturation consultée. Les treize appels ne sont
   chiffrés nulle part dans cette étude.
 - **La qualité comparée des modèles.** Une image par modèle, un seul sujet.
