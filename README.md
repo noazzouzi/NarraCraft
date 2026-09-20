@@ -112,7 +112,7 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 4c | Génération d'images Gemini | à venir |
 | 3b | Alignement forcé mot-à-mot | fait, vérifié en réel |
 | 6 | Motion graphics : cartes, unes de journaux, archives | à venir |
-| 7 | Page de validation, miniature, export vers éditeur | à venir |
+| 7 | Page de validation, miniature, export vers éditeur | page faite |
 
 Les durées de beat sont **mesurées sur l'audio Kokoro**, et depuis
 `fresque aligner` la position de chaque mot l'est aussi. L'écart valait la

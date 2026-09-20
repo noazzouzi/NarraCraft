@@ -2202,3 +2202,101 @@ def test_forced_alignment_refuses_an_estimate_it_cannot_trust():
               "beats": [{"id": "B001", "debut_s": 0.0},
                         {"id": "B002", "debut_s": 4.25}]}
     assert bases_depuis(mesure) == {"B001": 0.0, "B002": 4.25}
+
+
+# --- Sous-titres mot à mot ---------------------------------------------------
+
+def _mots(paires):
+    """(texte, début) -> des mots d'alignement, chacun long de 0,2 s."""
+    return [{"t": t.strip(".,!?"), "tx": t, "debut_s": d, "fin_s": d + 0.2}
+            for t, d in paires]
+
+
+def test_a_subtitle_line_is_a_sentence():
+    """Une ligne qui commence par les deux mots d'après le point fait lire le
+    début d'une idée dont la suite n'est pas affichée. Vu au rendu :
+    « cinq ans de prison. Il est »."""
+    from fresque.timeline import _subtitle_lines
+
+    mots = _mots([("Nicolas", 0.0), ("Sarkozy", 0.3), ("est", 0.6),
+                  ("condamné.", 0.9), ("Il", 1.4), ("entre", 1.7),
+                  ("en", 2.0), ("cellule.", 2.3)])
+    lignes = [" ".join(m["tx"] for m in l) for l in _subtitle_lines(mots, 6)]
+
+    assert lignes == ["Nicolas Sarkozy est condamné.", "Il entre en cellule."]
+    for ligne in lignes:
+        assert ". " not in ligne, f"{ligne!r} coupe une phrase"
+
+
+def test_a_sentence_too_long_for_a_line_breaks_on_a_comma():
+    from fresque.timeline import _subtitle_lines
+
+    mots = _mots([("Le", 0.0), ("tribunal", 0.2), ("de", 0.4), ("Paris,", 0.6),
+                  ("ce", 0.8), ("jour", 1.0), ("de", 1.2), ("septembre,", 1.4),
+                  ("rend", 1.6), ("son", 1.8), ("jugement.", 2.0)])
+    lignes = [" ".join(m["tx"] for m in l) for l in _subtitle_lines(mots, 4)]
+
+    assert lignes[0] == "Le tribunal de Paris,"
+    assert lignes[-1].endswith("jugement.")
+
+
+def test_a_word_stays_highlighted_until_the_next_one_starts():
+    """Sinon le surlignage s'éteint pendant la respiration entre deux mots,
+    et le texte clignote. Ça règle aussi les mots avalés : l'aligneur pose
+    « a » et « à » à une seule trame de 20 ms."""
+    from fresque.timeline import _fenetres
+
+    chunk = _mots([("a", 1.00), ("été", 1.02), ("condamné.", 1.40)])
+    fenetres = _fenetres(chunk, fin_ligne=60, fps=30, plancher=3)
+
+    # Jamais de trou : une fenêtre court au moins jusqu'au départ de la
+    # suivante. Elle peut la dépasser un peu quand le plancher mord sur un
+    # mot avalé — un chevauchement d'une ou deux images vaut mieux qu'un
+    # surlignage invisible — mais jamais s'arrêter avant.
+    for cette, suivante in zip(fenetres, fenetres[1:]):
+        assert cette["fin_frame"] >= suivante["debut_frame"], "trou"
+        depassement = cette["fin_frame"] - suivante["debut_frame"]
+        assert depassement <= 3, f"chevauchement de {depassement} frames"
+    # Le dernier mot tient jusqu'à la fin de la ligne.
+    assert fenetres[-1]["fin_frame"] == 60
+    # Et aucune fenêtre n'est trop courte pour être vue.
+    for f in fenetres:
+        assert f["fin_frame"] - f["debut_frame"] >= 3
+
+
+def test_a_swallowed_word_still_gets_a_visible_window():
+    """Un mot posé à une trame — mesuré sept fois sur trois cent dix-sept —
+    doit quand même se surligner assez longtemps pour se voir."""
+    from fresque.timeline import _fenetres
+
+    chunk = _mots([("à", 2.000), ("la", 2.005), ("Santé.", 2.010)])
+    fenetres = _fenetres(chunk, fin_ligne=200, fps=30, plancher=4)
+    for f in fenetres:
+        assert f["fin_frame"] - f["debut_frame"] >= 4
+
+
+def test_only_artefact_gaps_between_lines_are_closed():
+    """Le blanc entre deux phrases est voulu — c'est la pause que `voice`
+    insère. Celui entre deux moitiés d'une même phrase est un artefact."""
+    from fresque.timeline import _recoller
+
+    lignes = [
+        {"debut_frame": 0, "duree_frames": 10},    # trou de 5 -> artefact
+        {"debut_frame": 15, "duree_frames": 10},   # trou de 40 -> vrai silence
+        {"debut_frame": 65, "duree_frames": 10},
+    ]
+    recollees = _recoller(lignes, seuil_frames=21)
+
+    assert recollees[0]["duree_frames"] == 15      # tient jusqu'à la suivante
+    assert recollees[1]["duree_frames"] == 10      # le silence est gardé
+
+
+def test_the_renderer_is_told_the_measured_colours():
+    from fresque import apercu
+
+    montage = apercu.resume("documentaire-historique")["effectif"]["montage"]
+    assert montage["palette"]["sous_titre"].lower() == "#fafafa"
+    assert montage["sous_titres"]["surlignage"]["couleur"].upper() == "#F5BC4D"
+    assert montage["sous_titres"]["surlignage"]["actif"] is True
+    assert montage["sous_titres"]["voile"] is False
+    assert 90 <= montage["sous_titres"]["ligne_de_base_pct"] <= 92

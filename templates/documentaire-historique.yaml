@@ -223,6 +223,26 @@ montage:
     amorce_s: 0.12
     gain: 0.20
 
+  # Sous-titres, au pixel près d'après la mesure Frontier
+  # (`docs/analyse-frontier.md`) : blanc #FAFAFA, mot courant #F5BC4D, ligne
+  # de base à 90,8 % du cadre, et AUCUN bandeau — l'image reste visible, la
+  # lisibilité tient à l'ombre portée.
+  #
+  # Le surlignage exige `alignment.json` en `source: forced`. Sur des
+  # positions estimées par syllabes il dériverait de 305 ms en médiane, ce
+  # qui se voit sur une phrase de six mots.
+  sous_titres:
+    # Des phrases de douze mots au plus tiennent sur une ligne, et une seule
+    # ligne est ce qui a été mesuré.
+    mots_par_ligne: 6
+    ligne_de_base_pct: 90.8
+    voile: false
+    surlignage:
+      actif: true
+      couleur: "#F5BC4D"
+      fondu_frames: 3
+      duree_min_frames: 3
+
   # Panneaux graphiques. Un or vieilli sur un fond d'encre : c'est la
   # couleur du document officiel, et elle distingue immédiatement ce
   # template d'un documentaire criminel ou d'un portrait d'entreprise.
@@ -260,7 +280,7 @@ montage:
 
   palette:
     fond: "#000000"
-    sous_titre: "#f4f6fa"
+    sous_titre: "#fafafa"   # mesuré chez Frontier
     voile: "rgba(0,0,0,0.72)"
     ombre: "rgba(0,0,0,0.55)"
     letterbox: "#0a0c10"

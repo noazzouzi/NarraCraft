@@ -424,6 +424,32 @@ montage:
     actifs: true
     mots_par_ligne: 7
 
+    # Le mot prononcé change de couleur. Ce n'est pas un ornement : c'est ce
+    # qui fait qu'on lit la phrase entière tout en sachant où en est la voix.
+    # Mesuré chez Frontier (`docs/analyse-frontier.md`) — blanc #FAFAFA, mot
+    # courant #F5BC4D, et un fondu de deux à trois images d'un mot au suivant
+    # plutôt qu'une bascule sèche, qui clignoterait.
+    #
+    # Exige `alignment.json` en `source: forced` : sur des positions estimées
+    # par syllabes, le surlignage dérive de 305 ms en médiane.
+    surlignage:
+      actif: true
+      couleur: "#F5BC4D"
+      fondu_frames: 3
+      # Un mot reste surligné jusqu'à ce que le suivant commence, donc il n'y
+      # a jamais de trou. Ce plancher n'attrape que les mots avalés : l'aligneur
+      # en pose à une seule trame de 20 ms, et un surlignage de 20 ms ne se
+      # voit pas — il scintille.
+      duree_min_frames: 3
+
+    # Hauteur de la ligne de base, en % de la hauteur du cadre. 90,8 % est la
+    # mesure relevée ; plus bas, le texte touche le bord sur un téléviseur.
+    ligne_de_base_pct: 90.8
+    # Un dégradé sous le texte. Frontier n'en a aucun — l'image reste visible
+    # et seule une ombre portée douce tient la lisibilité. Un template qui
+    # travaille sur des archives très claires peut le rallumer.
+    voile: true
+
 budget:
   # Le pipeline refuse de continuer au-delà, et demande confirmation.
   max_eur_par_projet: 8.0

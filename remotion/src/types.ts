@@ -44,10 +44,25 @@ export type Clip = {
   accroche: string | null;
 };
 
+export type MotSousTitre = {
+  tx: string;
+  /** Frames absolues, comme partout ailleurs dans le fichier : le composant
+   *  les ramène au début de sa séquence. */
+  debut_frame: number;
+  fin_frame: number;
+};
+
+export type SurlignageStyle = {
+  actif: boolean;
+  couleur: string;
+  fondu_frames: number;
+};
+
 export type SousTitre = {
   texte: string;
   debut_frame: number;
   duree_frames: number;
+  mots?: MotSousTitre[];
 };
 
 export type Palette = {
@@ -103,6 +118,8 @@ export type Style = {
   traitement: { grain?: number; vignette?: number };
   motion: MotionStyle;
   transitions: StyleTransitions;
+  surlignage?: SurlignageStyle;
+  sous_titres?: { ligne_de_base_pct?: number; voile?: boolean };
 };
 
 export type Timeline = {

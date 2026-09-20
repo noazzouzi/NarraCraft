@@ -103,8 +103,13 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
         >
           <SousTitre
             texte={line.texte}
+            mots={line.mots}
+            depuis={line.debut_frame}
             palette={palette}
             typographie={typographie}
+            surlignage={style.surlignage}
+            ligneDeBasePct={style.sous_titres?.ligne_de_base_pct}
+            voile={style.sous_titres?.voile}
           />
         </Sequence>
       ))}

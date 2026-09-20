@@ -282,6 +282,12 @@ L'ordre est celui du rapport entre ce que ça change à l'écran et ce que
 ça coûte à écrire.
 
 > **Suivi.** Les points 1 et 3 sont faits (commit `d291cea`), ainsi que le
+> point 4 (alignement forcé, `75e6fd1`) et le point 5 (sous-titres mot à
+> mot). Le point 8, le style collage, est reclassé troisième après l'étude
+> de `vox-director` — voir `docs/etude-vox-director.md`. Reste le point 6,
+> le panneau de presse, et le point 7, Pexels.
+>
+> Le
 > point 2 — et celui-ci a révélé un défaut que l'analyse n'avait pas vu :
 > `pause_phrase_s` ne créait aucun silence, il ne servait qu'à estimer la
 > position des mots. Kokoro ne laisse que 0,10 s après un point. Le beat est

@@ -164,32 +164,88 @@ def _subtitle_lines(words: list[dict[str, Any]], per_line: int) -> list[list[dic
     while the voice moves on. Breaking one or two words early, at a comma or a
     full stop, costs nothing and reads far better.
     """
-    lines: list[list[dict[str, Any]]] = []
-    index = 0
     slack = max(1, per_line // 3)
+    plafond = per_line + slack
 
-    while index < len(words):
-        remaining = len(words) - index
-        if remaining <= per_line + slack:
-            lines.append(words[index:])
-            break
+    # 1. Une ligne par phrase. C'est la règle, et elle est courte parce que
+    #    les phrases le sont : le skill d'écriture plafonne à douze mots et
+    #    vise trois à huit (`docs/analyse-frontier.md`). Une phrase entière à
+    #    l'écran est ce qui se lit le mieux, et le surlignage mot à mot dit
+    #    déjà où la voix en est.
+    #
+    #    L'ancienne version coupait à longueur fixe et ne respectait la
+    #    ponctuation que si elle tombait dans une fenêtre étroite. Le rendu
+    #    l'a montré tel quel : « cinq ans de prison. Il est » — deux mots
+    #    d'une idée dont la suite n'était pas encore affichée.
+    phrases: list[list[dict[str, Any]]] = []
+    courante: list[dict[str, Any]] = []
+    for mot in words:
+        courante.append(mot)
+        if mot.get("tx", mot["t"]).rstrip().endswith((".", "!", "?", "…")):
+            phrases.append(courante)
+            courante = []
+    if courante:
+        phrases.append(courante)
 
-        window = words[index:index + per_line + slack]
-        cut = None
-        # Prefer the latest clean break inside the window, never earlier than
-        # a line too short to be worth its own card.
-        for offset in range(len(window) - 1, max(per_line - slack, 1) - 1, -1):
-            if window[offset]["tx"].rstrip().endswith((".", "!", "?", "…", ",", ";", ":")):
-                cut = offset + 1
-                break
-        cut = cut or per_line
-        lines.append(words[index:index + cut])
-        index += cut
+    # 2. Une phrase trop longue pour tenir se découpe, à la virgule si elle
+    #    en a une, à la longueur sinon.
+    lines: list[list[dict[str, Any]]] = []
+    for phrase in phrases:
+        while len(phrase) > plafond:
+            fenetre = phrase[:plafond]
+            coupe = None
+            for offset in range(len(fenetre) - 1, 0, -1):
+                if fenetre[offset].get("tx", "").rstrip().endswith((",", ";", ":")):
+                    coupe = offset + 1
+                    break
+            coupe = coupe or per_line
+            lines.append(phrase[:coupe])
+            phrase = phrase[coupe:]
+        if phrase:
+            lines.append(phrase)
 
     return [line for line in lines if line]
 
 
-def _subtitles(beat: dict[str, Any], fps: int, per_line: int) -> list[dict[str, Any]]:
+def _fenetres(chunk: list[dict[str, Any]], fin_ligne: int, fps: int,
+              plancher: int) -> list[dict[str, Any]]:
+    """La fenêtre de surlignage de chaque mot d'une ligne.
+
+    Un mot reste surligné **jusqu'à ce que le suivant commence**, pas
+    jusqu'à ce qu'il se taise. C'est ce qui supprime les trous : entre deux
+    mots la voix respire, et un surlignage qui s'éteindrait pendant cette
+    respiration donnerait un texte qui clignote.
+
+    Ça règle aussi le cas des mots avalés. L'aligneur pose « a » et « à » à
+    une seule trame de 20 ms — ce qu'aucune voyelle prononcée ne dure ;
+    mesurés à sept sur trois cent dix-sept. En prenant le départ du mot
+    suivant, ils héritent d'une fenêtre lisible, et le plancher n'a plus
+    qu'à couvrir les derniers cas.
+
+    Sur un mot avalé, le plancher peut pousser la fenêtre un peu au-delà du
+    départ du suivant : deux mots sont alors pleinement surlignés pendant
+    une ou deux images. C'est assumé. L'autre choix serait un surlignage de
+    20 ms, c'est-à-dire invisible — un scintillement plutôt qu'une
+    indication. Le chevauchement est borné par le plancher, donc petit.
+
+    Les frames sont calculées ici, jamais dans le moteur de rendu : c'est la
+    même règle que pour les coupes.
+    """
+    departs = [round(m["debut_s"] * fps) for m in chunk]
+    fenetres: list[dict[str, Any]] = []
+    for index, mot in enumerate(chunk):
+        debut = departs[index]
+        suivant = departs[index + 1] if index + 1 < len(departs) else fin_ligne
+        fenetres.append({
+            "tx": mot.get("tx", mot["t"]),
+            "debut_frame": debut,
+            "fin_frame": max(suivant, debut + plancher),
+        })
+    return fenetres
+
+
+def _subtitles(beat: dict[str, Any], fps: int, per_line: int,
+               plancher: int) -> list[dict[str, Any]]:
     lines: list[dict[str, Any]] = []
     for chunk in _subtitle_lines(beat["mots"], per_line):
         first, last = chunk[0]["debut_s"], chunk[-1]["fin_s"]
@@ -199,8 +255,32 @@ def _subtitles(beat: dict[str, Any], fps: int, per_line: int) -> list[dict[str, 
             "texte": " ".join(w.get("tx", w["t"]) for w in chunk),
             "debut_frame": debut,
             "duree_frames": fin - debut,
+            # Les fenêtres sont en frames absolues, comme tout le reste du
+            # fichier ; le moteur les ramène au début de sa séquence.
+            "mots": _fenetres(chunk, fin, fps, plancher),
         })
     return lines
+
+
+def _recoller(lignes: list[dict[str, Any]], seuil_frames: int) -> list[dict[str, Any]]:
+    """Tient une ligne jusqu'à la suivante quand le trou est un artefact.
+
+    Une ligne s'arrêtait à la fin acoustique de son dernier mot. Entre deux
+    moitiés d'une même phrase, ça laissait le temps d'une respiration inter-
+    mots — quelques images — pendant lesquelles le texte disparaissait puis
+    revenait. Vu au rendu : un clignotement.
+
+    Mais tous les trous ne sont pas des artefacts. Entre deux phrases, la
+    voix se tait vraiment, et ce blanc-là est voulu : c'est la pause que
+    `voice` insère. Le seuil est donc cette pause elle-même, pas un réglage
+    de plus — un trou plus court qu'un silence de phrase n'en est pas un.
+    """
+    for index, ligne in enumerate(lignes[:-1]):
+        fin = ligne["debut_frame"] + ligne["duree_frames"]
+        trou = lignes[index + 1]["debut_frame"] - fin
+        if 0 < trou < seuil_frames:
+            ligne["duree_frames"] += trou
+    return lignes
 
 
 def build(
@@ -215,6 +295,8 @@ def build(
     width, height = config.get("montage", "resolution", default=[1920, 1080])
     per_line = int(config.get("montage", "sous_titres", "mots_par_ligne", default=7))
     subtitles_on = bool(config.get("montage", "sous_titres", "actifs", default=True))
+    plancher = int(config.get("montage", "sous_titres", "surlignage",
+                              "duree_min_frames", default=3))
 
     transition_s = float(config.get("montage", "transitions", "duree_s", default=0.3))
     fondu_noir_s = float(config.get("montage", "transitions", "fondu_noir_s", default=0.55))
@@ -293,7 +375,7 @@ def build(
             cursor = end
 
         if subtitles_on:
-            subtitles.extend(_subtitles(beat, fps, per_line))
+            subtitles.extend(_subtitles(beat, fps, per_line, plancher))
 
     # Chaque panneau graphique reçoit l'image du plan photographique le plus
     # proche, qui lui servira de texture de fond. C'est ce qui rattache un
@@ -368,6 +450,24 @@ def build(
                 "punch_pct": float(config.get(
                     "montage", "transitions", "punch_pct", default=5)),
             },
+            # Le surlignage mot à mot. Le moteur interpole une couleur entre
+            # deux bornes ; il ne décide ni laquelle, ni quand, ni combien de
+            # temps — les fenêtres sont déjà dans `sous_titres[].mots`.
+            "surlignage": {
+                "actif": bool(config.get("montage", "sous_titres", "surlignage",
+                                         "actif", default=False)),
+                "couleur": str(config.get("montage", "sous_titres", "surlignage",
+                                          "couleur", default="#F5BC4D")),
+                "fondu_frames": int(config.get("montage", "sous_titres",
+                                               "surlignage", "fondu_frames",
+                                               default=3)),
+            },
+            "sous_titres": {
+                "ligne_de_base_pct": float(config.get(
+                    "montage", "sous_titres", "ligne_de_base_pct", default=90.8)),
+                "voile": bool(config.get(
+                    "montage", "sous_titres", "voile", default=True)),
+            },
         },
         "clips": clips,
         # Le lit sonore. Le moteur le boucle : il n'a pas à savoir combien de
@@ -385,7 +485,8 @@ def build(
         } if musique and config.get("montage", "musique", "actif", default=True)
         else None,
         "sons": sound_track,
-        "sous_titres": subtitles,
+        "sous_titres": _recoller(subtitles, round(float(config.get(
+            "narration", "pause_phrase_s", default=0.45)) * fps)),
         # Les crédits voyagent avec le montage, pas dans une tête. Une piste
         # CC-BY n'est libre que si l'attribution suit jusqu'à la description
         # de la vidéo — la musique y figure donc au même titre qu'une image.
