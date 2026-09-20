@@ -12,6 +12,7 @@ subtitles. `alignment.json` records which is which in its `source` field.
 """
 from __future__ import annotations
 
+import re
 import wave
 from pathlib import Path
 from typing import Any, Callable
@@ -97,6 +98,56 @@ def _time_words(beat: Beat, start: float, duration: float) -> list[dict[str, Any
     return timed
 
 
+#: Fin de phrase. Le point d'un « M. » ou d'un « 1. » n'en est pas une, d'où
+#: l'exigence d'un espace et d'une majuscule — et le script, de toute façon,
+#: ne doit plus contenir ni l'un ni l'autre (voir `lint.TTS_HAZARDS`).
+_FIN_PHRASE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÀ-Ý])")
+
+#: Ce que Kokoro laisse lui-même après un point, mesuré sur ff_siwis :
+#: 0,10 s à vitesse 0,75, 0,12 s à 0,82 — à peine plus qu'après une virgule.
+#: On l'ôte du silence qu'on ajoute, sinon les deux s'additionnent et la
+#: pause réelle dépasse celle qui est demandée, de huit pour cent sur un
+#: texte à phrases courtes.
+_PAUSE_KOKORO_S = 0.10
+
+
+def _say_beat(kokoro, texte: str, voice: str, speed: str, lang: str,
+              phrase_gap: float):
+    """Synthétise un beat, phrase par phrase, avec du vrai silence entre.
+
+    Kokoro ne marque qu'un dixième de seconde après un point — mesuré à
+    0,10 s à vitesse 0,75, à peine plus qu'après une virgule. Ce n'est pas
+    une respiration, et aucun réglage du moteur ne l'allonge.
+
+    Or le silence est la moitié du rythme : la voix de Frontier se tait un
+    tiers du temps (`docs/analyse-frontier.md`). On découpe donc le beat à
+    la phrase et on insère le silence nous-mêmes.
+
+    Effet de bord voulu : chaque phrase reçoit sa propre intonation de fin,
+    ce qui est exactement ce qu'on cherche pour des phrases de quatre mots.
+
+    Et effet de bord utile : `align.estimate` modélisait déjà ces pauses
+    comme du temps réel. Elles le deviennent, donc l'estimation cesse d'être
+    optimiste — elle dépassait la durée réelle de 12 % sur un texte à
+    phrases courtes.
+    """
+    import numpy as np
+
+    phrases = [p.strip() for p in _FIN_PHRASE.split(texte) if p.strip()]
+    if len(phrases) <= 1:
+        return kokoro.create(texte, voice=voice, speed=speed, lang=lang)
+
+    morceaux: list[Any] = []
+    rate = SAMPLE_RATE
+    for index, phrase in enumerate(phrases):
+        samples, rate = kokoro.create(phrase, voice=voice, speed=speed, lang=lang)
+        morceaux.append(np.asarray(samples, dtype="float32"))
+        manquant = phrase_gap - _PAUSE_KOKORO_S
+        if index < len(phrases) - 1 and manquant > 0:
+            morceaux.append(np.zeros(int(manquant * rate), dtype="float32"))
+    return np.concatenate(morceaux), rate
+
+
 def synthesize(
     script: Script,
     audio_dir: Path,
@@ -111,6 +162,7 @@ def synthesize(
     speed = float(config.get("voix", "kokoro", "speed", default=0.82))
     beat_gap = float(config.get("narration", "pause_entre_beats_s", default=0.4))
     act_gap = float(config.get("narration", "pause_entre_actes_s", default=1.2))
+    phrase_gap = float(config.get("narration", "pause_phrase_s", default=0.45))
 
     beats_dir = audio_dir / "beats"
     beats_dir.mkdir(parents=True, exist_ok=True)
@@ -127,7 +179,7 @@ def synthesize(
             clock += gap
         previous_act = beat.act
 
-        samples, rate = kokoro.create(beat.text, voice=voice, speed=speed, lang=lang)
+        samples, rate = _say_beat(kokoro, beat.text, voice, speed, lang, phrase_gap)
         if rate != SAMPLE_RATE:
             raise VoiceError(f"Fréquence inattendue : {rate} Hz (attendu {SAMPLE_RATE}).")
 

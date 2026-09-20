@@ -14,6 +14,27 @@ Lire `projet.yaml` pour connaître le template, puis `templates/<template>.yaml`
 Lire `fresque.config.yaml` : `mots_par_minute`, `duree_cible_min`,
 `relance_retention_s` et `hook_s` pilotent l'écriture.
 
+## Parler lentement, pour que le montage puisse aller vite
+
+C'est la règle la moins intuitive de ce pipeline, et elle vient d'une
+mesure. Sur deux documentaires du concurrent Frontier, la voix tient
+environ 105 mots par minute quand elle parle, 70 sur la durée totale —
+parce qu'elle se tait un tiers du temps. Pendant ce temps, le montage
+coupe vingt-cinq fois par minute (`docs/analyse-frontier.md`).
+
+Leurs phrases entières : « August 31st, 2026. » « It started in Rosario. »
+« A World Cup in Qatar. » Trois à six mots, puis du silence.
+
+Le premier documentaire de ce pipeline a été jugé ennuyant, et la réponse
+a été d'accélérer la narration de 140 à 170 mots par minute. C'était la
+mauvaise moitié du problème : **le rythme se joue à l'image, et la voix
+doit laisser la place pour qu'on le sente.** Une narration dense sur un
+montage rapide ne donne pas du rythme, elle donne du bruit.
+
+Donc : des phrases courtes, un point plutôt qu'une virgule, et un beat qui
+dit une seule chose. Chaque point produit une vraie pause — c'est la
+ponctuation qui fabrique le silence, pas les réglages.
+
 ## Ce qui distingue une narration documentaire
 
 Ce texte ne sera **jamais lu**. Il sera **entendu**, une seule fois, sans
@@ -111,9 +132,9 @@ Règles de format, strictes :
 
 - Les beats sont numérotés `B001`, `B002`… en continu à travers tout le
   document, sans trou et sans reprise à chaque acte.
-- Un beat = un plan visuel = 10 à 25 secondes de narration (soit ~25 à 60
-  mots). Un beat plus long n'est pas tenable visuellement ; plus court, le
-  montage devient haché.
+- Un beat = **une idée**, pas un plan visuel. Sa longueur est bornée par
+  `controle.mots_par_beat`, qui est court : le montage lui donnera
+  plusieurs plans, et c'est lui qui porte le rythme.
 - La ligne `> intention:` est obligatoire et fait **une seule ligne**. Elle
   décrit ce que le spectateur voit, pas ce qu'il entend.
 - La ligne `> relance:` est facultative, et fait une seule ligne aussi. Elle
@@ -180,7 +201,7 @@ Avant de présenter le script, le relire une fois **à voix haute, dans sa
 tête**, et vérifier :
 
 - [ ] Le hook tient en `hook_s` secondes et pose un fait, pas une question.
-- [ ] Aucune phrase ne dépasse 25 mots. Les couper.
+- [ ] Aucune phrase ne dépasse `controle.mots_par_phrase_max` mots.
 - [ ] Aucune phrase ne demande de reprendre son souffle en cours de route.
 - [ ] Chaque chiffre important a son ordre de grandeur concret.
 - [ ] Une relance au moins tous les `relance_retention_s` secondes.
@@ -189,7 +210,8 @@ tête**, et vérifier :
 - [ ] Aucun interdit du brief n'a été enfreint.
 - [ ] Aucune didascalie n'a survécu dans le corps d'un beat.
 - [ ] Le compte de mots est dans la tolérance de `fresque.config.yaml`.
-- [ ] Tout beat fait entre 25 et 60 mots.
+- [ ] Tout beat tient dans `controle.mots_par_beat`.
+- [ ] La part de silence atteint `controle.part_silence_min`.
 
 Les points de cette liste qui peuvent l'être sont vérifiés par
 `python -m fresque lint` : longueur des beats et des phrases, pièges de

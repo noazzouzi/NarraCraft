@@ -43,31 +43,40 @@ meta:
 # --- Écriture ---------------------------------------------------------------
 
 narration:
-  # Débit tendu. Le premier montage à 140 mots/min a été jugé monotone :
-  # le registre sobre ne veut pas dire lent, et une voix off documentaire
-  # française tient très bien 170 sans devenir un reportage télé.
+  # Le débit a été monté à 170 mots/min après que le premier montage a été
+  # jugé monotone. C'était la mauvaise moitié du problème : le rythme d'un
+  # documentaire se joue à l'image, et la voix doit laisser la place pour
+  # qu'on le sente. Frontier coupe deux fois plus vite que nous et parle
+  # deux fois moins vite — environ 105 mots/min quand elle parle, 70 sur la
+  # durée totale, parce que la voix se tait un tiers du temps
+  # (`docs/analyse-frontier.md`).
   #
+  # `mots_par_minute` est le débit PARLÉ : les pauses s'ajoutent par-dessus.
   # Mesuré sur un extrait réel du script, avec la voix ff_siwis :
-  #   speed 0.82 → 148 mots/min   (ancien réglage)
-  #   speed 0.92 → 167 mots/min
-  #   speed 0.95 → 170 mots/min   ← retenu
-  #   speed 1.00 → 176 mots/min
-  #   speed 1.15 → 192 mots/min   (articulation qui commence à se dégrader)
+  #   speed 0.62 → 107 mots/min   (au niveau de Frontier, mais traînant)
+  #   speed 0.69 → 117 mots/min
+  #   speed 0.75 → 124 mots/min   ← retenu
+  #   speed 0.82 → 146 mots/min
+  #   speed 0.95 → 167 mots/min   (ancien réglage)
   #
-  # `mots_par_minute` doit rester cohérent avec `voix.kokoro.speed` :
-  # c'est lui qui convertit mots <-> durée dans tout le pipeline.
-  mots_par_minute: 170
-  # Les respirations sont divisées par deux. Elles restent audibles — un
-  # enchaînement à zéro pause sonne synthétique — mais elles ne portent
-  # plus le rythme à elles seules.
-  pause_entre_actes_s: 0.9
-  pause_entre_beats_s: 0.22
-  pause_phrase_s: 0.30
-  pause_virgule_s: 0.12
+  # 124 plutôt que 107 : la voix française de Kokoro est notée B-, et plus
+  # on la ralentit plus sa prosodie se délite. Le reste du ralentissement
+  # vient du silence, qui ne coûte rien en qualité.
+  mots_par_minute: 124
+  # Les respirations portent le rythme, et c'est délibéré. Elles étaient
+  # divisées par deux ; elles sont maintenant au-dessus de la base. Une
+  # phrase courte suivie d'un vrai silence frappe plus fort que n'importe
+  # quel adjectif — c'est déjà écrit dans le registre de ce template, ça
+  # n'était simplement pas dans les nombres.
+  pause_entre_actes_s: 2.0
+  pause_entre_beats_s: 0.9
+  pause_phrase_s: 0.70
+  pause_virgule_s: 0.22
 
 voix:
   kokoro:
-    speed: 0.95
+    # Cohérent avec `narration.mots_par_minute` ci-dessus : 0.75 → 124.
+    speed: 0.75
 
 structure:
   actes: 4
@@ -78,9 +87,17 @@ structure:
 
 controle:
   # Beats courts. Un beat = une unité de narration, et c'est la maille à
-  # laquelle le montage peut changer d'intention. 45 mots à 170 mots/min
-  # font déjà seize secondes.
-  mots_par_beat: [16, 45]
+  # laquelle le montage peut changer d'intention. 20 mots à 124 mots/min
+  # font dix secondes une fois les pauses comptées — déjà trois plans.
+  mots_par_beat: [8, 20]
+  # Les phrases de Frontier font trois à six mots : « August 31st, 2026. »,
+  # « It started in Rosario. ». Douze est un plafond, pas une cible.
+  mots_par_phrase_max: 12
+  # Part minimale de silence sur la durée estimée. Mesuré chez Frontier :
+  # 34 % sur un documentaire, 21 % sur l'autre. C'est une règle d'écriture
+  # autant que de réglage — un beat d'une seule longue phrase ne respire
+  # nulle part, quelles que soient les pauses configurées.
+  part_silence_min: 0.25
   interdits:
     - abonnez-vous
     - dans cette vidéo

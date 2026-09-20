@@ -281,6 +281,14 @@ un plan chacun, du silence entre.
 L'ordre est celui du rapport entre ce que ça change à l'écran et ce que
 ça coûte à écrire.
 
+> **Suivi.** Les points 1 et 3 sont faits (commit `d291cea`), ainsi que le
+> point 2 — et celui-ci a révélé un défaut que l'analyse n'avait pas vu :
+> `pause_phrase_s` ne créait aucun silence, il ne servait qu'à estimer la
+> position des mots. Kokoro ne laisse que 0,10 s après un point. Le beat est
+> désormais synthétisé phrase par phrase avec un vrai blanc entre les
+> morceaux, ce qui porte la part de silence de 19 % à 31 % — dans la bande
+> mesurée chez Frontier.
+
 1. **Couper deux fois plus vite, et en franc.** `plans_par_minute` à 25,
    `duree_plan_max_s` à 3, transitions à 0, fondu noir réservé aux
    changements d'acte, sons de transition désactivés par défaut. Ce sont

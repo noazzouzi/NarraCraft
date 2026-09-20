@@ -15,7 +15,13 @@ narration:
   pause_entre_actes_s: 1.2
   pause_entre_beats_s: 0.4
   # Respirations internes à un beat, déduites de la ponctuation.
+  # Silence réellement inséré entre deux phrases d'un même beat : le beat
+  # est synthétisé phrase par phrase et les morceaux sont recollés autour
+  # de ce blanc. Kokoro n'en laisse que 0,10 s tout seul, ce qui n'est pas
+  # une respiration — on le lui ôte pour que le total soit bien celui-ci.
   pause_phrase_s: 0.45      # après . ! ? …
+  # Celui-ci n'est qu'un poids d'estimation : il sert à placer les mots
+  # dans un beat dont la durée est mesurée, jamais à produire du silence.
   pause_virgule_s: 0.18     # après , ; :
 
 controle:
@@ -25,6 +31,15 @@ controle:
   # voix off finale.
   mots_par_beat: [25, 60]
   mots_par_phrase_max: 25
+
+  # Part minimale de la durée estimée passée sans voix, vérifiée par
+  # `fresque lint`. Zéro désactive la règle, ce qui est le défaut : c'est
+  # une exigence de genre, et un template la relève s'il en veut.
+  #
+  # Le silence ne se règle pas qu'avec les pauses : il dépend de l'écriture.
+  # Un beat fait d'une seule phrase de vingt mots ne produit qu'une pause,
+  # quelle que soit sa durée.
+  part_silence_min: 0.0
 
   # Acronymes lus comme un mot. Tous les autres doivent être ponctués
   # (U.R.S.S., F.B.I.) sinon la synthèse tranche au hasard.

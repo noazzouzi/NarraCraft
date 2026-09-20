@@ -1509,12 +1509,22 @@ def test_a_project_can_override_its_template(tmp_path, monkeypatch):
         (tmp_path / "templates" / gabarit.name).write_text(
             gabarit.read_text(encoding="utf-8"), encoding="utf-8")
 
+    # Ce test porte sur la surcouche, pas sur un réglage : figer la valeur du
+    # template ici le ferait échouer chaque fois qu'on ajuste le débit, et
+    # pour une raison qui n'a rien à voir avec ce qu'il vérifie.
+    import yaml
+
+    attendu = yaml.safe_load(
+        (vrai / "templates" / "documentaire-historique.yaml").read_text(
+            encoding="utf-8")
+    )["narration"]["mots_par_minute"]
+
     try:
         Project.open("essai")
         # Le projet a le dernier mot…
         assert config_mod.get("production", "duree_cible_min") == 2
         # …sans écraser ce que le template dit par ailleurs.
-        assert config_mod.get("narration", "mots_par_minute") == 170
+        assert config_mod.get("narration", "mots_par_minute") == attendu
     finally:
         config_mod.use_project_overrides({})
         config_mod.use_template(None)
@@ -1964,3 +1974,165 @@ def test_the_historical_template_cuts_hard_and_fast():
     assert montage["transitions"]["style"] == "coupe"
     assert 2.0 <= montage["ken_burns"]["vitesse_pct_s"] <= 3.1, \
         "hors de la plage relevée chez Frontier"
+
+
+# --- Narration : le silence compte ------------------------------------------
+
+def _script(texte: str):
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False,
+                                     encoding="utf-8") as f:
+        f.write(texte)
+        chemin = Path(f.name)
+    return script_parser.parse(chemin)
+
+
+def test_the_word_budget_is_measured_in_time_not_in_words():
+    """La cible est une durée. `mots_par_minute` est le débit PARLÉ, et les
+    silences s'ajoutent par-dessus : multiplier l'un par l'autre sous-estime
+    la durée dès qu'on laisse de l'air, et un script « dans le budget »
+    dépasse sa cible d'un tiers.
+    """
+    from fresque import align as align_mod, config as config_mod, lint as lint_mod
+
+    texte = "# Script — essai\n\n## Acte I — Ouverture\n\n"
+    for i in range(1, 9):
+        texte += (f"### B{i:03d}\n> intention: un plan\n"
+                  "Une phrase courte. Puis une autre. Et encore une ici.\n\n")
+    script = _script(texte)
+
+    config_mod.use_template(None)
+    config_mod.use_project_overrides({"production": {"duree_cible_min": 1}})
+    try:
+        plan = align_mod.estimate(script)
+        parlee_s = script.word_count / float(
+            config_mod.get("narration", "mots_par_minute")) * 60
+        assert plan["duree_totale_s"] > parlee_s, \
+            "les pauses doivent allonger la durée au-delà du temps parlé"
+
+        message = " ".join(
+            v.message for v in lint_mod.rule_word_budget(script, plan))
+        assert "estimées" in message
+        # La durée annoncée est celle du plan, pas un produit mots × débit.
+        assert align_mod.format_duration(plan["duree_totale_s"]) in message
+    finally:
+        config_mod.use_project_overrides({})
+
+
+def test_a_script_without_air_is_flagged():
+    """Un beat fait d'une seule longue phrase ne respire nulle part, quelles
+    que soient les pauses configurées : c'est la ponctuation qui les crée."""
+    from fresque import align as align_mod, config as config_mod, lint as lint_mod
+
+    entete = "# Script — essai\n\n## Acte I — Ouverture\n\n"
+    dense = entete + "".join(
+        f"### B{i:03d}\n> intention: un plan\n"
+        "Une seule très longue phrase qui avance sans jamais reprendre son "
+        "souffle et ne laisse donc aucun silence au montage\n\n"
+        for i in range(1, 6))
+    aere = entete + "".join(
+        f"### B{i:03d}\n> intention: un plan\n"
+        "Trois mots. Puis trois. Encore trois. Et fin.\n\n"
+        for i in range(1, 6))
+
+    config_mod.use_template(None)
+    config_mod.use_project_overrides({"controle": {"part_silence_min": 0.25}})
+    try:
+        def part(script):
+            return list(lint_mod.rule_air(script, align_mod.estimate(script)))
+
+        assert part(_script(dense)), "un pavé sans ponctuation doit être signalé"
+        assert not part(_script(aere)), "un script ponctué ne doit pas l'être"
+    finally:
+        config_mod.use_project_overrides({})
+
+
+def test_the_voice_speed_matches_the_words_per_minute_it_claims():
+    """`mots_par_minute` et `voix.kokoro.speed` disent la même chose à deux
+    endroits : l'un sert à convertir mots <-> durée dans tout le pipeline,
+    l'autre pilote le moteur. Les changer séparément fait dériver toutes les
+    estimations de durée sans qu'aucun test ne tombe.
+
+    La table vient d'une mesure sur un extrait réel du script Sarkozy avec
+    la voix ff_siwis, la seule voix française de Kokoro v1.0.
+    """
+    from fresque import apercu
+
+    MESURE = {0.62: 107, 0.69: 117, 0.75: 124, 0.82: 146, 0.95: 167}
+
+    effectif = apercu.resume("documentaire-historique")["effectif"]
+    vitesse = float(effectif["voix"]["kokoro"]["speed"])
+    annonce = float(effectif["narration"]["mots_par_minute"])
+
+    plus_proche = min(MESURE, key=lambda v: abs(v - vitesse))
+    assert abs(plus_proche - vitesse) < 0.01, (
+        f"speed {vitesse} n'est pas dans la table mesurée {sorted(MESURE)} — "
+        "mesurer avant de changer")
+    assert abs(MESURE[plus_proche] - annonce) <= 4, (
+        f"speed {vitesse} produit {MESURE[plus_proche]} mots/min, "
+        f"mais la config en annonce {annonce}")
+
+
+def test_the_historical_template_speaks_slowly_and_leaves_air():
+    from fresque import apercu
+
+    effectif = apercu.resume("documentaire-historique")["effectif"]
+    assert effectif["narration"]["mots_par_minute"] <= 130
+    assert effectif["controle"]["mots_par_phrase_max"] <= 12
+    assert effectif["controle"]["part_silence_min"] >= 0.20
+    assert effectif["controle"]["mots_par_beat"][1] <= 20
+    # Les pauses portent le rythme : elles doivent dépasser celles de la base.
+    base = apercu._charger("documentaire-historique")[0]["narration"]
+    for cle in ("pause_phrase_s", "pause_entre_beats_s"):
+        assert effectif["narration"][cle] > base[cle], cle
+
+
+def test_a_beat_is_spoken_sentence_by_sentence_with_real_silence():
+    """Kokoro ne marque qu'un dixième de seconde après un point. Le silence
+    qui porte le rythme est donc inséré par nous, entre les phrases — sinon
+    `pause_phrase_s` ne servirait qu'à estimer, et jamais à produire.
+
+    Le moteur est remplacé par un faux : ce qui est vérifié ici est le
+    découpage et le silence, pas la synthèse.
+    """
+    import numpy as np
+
+    from fresque import voice as voice_mod
+
+    appels = []
+
+    class FauxKokoro:
+        def create(self, texte, voice, speed, lang):
+            appels.append(texte)
+            # Une seconde de « parole » par phrase, à amplitude non nulle.
+            return np.ones(voice_mod.SAMPLE_RATE, dtype="float32"), voice_mod.SAMPLE_RATE
+
+    samples, rate = voice_mod._say_beat(
+        FauxKokoro(), "Trois mots. Puis trois. Et fin.",
+        "ff_siwis", 0.75, "fr-fr", 0.70)
+
+    assert appels == ["Trois mots.", "Puis trois.", "Et fin."]
+    # Trois secondes de parole, plus deux silences amputés de ce que le
+    # moteur fournit déjà.
+    attendu = 3 + 2 * (0.70 - voice_mod._PAUSE_KOKORO_S)
+    assert abs(len(samples) / rate - attendu) < 0.02
+    assert (samples == 0).sum() > 0, "aucun silence n'a été inséré"
+
+
+def test_a_single_sentence_beat_is_not_split():
+    """Découper là où il n'y a rien à découper ferait payer un appel de plus
+    au moteur, et changerait la prosodie sans raison."""
+    import numpy as np
+
+    from fresque import voice as voice_mod
+
+    appels = []
+
+    class FauxKokoro:
+        def create(self, texte, voice, speed, lang):
+            appels.append(texte)
+            return np.ones(100, dtype="float32"), voice_mod.SAMPLE_RATE
+
+    texte = "Une seule phrase, avec une virgule."
+    voice_mod._say_beat(FauxKokoro(), texte, "ff_siwis", 0.75, "fr-fr", 0.70)
+    assert appels == [texte]
