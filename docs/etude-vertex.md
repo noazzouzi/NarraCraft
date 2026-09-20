@@ -255,10 +255,26 @@ unique suffit : le mode `projet` n'a pas besoin d'un autre type de
 justificatif que le mode `express`, seule l'URL change, et la seule chose que
 `VERTEX_PROJECT` ajoute est de rendre le projet explicite dans l'adresse.
 
-## 4. Non testé
+## 4. La facturation, rapportée par le titulaire du compte
 
-- **Le coût réel.** Aucune facturation consultée. Les treize appels ne sont
-  chiffrés nulle part dans cette étude.
+Constaté dans la console Google Cloud par le propriétaire du projet, et non
+mesuré ici — c'est un rapport, pas une sonde :
+
+- le crédit d'essai de **300 $ est bien visible** sur le compte ;
+- la page « Usage » montre une consommation de **`gemini-3.1`** correspondant
+  aux images produites par ces essais.
+
+Ce qui était la question ouverte depuis le départ est donc tranché : la clé
+d'API facture bien le projet du titulaire, et ce projet porte le crédit. La
+chaîne complète — clé → projet → crédit — est confirmée de bout en bout.
+
+Ce que ça ne dit pas : le montant exact consommé. Aucun chiffre n'a été relevé.
+
+## 5. Non testé
+
+- **Le coût unitaire réel.** La consommation est visible mais n'a pas été
+  chiffrée. Les prix utilisés ailleurs dans le dépôt viennent de la
+  documentation publique, pas d'une facture.
 - **La qualité comparée des modèles.** Une image par modèle, un seul sujet.
   Rien ne dit lequel rend le meilleur plan ; on ne mesure ici que des
   dimensions, des poids et des temps.
