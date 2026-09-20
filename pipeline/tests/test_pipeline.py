@@ -2893,3 +2893,54 @@ def test_the_key_is_accepted_under_the_names_people_actually_use(monkeypatch):
         monkeypatch.delenv(nom, raising=False)
     monkeypatch.setenv("GOOGLE_CLOUD_KEY", "CLE")
     assert vertex_mod.cle_express() == "CLE"
+
+
+def test_every_request_carries_a_role():
+    """Épinglé contre le premier appel Vertex réel, le 2026-09-20.
+
+    Sans `role`, la génération rend « Please use a valid role: user, model »
+    en 400 — un message qui nomme les valeurs attendues et pas le champ
+    manquant, donc difficile à rattacher à un `contents` sans rôle. AI Studio
+    s'en passe, Vertex l'exige ; on l'émet pour les deux, parce qu'un corps
+    unique est ce qui rend les deux portes interchangeables.
+    """
+    corps = images_mod._corps("un prompt", avec_image_config=True)
+    assert corps["contents"][0]["role"] == "user"
+
+
+def test_a_401_on_model_sheets_is_not_reported_as_a_stale_model_id(monkeypatch):
+    """Relevé au premier essai réel : quatre 401 étaient rendus comme « les
+    identifiants de modèle ont peut-être changé ». Un 401 ne dit rien des
+    identifiants — il dit que la requête n'est pas identifiée, et le message
+    envoyait chercher au mauvais endroit."""
+    monkeypatch.setattr(vertex_mod.config, "get",
+                        lambda *k, default=None: "express"
+                        if k[-1] == "mode" else default)
+    monkeypatch.setenv("VERTEX_API_KEY", "CLE")
+
+    class _S:
+        def get(self, url, params=None, headers=None, timeout=None):
+            return _Reponse(401, texte="UNAUTHENTICATED")
+
+    with pytest.raises(vertex_mod.VertexError) as capture:
+        vertex_mod.modeles_image(_S())
+    message = str(capture.value)
+    assert "MODELES_CANDIDATS" not in message
+    # En express, l'issue est nommée : il n'y a pas de vérification gratuite.
+    assert "essai-image" in message
+
+
+def test_a_404_on_model_sheets_still_points_at_the_identifiers(monkeypatch):
+    """L'autre moitié de la distinction : une route qui répond mais ne
+    connaît pas le modèle, c'est bien l'identifiant qui est en cause."""
+    monkeypatch.setattr(vertex_mod.config, "get",
+                        lambda *k, default=None: "express"
+                        if k[-1] == "mode" else default)
+    monkeypatch.setenv("VERTEX_API_KEY", "CLE")
+
+    class _S:
+        def get(self, url, params=None, headers=None, timeout=None):
+            return _Reponse(404, texte="NOT_FOUND")
+
+    with pytest.raises(vertex_mod.VertexError, match="MODELES_CANDIDATS"):
+        vertex_mod.modeles_image(_S())

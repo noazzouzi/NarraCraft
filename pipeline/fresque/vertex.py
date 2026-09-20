@@ -6,10 +6,15 @@ Le crédit d'essai Google Cloud — 300 $ sur quatre-vingt-dix jours — **ne pa
 plus l'API Gemini servie par AI Studio** pour les comptes ouverts après le
 2 mars 2026. Il paie Vertex AI, qui sert exactement les mêmes modèles.
 
-C'est donc une question de facturation, pas de capacité : le corps de requête
-est identique à celui d'AI Studio, et la réponse aussi. Seules changent
-l'adresse et l'authentification. Tout ce module ne fait que ça — le reste de
-`images.py` ne sait pas quelle porte il a prise.
+C'est donc une question de facturation, pas de capacité : la réponse est de
+même forme, et le corps de requête l'est presque. Une seule divergence a été
+constatée au premier appel réel — Vertex exige un `role` sur chaque entrée de
+`contents`, qu'AI Studio rend facultatif. Elle est absorbée dans
+`images._corps()`, qui l'émet pour les deux : un corps unique est ce qui rend
+les deux portes interchangeables.
+
+Pour le reste, seules changent l'adresse et l'authentification, et tout ce
+module ne fait que ça — `images.py` ne sait pas quelle porte il a prise.
 
 CE QUI CHANGE VRAIMENT
 ======================
@@ -387,14 +392,40 @@ def modeles_image(session: requests.Session | None = None) -> list[str]:
         else:
             refus.append(f"{modele} → {fiche.status_code}")
 
-    if not servis:
+    if servis:
+        return servis
+
+    # Le diagnostic dépend du code, et les confondre envoie chercher au
+    # mauvais endroit. Relevé au premier essai réel : quatre 401 étaient
+    # rendus comme « les identifiants de modèle ont peut-être changé », alors
+    # qu'un 401 ne dit rien des identifiants — il dit que la requête n'est
+    # pas identifiée.
+    codes = {ligne.rsplit(" → ", 1)[1] for ligne in refus}
+    detail = "\n  ".join(refus)
+
+    if codes <= {"401", "403"}:
+        if mode() == "express":
+            raise VertexError(
+                "la fiche publique d'un modèle n'accepte pas une clé d'API : "
+                "les quatre sondes rendent 401.\n  " + detail
+                + "\n\n  Ce n'est PAS un échec de la clé — elle n'a simplement "
+                  "pas cours sur cette route, qui attend un jeton OAuth.\n"
+                  "  En mode `express`, il n'existe donc aucune vérification "
+                  "gratuite : le seul essai concluant est une génération.\n"
+                  "  · `fresque essai-image \"...\"` — une image, quelques "
+                  "centimes."
+            )
         raise VertexError(
-            "le projet répond, mais aucun des modèles d'image connus n'a de "
-            "fiche.\n  " + "\n  ".join(refus)
-            + "\n  · les identifiants de `vertex.MODELES_CANDIDATS` ont "
-              "peut-être changé."
+            "jeton refusé sur les fiches de modèle (401/403).\n  " + detail
+            + "\n  · le jeton a-t-il la portée `cloud-platform` ?"
         )
-    return servis
+
+    raise VertexError(
+        "le projet répond, mais aucun des modèles d'image connus n'a de "
+        "fiche.\n  " + detail
+        + "\n  · les identifiants de `vertex.MODELES_CANDIDATS` ont "
+          "peut-être changé."
+    )
 
 
 def etat() -> dict[str, Any]:

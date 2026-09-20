@@ -215,7 +215,17 @@ def _corps(prompt: str, avec_image_config: bool) -> dict[str, Any]:
             image["imageSize"] = taille
         if image:
             generation["imageConfig"] = image
-    return {"contents": [{"parts": [{"text": prompt}]}],
+    # `role` est OBLIGATOIRE sur Vertex et facultatif sur AI Studio. Omis, la
+    # génération rendait « Please use a valid role: user, model » en 400 — un
+    # message qui ne nomme pas le champ manquant mais les valeurs attendues,
+    # donc difficile à rattacher à un `contents` sans rôle.
+    #
+    # Relevé au premier appel réel. `vertex.py` annonçait un corps identique
+    # sur les deux portes : c'était faux, et c'est la seule divergence
+    # constatée à ce jour. L'ajouter partout plutôt que le conditionner —
+    # AI Studio l'accepte, et un corps unique est ce qui rend les deux portes
+    # interchangeables.
+    return {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": generation}
 
 
