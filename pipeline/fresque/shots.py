@@ -14,7 +14,40 @@ from typing import Any
 
 #: `video` est distinct d'`archive` : le métrage bouge déjà, il n'a pas de
 #: mouvement de caméra à recevoir, et il se source auprès d'autres fonds.
-TYPES = {"archive", "generated", "motion", "video"}
+#:
+#: `collage` se source comme `archive` — c'est une photographie libre — mais
+#: ne s'affiche pas comme elle : elle est composée sur une planche de papier
+#: par `fresque.collage`, et ses pièces bougent séparément. D'où un type à
+#: part plutôt qu'un drapeau sur `archive` : le type dit ce que le spectateur
+#: voit, et une planche n'est pas une photo.
+TYPES = {"archive", "collage", "generated", "motion", "video"}
+
+#: Ce qui se source dans les fonds d'archives, par opposition à ce qui se
+#: génère, se construit ou se télécharge en métrage.
+SOURCEES = ("archive", "collage")
+
+#: Les plans qui bougent tout du long, et qui tiennent donc plus longtemps à
+#: l'écran qu'une photographie. Une photo se périme : passé quelques secondes
+#: le mouvement de caméra est le seul événement, et il ne dit rien. Un panneau
+#: dont les lignes arrivent encore, une planche dont les pièces glissent à des
+#: vitesses différentes, sont toujours en train de dire quelque chose.
+ANIMES = ("motion", "collage")
+
+
+def plafond_s(type_de_plan: str) -> float:
+    """Combien de temps ce type de plan peut tenir l'écran.
+
+    Vérifié deux fois, et c'est voulu : par `density()` au checkpoint 2,
+    depuis le compte de mots — donc avant toute dépense — puis par
+    `timeline.check()` sur l'audio réel, qui est le seul endroit où un
+    montage lent est vraiment attrapable.
+    """
+    from . import config
+
+    longest = float(config.get("montage", "duree_plan_max_s", default=10))
+    if type_de_plan not in ANIMES:
+        return longest
+    return float(config.get("montage", "duree_panneau_max_s", default=longest))
 MOVEMENTS = {
     "zoom_in", "zoom_out", "pan_left", "pan_right",
     "pan_up", "pan_down", "static",
@@ -132,8 +165,8 @@ def load(path: Path, beat_ids: list[str]) -> list[Shot]:
         if shot.accroche:
             _validate_accroche(shot, where)
 
-        if kind == "archive" and not shot.requete:
-            raise ShotsError(f"{where} : un plan `archive` exige une `requete`.")
+        if kind in SOURCEES and not shot.requete:
+            raise ShotsError(f"{where} : un plan `{kind}` exige une `requete`.")
         if kind == "generated" and not shot.prompt:
             raise ShotsError(f"{where} : un plan `generated` exige un `prompt`.")
         if kind == "video":
@@ -460,8 +493,6 @@ def density(shots: list[Shot], beats: list[Any]) -> list[str]:
     from . import config
 
     wpm = float(config.get("narration", "mots_par_minute", default=140))
-    longest = float(config.get("montage", "duree_plan_max_s", default=10))
-    panneau = float(config.get("montage", "duree_panneau_max_s", default=longest))
     grouped = by_beat(shots)
 
     slow: list[str] = []
@@ -474,10 +505,9 @@ def density(shots: list[Shot], beats: list[Any]) -> list[str]:
         # average: a beat split 1/1/4 still holds its last image forever.
         # A graphic panel gets its own, higher ceiling — see the config.
         weight_total = sum(s.poids for s in planned)
-        pire = max(planned, key=lambda s: s.poids / (
-            panneau if s.type == "motion" else longest))
+        pire = max(planned, key=lambda s: s.poids / plafond_s(s.type))
         held = seconds * pire.poids / weight_total
-        plafond = panneau if pire.type == "motion" else longest
+        plafond = plafond_s(pire.type)
         if held > plafond:
             needed = math.ceil(seconds / plafond)
             slow.append(

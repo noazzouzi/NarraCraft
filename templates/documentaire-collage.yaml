@@ -1,0 +1,177 @@
+# Template — Documentaire collage
+#
+# Surcouche de fresque.config.yaml, comme tout template : ne redéfinit que ce
+# qui change. Les champs `meta.*` sont en prose et lus par les skills ; tout
+# le reste est lu par le code.
+#
+# CE QUE CE FICHIER DÉMONTRE
+# ==========================
+# Le style « collage Vox » relevé chez Frontier est visuellement à l'opposé
+# du documentaire historique : papier crème au lieu de noir, encre sombre au
+# lieu de texte blanc, aplats rouges, photographies en duotone posées sur des
+# tampons déchirés.
+#
+# Et pourtant il n'ajoute **aucun composant de rendu**. Tout ce qui suit est
+# de la donnée que le moteur applique — c'est la règle qui décide de la
+# viabilité du projet (CLAUDE.md) :
+#
+# > Un template est de la donnée, jamais du code. Si une thématique semble
+# > exiger son propre composant, c'est le signe qu'il manque un paramètre.
+#
+# Deux paramètres manquaient effectivement, et ils ont été ajoutés plutôt
+# qu'un composant : `typographie.accroche` et `montage.collage.*`.
+
+meta:
+  nom: Documentaire collage
+  description: >-
+    Le même fond documentaire, monté sur des planches de papier composées :
+    photographies d'archive en duotone, collées sur des tampons déchirés,
+    avec leurs accents découpés. Les pièces bougent séparément.
+
+  registre: >-
+    Explicatif et nerveux. Plus proche du reportage expliqué que du récit
+    grave : on avance par étapes nommées, chacune posée sur sa planche.
+    Le ton reste factuel — le graphisme porte l'énergie, la voix n'a pas
+    à en rajouter.
+
+  structure_narrative: >-
+    Quatre actes. I — la situation, telle qu'on la croit. II — ce que les
+    documents disent à la place. III — le pivot : d'où vient l'écart.
+    IV — ce qui en découle, et ce qui reste ouvert. Chaque acte se termine
+    sur une question ouverte, sauf le dernier.
+
+  interdits_specifiques: >-
+    Aucune reconstitution présentée comme une archive — et la planche de
+    collage ne change rien à cette règle : une photographie composée sur du
+    papier reste la photographie qu'elle est, avec sa date et sa source.
+    Aucune fausse coupure de presse, aucun faux document. Les panneaux
+    graphiques sont construits, et se voient comme tels.
+
+  sourcing: >-
+    Archives d'abord, comme partout. Une planche de collage ne dispense pas
+    de sourcer : elle prend une photographie libre et la compose. Ce qui
+    change, c'est qu'une image moyenne y passe mieux — le duotone et le
+    liseré la remettent dans la direction artistique.
+
+# --- Écriture ---------------------------------------------------------------
+
+narration:
+  # Même débit que le documentaire historique : c'est une mesure faite sur
+  # Frontier, pas un goût, et elle ne dépend pas du graphisme.
+  mots_par_minute: 124
+  pause_phrase_s: 0.45
+
+controle:
+  mots_par_beat: [8, 20]
+  mots_par_phrase_max: 12
+  part_silence_min: 0.25
+
+visuels:
+  plans_par_minute: 25
+
+montage:
+  # Une planche bouge tout du long : ses pièces glissent à des vitesses
+  # différentes. Elle tient donc l'écran plus longtemps qu'une photographie,
+  # au même titre qu'un panneau graphique — `shots.ANIMES`.
+  duree_plan_max_s: 3.5
+  duree_panneau_max_s: 5.5
+
+  # Frontier coupe franc : vingt et une transitions relevées sur deux
+  # documentaires, toutes des coupes d'une image.
+  transitions:
+    style: coupe
+    sons: true
+
+  # --- Les planches ---------------------------------------------------------
+  #
+  # Papier crème, encre charbon, rouge sang de bœuf. Trois couleurs, comme un
+  # vrai tirage risographe à deux encres sur papier teinté.
+  collage:
+    papier: "#F2EDE1"
+    encre: "#1C1B19"
+    accent: "#8C2230"
+    lisere: "#FBF8F1"
+    adhesif: "rgba(226,214,186,0.72)"
+    ombre: "rgba(60,44,28,0.34)"
+    voile_titre: "transparent"
+
+    trame: 0.35
+    grain: 0.05
+    photo: duotone
+    parallaxe_min: 0.25
+    cascade_s: 0.05
+    lisere_px: 14
+
+    # Mesuré au rendu : à 68 px, une accroche de deux lignes et son filet
+    # occupent 38 % de la hauteur. La bande leur laisse de la marge et la
+    # planche garde la moitié basse du cadre.
+    bande_titre: 0.44
+
+  # --- Ce que les planches imposent au reste ---------------------------------
+  #
+  # C'est ici que le template gagne son intérêt. Un sous-titre blanc sur du
+  # papier crème est illisible, et c'est le genre de défaut qu'on ne voit
+  # qu'au rendu : il se trouve que la photographie tombe souvent sous la
+  # ligne de sous-titres, donc le texte passe — jusqu'au plan où elle est
+  # plus haute, et la phrase disparaît.
+  #
+  # La correction n'est pas dans le moteur : elle est ici, parce que c'est le
+  # template qui a décidé que le fond serait clair.
+  palette:
+    fond: "#F2EDE1"              # même papier : une coupe ne vire pas au noir
+    sous_titre: "#1C1B19"        # encre, pas blanc
+    voile: "rgba(242,237,225,0.86)"
+    ombre: "rgba(60,44,28,0.34)"
+    letterbox: "#E7E0CF"
+
+  sous_titres:
+    mots_par_ligne: 6
+    ligne_de_base_pct: 90.8
+    # Rallumé, contrairement au documentaire historique : sur une planche, la
+    # ligne de sous-titres passe tantôt sur du papier, tantôt sur une photo
+    # en duotone. Sans voile, elle change de lisibilité d'un plan à l'autre.
+    voile: true
+    surlignage:
+      actif: true
+      # Le jaune Frontier disparaît sur du crème. Le rouge des tampons est la
+      # seule autre encre de la planche, donc la seule qui ne soit pas une
+      # couleur de plus.
+      couleur: "#8C2230"
+      fondu_frames: 3
+      duree_min_frames: 3
+
+  typographie:
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    taille: 48
+    # Descendue de 104 : sur une planche, 104 px poussent la composition hors
+    # du cadre. Sur une photographie plein cadre, c'est au contraire la bonne
+    # taille — d'où un réglage et non une constante.
+    accroche: 68
+    graisse: 500
+    interligne: 1.28
+    interlettrage: "-0.01em"
+
+  traitement:
+    # Presque rien : la fibre du papier est déjà dessinée par les planches,
+    # et une vignette sombre sur du crème se lit comme une tache.
+    grain: 0.03
+    vignette: 0.06
+
+  # Panneaux graphiques, accordés aux planches : même papier, même encre.
+  # Sans quoi une frise chronologique ouvrirait un trou noir au milieu d'un
+  # film clair.
+  motion:
+    fond: "#F2EDE1"
+    texte: "#1C1B19"
+    accent: "#8C2230"
+    attenue: "#6E6459"
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    cascade_s: 0.4
+    scene:
+      opacite: 0.10
+      flou_px: 28
+      saturation: 0.3
+      echelle: 1.12
+      filet: true
+      grain: 0.03
+      vignette: 0.10

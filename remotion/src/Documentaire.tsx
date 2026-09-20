@@ -81,6 +81,7 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
             clip={clip}
             palette={palette}
             motionStyle={motion}
+            collageStyle={style.collage}
             traitement={traitement}
             transitions={transitions}
           />
@@ -89,6 +90,18 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
               texte={clip.accroche}
               typographie={typographie}
               style={motion}
+              // Sur une planche de papier clair, le voile sombre de
+              // l'accroche serait une bande noire en travers du collage. Les
+              // couleurs de remplacement viennent du template de la planche.
+              surface={
+                clip.type === "collage" && style.collage
+                  ? {
+                      texte: style.collage.encre,
+                      accent: style.collage.accent,
+                      voile: style.collage.voile_titre,
+                    }
+                  : undefined
+              }
             />
           ) : null}
         </Sequence>

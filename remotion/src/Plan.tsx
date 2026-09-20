@@ -1,15 +1,11 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { Collage } from "./Collage";
 import { Entree, enveloppe } from "./Entree";
 import { MotionGraphic } from "./Motion";
+import { camera } from "./mouvement";
 import { Traitement } from "./Traitement";
-import type { Clip, MotionStyle, Palette, StyleTransitions } from "./types";
-
-const EASINGS: Record<string, (t: number) => number> = {
-  easeInOutCubic: Easing.bezier(0.65, 0, 0.35, 1),
-  easeOutCubic: Easing.bezier(0.33, 1, 0.68, 1),
-  linear: Easing.linear,
-};
+import type { Clip, CollageStyle, MotionStyle, Palette, StyleTransitions } from "./types";
 
 /** Below this, filling the frame would crop the source to a vertical slice.
  *  Archives are full of tall scans — book pages, posters, portrait plates —
@@ -20,6 +16,7 @@ type PlanProps = {
   clip: Clip;
   palette: Palette;
   motionStyle: MotionStyle;
+  collageStyle?: CollageStyle;
   traitement: { grain?: number; vignette?: number };
   transitions: StyleTransitions;
 };
@@ -45,23 +42,12 @@ export const Plan: React.FC<PlanProps> = (props) => {
  *
  *  The move is fully described by the timeline, so this component decides
  *  nothing about pacing — it only plays back what the pipeline computed. */
-const Contenu: React.FC<PlanProps> = ({ clip, palette, motionStyle, traitement }) => {
+const Contenu: React.FC<PlanProps> = ({
+  clip, palette, motionStyle, collageStyle, traitement,
+}) => {
   const frame = useCurrentFrame();
   const { durationInFrames, fps } = useVideoConfig();
-  const { debut, fin, rotation_deg, easing } = clip.mouvement;
-
-  const ease = EASINGS[easing] ?? EASINGS.easeInOutCubic;
-  const at = (from: number, to: number) =>
-    interpolate(frame, [0, Math.max(durationInFrames - 1, 1)], [from, to], {
-      easing: ease,
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    });
-
-  const scale = at(debut.scale, fin.scale);
-  const x = at(debut.x, fin.x) * 100;
-  const y = at(debut.y, fin.y) * 100;
-  const rotation = at(0, rotation_deg);
+  const { scale, x, y, rotation } = camera(clip.mouvement, frame, durationInFrames);
 
   if (clip.type === "motion" && clip.motion) {
     return (
@@ -69,6 +55,22 @@ const Contenu: React.FC<PlanProps> = ({ clip, palette, motionStyle, traitement }
         motion={clip.motion}
         style={motionStyle}
         fond={clip.fond_image}
+      />
+    );
+  }
+
+  // Une planche de collage : ses pièces reçoivent la même caméra, atténuée
+  // par leur profondeur. Elle est donc rendue avant tout traitement d'image —
+  // ce n'est pas une photographie, c'est du papier composé.
+  if (clip.type === "collage" && clip.collage && collageStyle) {
+    return (
+      <Collage
+        planche={clip.collage}
+        style={collageStyle}
+        mouvement={clip.mouvement}
+        image={clip.image}
+        grain={traitement.grain}
+        vignette={traitement.vignette}
       />
     );
   }

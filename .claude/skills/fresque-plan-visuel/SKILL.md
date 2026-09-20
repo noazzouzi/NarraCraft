@@ -208,10 +208,50 @@ Contraintes vérifiées par le pipeline, qui refusera le fichier sinon :
 - **Le premier plan n'est pas un `motion` et porte une `accroche`.**
 - Une `accroche` fait au plus `accroche_mots_max` mots.
 - Les beats sont référencés par leur identifiant exact (`B001`…).
-- `type` vaut `archive`, `generated` ou `motion`.
-- Un plan `archive` a une `requete`, un plan `generated` a un `prompt`.
+- `type` vaut `archive`, `collage`, `generated`, `motion` ou `video`.
+- Un plan `archive`, `collage` ou `video` a une `requete` ; un plan
+  `generated` a un `prompt`.
 - `poids` est strictement positif.
 - `mouvement` appartient à la liste ci-dessus.
+
+## Plans `collage` — une archive composée sur du papier
+
+Le style relevé chez Frontier sur ses documentaires « Vox » : la photographie
+d'archive n'est pas montrée plein cadre, elle est **collée sur une planche de
+papier** — un tampon déchiré dessous, un liseré blanc autour, des accents
+découpés, un ou deux morceaux d'adhésif.
+
+```json
+{"beat":"B006","type":"collage","intention":"le tribunal, le jour du verdict",
+ "requete":"palais justice Paris","mouvement":"zoom_in"}
+```
+
+Le plan se déclare **exactement comme une `archive`** : même `requete`, mêmes
+fonds, même licence à respecter. Tout le reste — quelles pièces, où, dans
+quel ordre, à quelle profondeur — est calculé par `fresque.collage`, écrit
+dans `06-timeline.json` et corrigeable à la main. Il n'y a rien à décrire
+ici, et c'est voulu : une mise en page écrite par un LLM serait une décision
+de plus qu'il ne peut pas tenir d'un plan à l'autre.
+
+**Quand s'en servir.** Une planche relance l'œil là où une suite de
+photographies plein cadre s'endort, et elle rattrape une image moyenne — le
+duotone et le liseré la remettent dans la direction artistique. Elle vaut
+donc pour les beats explicatifs, les changements d'acte, et les archives dont
+le cadrage est quelconque.
+
+**Quand s'en passer.** Un visage qui porte le beat se montre en grand. Une
+planche met la photographie à moins de la moitié du cadre : c'est le bon
+choix pour illustrer une idée, jamais pour un regard.
+
+**Elle tient l'écran plus longtemps** qu'une photographie — `duree_panneau_max_s`
+plutôt que `duree_plan_max_s` — parce que ses pièces bougent à des vitesses
+différentes tout du long. Ce n'est pas une licence pour ralentir : c'est la
+même règle que pour un panneau graphique.
+
+**Le style est celui du template.** Papier, encres, trame, adhésif,
+profondeur de parallaxe : tout vient de `montage.collage`. Le template
+`documentaire-collage` est construit autour, sous-titres en encre sombre
+compris — un sous-titre blanc sur du papier crème est illisible.
 
 ## Plans `video` — métrage d'archive
 

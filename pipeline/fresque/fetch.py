@@ -18,7 +18,7 @@ from typing import Any, Callable
 import requests
 
 from . import config
-from .shots import Shot
+from .shots import SOURCEES, Shot
 from .sources import openverse, wikimedia
 from .sources.base import Candidate
 
@@ -161,7 +161,7 @@ def fetch_archives(
 
     position = 0
     for shot in shots:
-        if shot.type != "archive":
+        if shot.type not in SOURCEES:
             # A motion panel or a generated still still occupies the screen,
             # so it counts towards the distance between two reuses.
             position += 1

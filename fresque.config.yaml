@@ -347,10 +347,75 @@ montage:
 
   typographie:
     famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
-    taille: 52
+    taille: 52                   # sous-titres
+    # Corps de l'accroche incrustée. Un template qui compose ses plans sur
+    # une planche de papier la descend : à 104 px, deux lignes et leur filet
+    # occupent plus de la moitié de la hauteur, et la planche n'a plus de
+    # place. Sur une photographie plein cadre, c'est au contraire la bonne
+    # taille — d'où deux valeurs et non une.
+    accroche: 104
     graisse: 500
     interligne: 1.28
     interlettrage: "-0.01em"
+
+  # Planches de collage — le style « Vox » relevé chez Frontier. Une photo
+  # d'archive collée sur du papier, avec ses tampons déchirés et ses accents
+  # découpés, et dont les pièces bougent à des vitesses différentes.
+  #
+  # Elles sont COMPOSÉES, pas générées. Quatre modèles d'image ont été mesurés
+  # avant d'en arriver là (`docs/essai-collage.md`) : le meilleur rendait une
+  # bonne planche en quatre secondes pour 0,0336 $, et restait un aplat cuit
+  # dans des pixels. Une planche cuite ne se relit pas, ne change pas de
+  # palette avec le template, et ne s'anime pas par couches.
+  #
+  # Tout ce bloc est de la donnée que le moteur applique. C'est la condition
+  # posée par CLAUDE.md : une thématique de plus doit être un fichier YAML,
+  # jamais un composant de plus.
+  collage:
+    papier: "#F2EDE1"
+    encre: "#1C1B19"
+    accent: "#8C2230"
+    lisere: "#FBF8F1"           # le liseré blanc autour de la photo
+    adhesif: "rgba(226,214,186,0.72)"
+    ombre: "rgba(60,44,28,0.30)"
+    # Voile sous l'accroche. Nul, et c'est une mesure : sur une planche
+    # claire le texte est en encre sombre et n'a besoin d'aucun fond. Le
+    # premier rendu portait un voile crème à 90 % — il délavait la moitié
+    # haute de la planche, le tampon rouge virait au rose. Un template à
+    # papier sombre le rallume.
+    voile_titre: "transparent"
+
+    # Trame d'impression posée sur les aplats. Sans elle, un aplat de couleur
+    # unie se lit comme du vecteur — c'est le défaut mesuré sur les essais de
+    # génération locale : saturation 187/255 contre 95 attendus.
+    trame: 0.35
+    grain: 0.05                 # la fibre du papier, sous les pièces
+
+    # duotone · gris · brut. Le duotone est ce qui rattache la photographie
+    # au papier : sans lui, une image couleur posée sur du crème se lit comme
+    # une vignette collée sur une maquette.
+    photo: duotone
+
+    # Part du mouvement de caméra que reçoit la pièce la plus au fond. C'est
+    # TOUTE la parallaxe, et c'est la seule chose qu'une affiche générée ne
+    # sait pas faire. À 1,0 les pièces bougent ensemble et la planche redevient
+    # plate ; en dessous de 0,15 le fond a l'air fixé au cadre.
+    parallaxe_min: 0.25
+
+    # Les pièces arrivent l'une après l'autre. À vingt-cinq plans par minute,
+    # une cascade lente mangerait le plan entier : on cherche seulement que la
+    # planche ne tombe pas d'un bloc, ce qui se lirait comme une diapositive.
+    cascade_s: 0.05
+
+    lisere_px: 14
+    # Bande haute laissée libre pour l'accroche, en fraction de la hauteur.
+    # Le titre est composé par Remotion et non dans l'image : accents français
+    # fiables, typographie du template, et un titre qu'un surligneur peut
+    # balayer au moment où la voix le dit.
+    # Mesuré : l'accroche est composée à 104 px sur deux à trois lignes,
+    # règle comprise, soit un peu plus de 40 % de la hauteur. En dessous, le
+    # texte tombe sur la photo.
+    bande_titre: 0.46
 
   # Motion graphics. Sur un sujet fait de dates, de chefs d'accusation et de
   # peines, la moitié des plans n'a pas besoin de photographie — et une frise

@@ -410,3 +410,62 @@ Le point bloquant — « est-ce qu'un modèle local reçoit notre prompt ? » �
 est levé. Les deux points restants sont des réglages de prompt et de
 workflow, pas des impossibilités. Le style collage reste donc classé
 troisième, et il est maintenant réalisable **sans facturation**.
+
+---
+
+# Épilogue — la feature n'a finalement rien généré
+
+Le banc d'essai s'est terminé sur trois modèles de plus, chronométrés par
+l'utilisateur sur sa machine :
+
+| Modèle | Temps | Texte inventé | Matière | Composition |
+|---|---|---|---|---|
+| SDXL Turbo | 65 s | **partout** | — | aucune |
+| z-image turbo + qwen | 99 s | aucun | trame présente, bords vectoriels | pictogrammes alignés |
+| **Nano Banana 2 Lite** | **4 s** | aucun | trame, fibre, bords déchirés | superposée, profondeur réelle |
+
+SDXL Turbo confirme la v1 par l'autre bout : 77 jetons CLIP, le prompt est
+tronqué avant même d'arriver à la scène. Nano Banana 2 Lite rend une
+planche qui tient la comparaison avec Frontier, en quatre secondes, pour
+**0,0336 $** — moitié moins en Batch API.
+
+## Et c'est là que la feature a changé de nature
+
+Le calcul du coût était devenu acceptable — 2,79 $ pour quatre-vingts
+planches, 1,39 $ en batch, sous le plafond de huit euros. Sauf que la
+question n'était plus le prix.
+
+L'analyse du concurrent disait déjà la réponse, et elle avait été lue sans
+être entendue (`analyse-frontier.md`) :
+
+> Il ne demande aucune image générée : il demande un **moteur de
+> composition**.
+
+Une planche générée, même excellente, a ses couches cuites dans les pixels.
+Trois choses deviennent impossibles :
+
+- **l'animer par couches** — donc pas de parallaxe, et la parallaxe est
+  précisément ce qui distingue une planche d'une image posée ;
+- **changer sa palette avec le template** — il faudrait tout regénérer ;
+- **corriger la position d'une pièce** — il faudrait relancer le modèle et
+  espérer.
+
+Les trois sont des choses qu'un template est censé pouvoir faire, et la
+troisième est le principe même de l'atelier : « tu peux corriger n'importe
+quel fichier à la main et relancer à partir de là ».
+
+## Ce qui a été construit à la place
+
+`fresque.collage` calcule la mise en page — quelles pièces, où, à quelle
+profondeur — et `Collage.tsx` la dessine. La planche atterrit dans
+`06-timeline.json`, où elle se relit et se corrige. Coût par documentaire :
+**zéro**.
+
+Le banc d'essai n'a donc pas servi à choisir un fournisseur. Il a servi à
+mesurer la borne haute de ce qu'une image générée pouvait donner — et à
+constater qu'elle était en dessous de ce qu'on pouvait composer.
+
+**La règle à retenir dépasse le collage** : avant de payer un modèle pour
+dessiner quelque chose, vérifier que ce quelque chose n'est pas composable.
+Un élément composé coûte plus cher à écrire une fois, et moins cher à toutes
+les autres — en argent, en temps de rendu, et en contrôle.

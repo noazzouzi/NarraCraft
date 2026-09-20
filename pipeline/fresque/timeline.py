@@ -8,24 +8,18 @@ NLE exporter can consume the same file tomorrow.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
-from . import config
-from .shots import Shot, by_beat
+from . import collage, config
+from .shots import Shot, by_beat, plafond_s
 
-
-def _jitter(seed: str, salt: str) -> float:
-    """Stable pseudo-random in [0, 1).
-
-    Ken Burns applied identically to every shot reads as a template. Varying
-    it per shot — but deterministically, so a re-render is identical — is what
-    makes the movement feel authored rather than generated.
-    """
-    digest = hashlib.sha256(f"{seed}:{salt}".encode()).digest()
-    return int.from_bytes(digest[:4], "big") / 2**32
+#: Ken Burns applied identically to every shot reads as a template. Varying it
+#: per shot — but deterministically, so a re-render is identical — is what
+#: makes the movement feel authored rather than generated. La composition des
+#: planches de collage s'en sert pour la même raison, d'où le partage.
+_jitter = collage.jitter
 
 
 def _movement(shot: Shot, duree_s: float) -> dict[str, Any]:
@@ -145,8 +139,9 @@ def _transition(position: int, clip_beat: str, clip_act: str,
         return "coupe"
 
     # A graphic panel is a different medium arriving; sliding it in says so,
-    # and a hard cut into one reads as a glitch.
-    if "motion" in (shot_type, previous_type):
+    # and a hard cut into one reads as a glitch. Une planche de collage est
+    # le même cas : on passe de la photographie au papier composé.
+    if {shot_type, previous_type} & {"motion", "collage"}:
         return "glisse"
 
     if clip_beat != previous["beat"]:
@@ -429,6 +424,13 @@ def build(
                 "ratio": round(width_px / height_px, 4) if height_px else None,
                 "mouvement": _movement(shot, (end_frame - start_frame) / fps),
                 "motion": _motion_calee(shot, beat, start_frame, fps, introuvables),
+                # La mise en page de la planche, calculée ici et non dans le
+                # moteur : elle atterrit donc dans ce fichier, où elle se
+                # relit et se corrige à la main. Déplacer une flèche, c'est
+                # éditer un nombre et relancer `fresque render`.
+                "collage": collage.compose(
+                    shot, round(width_px / height_px, 4) if height_px else None,
+                ) if shot.type == "collage" else None,
                 "intention": shot.intention,
                 # A sentence burned over the image. The viewer reads it while
                 # the voice is saying something else — which is why it is
@@ -535,6 +537,11 @@ def build(
                 "voile": bool(config.get(
                     "montage", "sous_titres", "voile", default=True)),
             },
+            # Papier, encres, trame, adhésif, profondeur de parallaxe. Le
+            # moteur trace un bord déchiré et une trame d'impression ; il ne
+            # décide d'aucune couleur, sans quoi une deuxième thématique
+            # demanderait un deuxième composant.
+            "collage": collage.style(),
         },
         "clips": clips,
         # Le lit sonore. Le moteur le boucle : il n'a pas à savoir combien de
@@ -594,14 +601,12 @@ def check(timeline: dict[str, Any]) -> list[str]:
     clips = timeline["clips"]
     cursor = 0
     fps = timeline["fps"]
-    longest = float(config.get("montage", "duree_plan_max_s", default=10))
-    panneau = float(config.get("montage", "duree_panneau_max_s", default=longest))
     for clip in clips:
         # `plans_par_minute` is an intention the visual plan may or may not
         # honour; this is the same rule measured on the real audio, which is
         # the only place a slow montage can actually be caught.
         held = clip["duree_frames"] / fps
-        plafond = panneau if clip["type"] == "motion" else longest
+        plafond = plafond_s(clip["type"])
         if held > plafond:
             problems.append(
                 f"{clip['id']} : plan tenu {held:.1f} s (max {plafond:g} s) — "

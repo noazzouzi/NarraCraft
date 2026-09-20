@@ -40,7 +40,7 @@ lui.
 | Qui | Quoi |
 |---|---|
 | **Claude Code (skills)** | Jugement : angle, recherche, script, choix des plans, prompts d'image, critique qualité |
-| **Scripts `pipeline/`** | Mécanique : appels API, calculs de timecodes, ffmpeg, rendu |
+| **Scripts `pipeline/`** | Mécanique : appels API, calculs de timecodes, mises en page, ffmpeg, rendu |
 
 Règle non négociable : **aucun calcul de timing n'est fait par un LLM.**
 Les durées, offsets et synchronisations sont calculés par du code, à partir
@@ -86,6 +86,19 @@ ne décide d'aucune transition, au même titre qu'il ne calcule aucun timecode.
 Les sons de transition sont **synthétisés localement** par `fresque.sons`, à
 partir d'une graine fixe. Aucun téléchargement, aucune licence à suivre,
 aucun réseau — et des fichiers identiques d'une machine à l'autre.
+
+**Une planche de collage est composée, jamais générée.** `fresque.collage`
+calcule la mise en page — quelles pièces, où, à quelle profondeur — et le
+moteur ne fait que la dessiner. Quatre modèles d'image ont été mesurés avant
+d'en arriver là (`docs/essai-collage.md`) : le meilleur rendait une planche
+correcte en quatre secondes pour 0,0336 $, et restait un aplat cuit dans des
+pixels. On ne peut ni animer ses couches séparément, ni changer sa palette
+avec le template, ni corriger la position d'une pièce.
+
+La règle qui en découle vaut au-delà du collage : **avant de payer un modèle
+pour dessiner quelque chose, vérifier que ce quelque chose n'est pas
+composable.** Un élément composé est plus cher à écrire une fois, et moins
+cher à toutes les autres — en argent, en temps de rendu, et en contrôle.
 
 ## Voix et alignement
 

@@ -128,7 +128,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     script = script_parser.parse(project.script)
     plan = shots_mod.load(project.shots, [b.id for b in script.beats])
 
-    archives = [s for s in plan if s.type == "archive"]
+    # Une planche de collage se source exactement comme une archive : c'est
+    # une photographie libre. Ce qui change vient après, au montage.
+    archives = [s for s in plan if s.type in shots_mod.SOURCEES]
     generated = [s for s in plan if s.type == "generated"]
     print(f"→ {len(archives)} plans d'archive, {len(generated)} à générer")
 

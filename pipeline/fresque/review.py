@@ -63,7 +63,7 @@ def alertes(shots: list[Shot], assets: dict[str, Any],
     sorties: list[tuple[str, str, list[str]]] = []
 
     sans = [s.id for s in shots
-            if s.type in ("archive", "generated", "video") and s.id not in assets]
+            if s.type != "motion" and s.id not in assets]
     if sans:
         sorties.append((
             "grave", f"{len(sans)} plan(s) sans visuel",
@@ -254,6 +254,9 @@ def construire(slug: str) -> Path:
     if shots:
         mesures.append(("plans", len(shots)))
         mesures.append(("panneaux", sum(1 for s in shots if s.type == "motion")))
+        planches = sum(1 for s in shots if s.type == "collage")
+        if planches:
+            mesures.append(("planches collage", planches))
     if assets:
         distinctes = len({a.get("url") for a in assets.values() if a.get("url")})
         mesures.append(("images distinctes", distinctes))

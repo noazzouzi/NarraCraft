@@ -2447,3 +2447,120 @@ def test_stock_footage_is_marked_and_surfaced_at_the_checkpoint():
     assets["S000"]["nature"] = "films"
     assert "contemporaine" not in " ".join(
         t for _, t, _ in alertes(shots, assets, None))
+
+
+# --- Planches de collage ------------------------------------------------------
+#
+# La mise en page est calculée par le pipeline et voyage dans la timeline :
+# c'est ce qui la rend inspectable et corrigeable à la main. Ce qui se teste
+# ici, ce sont donc les invariants de cette mise en page — pas le dessin, qui
+# appartient au moteur.
+
+from fresque import collage as collage_mod  # noqa: E402
+
+
+#: Les coordonnées sont arrondies à quatre décimales avant d'entrer dans la
+#: timeline, pour qu'elle reste lisible à l'œil nu. Recalculer une géométrie
+#: à partir des valeurs arrondies décale donc de quelques 10⁻⁵. Un millième
+#: de cadre vaut un pixel sur 1080 : la marge est large pour l'arrondi et
+#: reste trop fine pour laisser passer une pièce qui dépasse vraiment.
+ARRONDI = 1e-3
+
+
+def _collage_shot(accroche: str = "") -> Shot:
+    return Shot(index=7, beat="B001", type="collage", requete="q",
+                accroche=accroche)
+
+
+def test_collage_layout_is_deterministic():
+    """Deux rendus du même plan doivent donner la même planche.
+
+    C'est la contrepartie de la variation : sans elle, un re-rendu d'une
+    seule séquence ne raccorderait pas avec le reste du film.
+    """
+    premier = collage_mod.compose(_collage_shot(), 1.5)
+    second = collage_mod.compose(_collage_shot(), 1.5)
+    assert premier == second
+
+
+def test_two_shots_do_not_get_the_same_plate():
+    """Une mise en page identique d'un plan à l'autre se lit comme un
+    gabarit — exactement ce qu'on reproche aux vidéos générées."""
+    a = collage_mod.compose(Shot(index=1, beat="B001", type="collage",
+                                 requete="q"), 1.5)
+    b = collage_mod.compose(Shot(index=2, beat="B001", type="collage",
+                                 requete="q"), 1.5)
+    assert a["pieces"][1]["x"] != b["pieces"][1]["x"]
+
+
+def test_pieces_stay_inside_the_frame_once_rotated():
+    """Borner une pièce sur sa hauteur nominale ne suffit pas.
+
+    Une feuille large inclinée de quatre degrés lève un coin bien au-dessus
+    de son bord haut. Relevé au rendu : le tampon rouge remontait dans la
+    deuxième ligne de l'accroche alors que son centre respectait la bande.
+    """
+    for ratio in (0.6, 1.0, 1.5, 2.4):
+        for index in range(40):
+            shot = Shot(index=index, beat="B001", type="collage", requete="q")
+            for piece in collage_mod.compose(shot, ratio)["pieces"]:
+                demi = collage_mod._demi_hauteur(
+                    piece["w"], piece["h"], piece["rotation_deg"])
+                assert piece["y"] - demi >= -ARRONDI, (index, ratio, piece)
+                assert piece["y"] + demi <= 1 + ARRONDI, (index, ratio, piece)
+
+
+def test_the_title_band_is_left_clear():
+    """L'accroche est composée par Remotion plutôt que cuite dans une image :
+    accents français fiables, typographie du template, et un titre qu'un
+    surligneur peut balayer. Encore faut-il qu'aucune pièce n'y monte."""
+    for index in range(40):
+        shot = Shot(index=index, beat="B001", type="collage", requete="q",
+                    accroche="Condamné, et toujours présumé innocent")
+        planche = collage_mod.compose(shot, 1.5)
+        bande = planche["bande_titre"]
+        assert bande > 0
+        for piece in planche["pieces"]:
+            demi = collage_mod._demi_hauteur(
+                piece["w"], piece["h"], piece["rotation_deg"])
+            assert piece["y"] - demi >= bande - ARRONDI, (index, piece)
+
+
+def test_pieces_are_ordered_from_back_to_front():
+    """L'ordre de la liste EST l'ordre de superposition. Le moteur ne trie
+    rien, sans quoi une correction à la main dans `06-timeline.json` ne
+    servirait à rien."""
+    pieces = collage_mod.compose(_collage_shot(), 1.5)["pieces"]
+    profondeurs = [p["profondeur"] for p in pieces]
+    assert profondeurs == sorted(profondeurs)
+    assert pieces[0]["role"] == "bloc"
+
+
+def test_a_plate_never_repeats_an_accent_shape_before_using_the_others():
+    """Un tirage indépendant par accent est uniforme et reste pourtant
+    capable de poser trois demi-cercles sur la même planche — relevé sur
+    S001. À l'œil, ça ne se lit pas comme du hasard mais comme une panne."""
+    for index in range(60):
+        shot = Shot(index=index, beat="B001", type="collage", requete="q")
+        formes = [p["forme"] for p in collage_mod.compose(shot, 1.5)["pieces"]
+                  if p["role"] == "accent"]
+        assert len(formes) == len(set(formes)), (index, formes)
+
+
+def test_collage_requires_a_query_like_an_archive(tmp_path):
+    """Une planche se source comme une archive : c'est une photographie
+    libre, et ce qui change vient après, au montage."""
+    with pytest.raises(ShotsError, match="`collage` exige une `requete`"):
+        load_shots(_shots_file(tmp_path, [{"beat": "B001", "type": "collage"}]),
+                   ["B001"])
+
+
+def test_collage_holds_the_screen_as_long_as_a_panel():
+    """Une photographie se périme : passé quelques secondes le mouvement de
+    caméra est le seul événement, et il ne dit rien. Une planche dont les
+    pièces glissent à des vitesses différentes est toujours en train de dire
+    quelque chose."""
+    from fresque.shots import plafond_s
+
+    assert plafond_s("collage") == plafond_s("motion")
+    assert plafond_s("archive") <= plafond_s("collage")

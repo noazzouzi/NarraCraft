@@ -88,6 +88,34 @@ disque.
 tu peux regarder le montage, juger le rythme et le découpage **avant** d'avoir
 sourcé ou généré la moindre image.
 
+## Les planches de collage
+
+Le style « Vox » — une photographie d'archive collée sur du papier, avec son
+tampon déchiré, son liseré blanc et ses accents découpés — est **composé par
+le pipeline**, pas généré par un modèle d'image.
+
+```json
+{"beat":"B006","type":"collage","requete":"palais justice Paris",
+ "intention":"le tribunal, le jour du verdict","mouvement":"zoom_in"}
+```
+
+Le calcul est fait avant le montage : la mise en page atterrit dans
+`06-timeline.json`, où elle se relit et se corrige à la main. Les pièces
+existent séparément jusqu'à la dernière image, donc elles **bougent à des
+vitesses différentes** selon leur profondeur — ce qu'une affiche générée, dont
+les couches sont cuites dans les pixels, ne peut pas faire.
+
+Le choix a été tranché par la mesure, pas par principe. Quatre modèles
+comparés sur le même prompt (`docs/essai-collage.md`) : SDXL Turbo inventait
+du faux texte, z-image alignait des pictogrammes, et le meilleur — Nano
+Banana 2 Lite, quatre secondes et 0,0336 $ l'image — rendait une belle
+planche qu'on ne pouvait ni animer ni retoucher. À quatre-vingts planches par
+documentaire, c'est 2,79 $ pour une image morte.
+
+Le template `documentaire-collage` en fait une thématique complète, **sans
+une ligne de composant supplémentaire** : papier, encres, trame, parallaxe,
+sous-titres en encre sombre, panneaux accordés.
+
 ## Coût
 
 Environ **2,50 à 4 € par documentaire de quinze minutes**, presque
@@ -114,6 +142,7 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 4c | Génération d'images Gemini | à venir |
 | 3b | Alignement forcé mot-à-mot | fait, vérifié en réel |
 | 6 | Motion graphics : cartes, unes de journaux, archives | à venir |
+| 6b | Planches de collage, style Vox | fait, vérifié au rendu |
 | 7 | Page de validation, miniature, export vers éditeur | page faite |
 
 Les durées de beat sont **mesurées sur l'audio Kokoro**, et depuis
