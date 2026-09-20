@@ -251,3 +251,82 @@ qui bougent tout du long.
 beat, plusieurs plans dedans ». Ce n'est pas une optimisation qu'on
 ajoutera après, c'est la contrainte qui rend le style payable, et elle doit
 être dans le plan visuel dès le départ.
+
+---
+
+# Variante locale — un modèle ouvert sur CPU
+
+Question posée : un modèle libre, tournant sans clé ni facturation,
+produit-il un collage Vox exploitable ? La réponse importe : la voix
+tourne déjà en local avec Kokoro, et l'image suivrait la même logique —
+modèle local par défaut, Gemini en finition.
+
+Essai fait sur cette machine, sans GPU, 4 cœurs, 15 Go de RAM :
+**SDXL base 1.0**, `bfloat16`, 1024 × 576, 24 étapes. Résultat dans
+`docs/essai-collage/C-sdxl-local.jpg`, obtenu en **42 à 110 secondes**
+selon la taille — bien plus rapide qu'attendu pour du CPU.
+
+## Le résultat : la matière, pas la scène
+
+**La texture est bonne.** Bords déchirés, papier réglé, trame, rayures,
+ombres portées, palette crème/rouge/charbon tenue. C'est du vrai collage
+papier ; la matière est là.
+
+**La scène est absente.** Aucun marteau, aucune pile de documents, aucune
+flèche — alors que tous trois étaient demandés. Le modèle a produit un
+collage **abstrait** : une texture, pas un plan.
+
+## La contrainte qui décide, et elle est mesurée
+
+Le premier essai était faussé par ma faute, et le diagnostic vaut plus que
+l'image :
+
+```
+235 tokens dans le prompt · limite CLIP de SDXL : 77
+-> "following part of your input was truncated"
+```
+
+Le modèle n'avait vu que le bloc de style. Toute la scène, le fond et la
+bande réservée au titre avaient été **silencieusement jetés**.
+
+C'est une contrainte d'architecture, pas un réglage :
+
+| Famille | Encodeur de texte | Budget | Notre prompt en 5 blocs |
+|---|---|---|---|
+| SDXL | CLIP ×2 | **77 tokens** | tronqué aux deux tiers |
+| FLUX, Qwen-Image | T5 | ~512 tokens | passe entier |
+
+Toute l'approche `vox-director` repose sur un prompt long et structuré —
+bloc de style répété mot pour mot, scène décrite pièce par pièce, fond,
+titre. **SDXL ne peut structurellement pas la recevoir.** Même ramené à
+75 tokens, il n'a pas lié les objets à la scène : c'est sa faiblesse
+connue face aux modèles à T5.
+
+**Conclusion : si on va en local, c'est FLUX ou Qwen-Image, pas SDXL.**
+Sur 16 Go de VRAM, FLUX quantifié passe confortablement. Ce n'est plus une
+préférence, c'est une contrainte mesurée.
+
+## Ce qui reste non vérifié
+
+FLUX n'a pas été testé ici : en `bfloat16` il demande plus de RAM que
+cette machine n'en a, et la version quantifiée aurait demandé une pile de
+dépendances supplémentaire pour un résultat toujours limité par l'absence
+de GPU. **Le test concluant se fera sur la machine cible.**
+
+## Mes deux erreurs de protocole, pour ne pas les refaire
+
+- `float32` sur 15 Go de RAM : SDXL pèse ~13 Go de poids dans ce format,
+  le chargement est parti en thrashing (1,7 s puis 14 s par bloc) et le
+  processus a été tué. `bfloat16` charge en 15 s.
+- 768 × 448, en dessous de la résolution d'entraînement de SDXL : motif
+  répété en damier, sa signature d'échec classique. À 1024 il disparaît.
+
+Aucune des deux ne disait quoi que ce soit sur les modèles ouverts. Elles
+disaient que mon banc d'essai était mal réglé.
+
+## Conséquence sur les dépendances
+
+`torch` et `diffusers` sont installés dans ce conteneur mais **ne sont pas
+ajoutés à `pipeline/requirements.txt`** : ce serait imposer deux gigaoctets
+à qui n'en veut pas. Si la voie locale est retenue, elle devient un extra
+optionnel, exactement comme Kokoro l'est pour la voix.
