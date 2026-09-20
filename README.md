@@ -44,8 +44,10 @@ curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-fil
 ```
 
 Une seule clé est nécessaire : **Gemini**, pour les images. La voix tourne en
-local avec Kokoro, gratuitement et sans limite. **ElevenLabs** est optionnel,
-pour la finition d'une vidéo qu'on publie.
+local avec Kokoro, gratuitement et sans limite.
+
+Deux clés optionnelles : **Pexels** (gratuite, pour le métrage vidéo libre)
+et **ElevenLabs** (payante, pour la finition d'une vidéo qu'on publie).
 
 Il n'y a volontairement pas de clé Anthropic : Claude Code est lui-même le
 runtime LLM du projet. Le script, la recherche et le montage ne coûtent donc

@@ -117,6 +117,16 @@ controle:
 # --- Visuels ----------------------------------------------------------------
 
 visuels:
+  # L'archive d'abord. Ce template raconte des événements datés : une
+  # banque d'images contemporaine y sert le présent — « le lieu, aujourd'hui »
+  # — jamais le passé. Le sourcing essaie donc la Library of Congress en
+  # premier, et ne tombe sur Pexels que s'il n'y a pas d'archive.
+  #
+  # Ce n'est pas une précaution théorique : le template interdit nommément
+  # la reconstitution déguisée en archive, et un plan de tribunal filmé
+  # cette année sous une narration qui raconte 2007 en est une.
+  sources_video: [loc, pexels]
+
   # Un changement d'image toutes les deux secondes et demie. La valeur est
   # relevée, pas devinée : les deux documentaires Frontier analysés tiennent
   # 24,8 et 25,2 plans par minute, avec une médiane de plan à 1,7 et 2,4 s

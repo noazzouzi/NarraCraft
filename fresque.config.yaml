@@ -138,6 +138,25 @@ alignement:
 visuels:
   # Ordre de préférence des sources. On ne génère que ce qu'on n'a pas trouvé.
   strategie: archives_d_abord
+  # Fonds de MÉTRAGE VIDÉO, dans l'ordre d'essai — le premier qui répond
+  # gagne. C'est un réglage de genre, pas une préférence technique :
+  #
+  # - `pexels` — banque contemporaine, gratuite avec une clé. Nette et
+  #   abondante, mais ce n'est PAS de l'archive. Un plan tourné cette année
+  #   posé sous une narration qui raconte 2007 est un mensonge visuel, et
+  #   le template l'interdit nommément. Chaque plan qui en vient est marqué
+  #   `stock contemporain` dans `assets.json`, et la page de validation le
+  #   montre — le code ne peut pas savoir de quelle époque parle un beat,
+  #   alors il rend la décision visible au lieu de la prendre.
+  # - `loc` — Library of Congress, domaine public, vraie archive. Catalogue
+  #   américain et ancien : sur un sujet français récent, il rend des films
+  #   sans rapport. C'est ce qui a fait supprimer tous les plans `video` du
+  #   premier documentaire.
+  #
+  # Un sujet d'histoire met `loc` d'abord ; un sujet contemporain, `pexels`.
+  # Une liste vide désactive les plans `video`.
+  sources_video: [pexels, loc]
+
   # Ordre de préférence. On ne génère que ce qu'aucune n'a fourni.
   sources_archives:
     - wikimedia_commons        # implémenté

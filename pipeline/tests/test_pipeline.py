@@ -2382,3 +2382,68 @@ def test_a_highlight_cue_only_belongs_on_a_panel_that_can_use_it(tmp_path, scrip
     # Et un document correctement annoté passe.
     load_shots(fichier({"kind": "document", "lignes": ["a"],
                         "surligne_a": "Le tribunal"}), ids)
+
+
+# --- Pexels ------------------------------------------------------------------
+
+def test_a_stock_clip_is_credited_to_its_own_source():
+    """`Clip.credit()` écrivait « Library of Congress » en dur. C'était vrai
+    tant qu'il n'y avait qu'un fonds, et devenait un faux crédit au second."""
+    from fresque.sources.loc import Clip
+
+    stock = Clip(provider="pexels", title="Aerial view of central paris",
+                 page_url="", file_url="", licence="Pexels License",
+                 duree_s=12, width=1920, height=1080,
+                 collection="stock contemporain", author="Florian Delée")
+    archive = Clip(provider="loc", title="A trip to the moon", page_url="",
+                   file_url="", licence="No known restrictions", duree_s=10,
+                   width=640, height=480, collection="films")
+
+    assert "Library of Congress" not in stock.credit()
+    assert "Florian Delée" in stock.credit()
+    assert "Library of Congress" in archive.credit()
+    # La licence ne disparaît jamais, même quand le fonds porte le même nom.
+    assert "Pexels License" in stock.credit()
+    assert stock.credit().count("Pexels") == 1
+
+
+def test_a_stock_title_too_long_is_shortened_in_the_credit():
+    from fresque.sources.loc import Clip
+
+    clip = Clip(provider="pexels", title="A stirring portrayal of justice " * 6,
+                page_url="", file_url="", licence="Pexels License",
+                duree_s=12, width=1920, height=1080, collection="stock")
+    assert len(clip.credit().split(" — ")[0]) <= 90
+
+
+def test_a_readable_title_is_derived_from_the_page_url():
+    """Pexels ne renvoie aucun titre : `alt` est nul sur toutes les vidéos
+    essayées. Sans le slug de l'URL, `review.html` afficherait dix fois la
+    même requête et on ne distinguerait aucun plan."""
+    from fresque.sources.pexels import _titre
+
+    video = {"url": "https://www.pexels.com/video/aerial-view-of-central-"
+                    "paris-skyline-38835028/", "alt": None}
+    assert _titre(video, "défaut") == "Aerial view of central paris skyline"
+    assert _titre({"url": ""}, "défaut") == "défaut"
+
+
+def test_stock_footage_is_marked_and_surfaced_at_the_checkpoint():
+    """Le code ne sait pas de quelle époque parle un beat. Il ne tranche donc
+    pas entre archive et banque contemporaine — il marque, et la page de
+    validation le montre. Sans ça, un plan tourné cette année passerait pour
+    de l'archive sans que personne ne l'ait décidé."""
+    from fresque.review import alertes
+
+    shots = [Shot(index=0, beat="B001", type="video", requete="q",
+                  intention="la façade du tribunal")]
+    assets = {"S000": {"fichier": "05-visuals/rushes/a.mp4",
+                       "titre": "Bashkia tirane municipality of tirana",
+                       "source": "pexels", "licence": "Pexels License",
+                       "nature": "stock contemporain"}}
+    textes = " ".join(t for _, t, _ in alertes(shots, assets, None))
+    assert "contemporaine" in textes
+
+    assets["S000"]["nature"] = "films"
+    assert "contemporaine" not in " ".join(
+        t for _, t, _ in alertes(shots, assets, None))

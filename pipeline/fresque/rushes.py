@@ -19,7 +19,7 @@ import requests
 
 from . import config
 from .shots import Shot
-from .sources import loc
+from .sources import loc, pexels
 from .sources.loc import Clip
 
 Reporter = Callable[[str], None]
@@ -64,27 +64,48 @@ def _plafonds() -> tuple[float, int, float]:
 
 
 def chercher(requete: str, session: requests.Session | None = None):
-    collections = config.get(
-        "visuels", "collections_domaine_public", "loc_video", default=[]
-    )
-    if not collections:
-        raise RushError(
-            "Aucune collection vidéo whitelistée. LOC n'expose pas de licence "
-            "par item : le statut vient de la collection, qui doit être "
-            "déclarée dans `visuels.collections_domaine_public.loc_video`."
-        )
+    """Cherche du métrage, fonds par fonds, dans l'ordre du template.
+
+    L'ordre est un réglage parce que c'est une question de genre. Un sujet
+    d'histoire ancienne veut d'abord l'archive ; un sujet contemporain veut
+    d'abord du métrage net. Le premier fonds qui répond gagne.
+    """
     duree_max, _, _ = _plafonds()
     http = session or requests.Session()
+    fonds = config.get("visuels", "sources_video",
+                       default=["pexels", "loc"]) or []
 
     dernier = None
-    for essai in _variantes(requete):
-        dernier = loc.search(
-            essai, collections=collections, limit=5,
-            max_duree_s=duree_max, session=http,
-        )
-        if dernier.clips:
-            return dernier
+    for nom in fonds:
+        for essai in _variantes(requete):
+            dernier = _chercher_dans(nom, essai, duree_max, http)
+            if dernier and dernier.clips:
+                return dernier
     return dernier or loc.Resultat(clips=[])
+
+
+def _chercher_dans(fonds: str, requete: str, duree_max: float,
+                   http: requests.Session):
+    if fonds == "pexels":
+        try:
+            return pexels.search(requete, limit=5, max_duree_s=duree_max,
+                                 session=http)
+        except pexels.PexelsError:
+            # Clé absente ou refusée : ce fonds est optionnel, on passe au
+            # suivant plutôt que de faire tomber tout le sourcing.
+            return None
+    if fonds == "loc":
+        collections = config.get(
+            "visuels", "collections_domaine_public", "loc_video", default=[]
+        )
+        if not collections:
+            # LOC n'expose pas de licence par item : le statut vient de la
+            # collection. Sans whitelist, on ne peut rien affirmer, donc on
+            # ne prend rien.
+            return None
+        return loc.search(requete, collections=collections, limit=5,
+                          max_duree_s=duree_max, session=http)
+    raise RushError(f"Fonds vidéo inconnu : {fonds!r} (pexels, loc).")
 
 
 def obtenir(
@@ -109,8 +130,11 @@ def obtenir(
         cache[cle] = rush
         return rush
 
-    say(f"    ↓ {clip.title[:44]} — {clip.duree_s:.0f}s")
-    loc.download(clip, destination, max_octets=taille_max)
+    say(f"    ↓ {clip.title[:44]} — {clip.duree_s:.0f}s [{clip.provider}]")
+    if clip.provider == "pexels":
+        pexels.download(clip, destination, max_octets=taille_max)
+    else:
+        loc.download(clip, destination, max_octets=taille_max)
     rush = Rush(clip, f"{RUSHES_DIR}/{cle}.mp4", destination.stat().st_size)
     cache[cle] = rush
     return rush
@@ -186,6 +210,12 @@ def fetch_videos(
             "depart_s": round(depart, 2),
             "octets": rush.octets,
             "requete": shot.requete,
+            # Archive ou banque contemporaine ? Le code ne sait pas de quelle
+            # époque parle un beat, donc il ne tranche pas — il marque, et
+            # `review.html` le montre au checkpoint. Sans ça, un plan tourné
+            # cette année passerait pour de l'archive sans que personne ne
+            # l'ait décidé, ce que le template interdit nommément.
+            "nature": choisi.collection,
         }
 
     if cache:

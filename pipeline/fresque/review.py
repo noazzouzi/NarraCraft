@@ -99,6 +99,19 @@ def alertes(shots: list[Shot], assets: dict[str, Any],
             "large que demandé", elargies[:12],
         ))
 
+    contemporains = [
+        f"{cle} — « {a.get('titre', '')[:52]} » ({a.get('source')})"
+        for cle, a in sorted(assets.items())
+        if "contemporain" in (a.get("nature") or "")
+    ]
+    if contemporains:
+        sorties.append((
+            "attention",
+            f"{len(contemporains)} plan(s) de banque contemporaine, pas "
+            "d'archive — vérifier qu'aucun ne passe pour une image d'époque",
+            contemporains[:12],
+        ))
+
     attribution = sorted({
         a.get("credit", "") for a in assets.values()
         if "BY" in (a.get("licence") or "").upper()

@@ -60,9 +60,26 @@ class Clip:
     height: int
     collection: str
     date: str = ""
+    author: str = ""
+
+    #: Le nom lisible d'un fonds, pour le crédit. `credit()` écrivait
+    #: « Library of Congress » en dur, ce qui restait vrai tant qu'il n'y
+    #: avait qu'un fonds — et devenait un faux crédit dès le deuxième.
+    FONDS = {"loc": "Library of Congress", "pexels": "Pexels"}
 
     def credit(self) -> str:
-        parts = [self.title.strip(), "Library of Congress", self.licence]
+        fonds = self.FONDS.get(self.provider, self.provider)
+        # Un titre de banque d'images tient parfois trois lignes : c'est une
+        # description, pas un titre. Le crédit doit rester lisible.
+        titre = self.title.strip()
+        if len(titre) > 90:
+            titre = titre[:87].rstrip() + "…"
+        # `Pexels — Pexels License` nomme deux fois le même acteur. On
+        # laisse alors tomber le fonds, jamais la licence : la convention du
+        # projet veut que tout asset porte la sienne.
+        if fonds and fonds.lower() in self.licence.lower():
+            fonds = ""
+        parts = [titre, self.author.strip(), fonds, self.licence]
         return " — ".join(p for p in parts if p)
 
 
