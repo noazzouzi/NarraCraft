@@ -174,9 +174,9 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 4a | Plan visuel (skill) et validation | fait |
 | 3a | Voix off Kokoro, durées réelles | fait |
 | 4b | Sourcing Wikimedia Commons + Openverse | fait, vérifié en réel |
-| 4c | Génération d'images Gemini | à venir |
+| 4c | Génération d'images (Gemini ou Vertex) | fait, vérifié en réel |
 | 3b | Alignement forcé mot-à-mot | fait, vérifié en réel |
-| 6 | Motion graphics : cartes, unes de journaux, archives | à venir |
+| 6 | Motion graphics : cartes, unes de journaux, archives | fait, douze panneaux |
 | 6b | Planches de collage, style Vox | fait, vérifié au rendu |
 | 7 | Page de validation, miniature, export vers éditeur | page faite |
 

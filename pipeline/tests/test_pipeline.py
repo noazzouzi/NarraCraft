@@ -3025,3 +3025,110 @@ def test_an_unnamed_400_names_the_size_as_the_likely_cause(par_vertex, tmp_path)
     # coûtent plus qu'un échec net, et une définition refusée est une erreur
     # de réglage — elle échouerait de la même façon sur les cent.
     assert len(session.envois) == 1
+
+
+import re  # noqa: E402
+
+# --------------------------------------------------------------------------
+# CLAUDE.md
+#
+# Le fichier est rechargé dans chaque session : une phrase fausse s'y applique
+# à toutes. Il a déjà dérivé — un tableau de skills annonçait « à venir » un
+# skill livré, et la section des rôles contredisait celle de l'alignement.
+# Ces quatre tests sont à CLAUDE.md ce que
+# `test_every_motion_kind_is_dispatched_by_the_renderer` est au moteur : ils
+# ne jugent pas la prose, ils empêchent deux artefacts de diverger.
+# --------------------------------------------------------------------------
+
+#: Le fichier est passé de 1795 à ~1550 mots en changeant la moitié de son
+#: contenu — la doctrine d'étape est partie dans les skills et dans `docs/`,
+#: et le démarrage, les commandes et la carte sont entrés. Le budget laisse
+#: une cinquantaine de mots : la prochaine addition devra déplacer d'abord.
+BUDGET_MOTS_CLAUDE_MD = 1600
+
+#: Les dossiers du dépôt qu'un chemin cité peut désigner. `projects/` en est
+#: absent à dessein : il est ignoré par git, et son contenu varie.
+RACINES_CITABLES = ("pipeline/", "docs/", "templates/", "remotion/",
+                    ".claude/", "assets/")
+FICHIERS_RACINE = {"README.md", "CLAUDE.md", "fresque.config.yaml",
+                   ".env.example", "package.json"}
+EXTENSIONS = (".py", ".md", ".json", ".yaml", ".tsx", ".ts", ".html")
+
+
+def _claude_md() -> str:
+    return Path("CLAUDE.md").read_text(encoding="utf-8")
+
+
+def _codes_inline(texte: str) -> list[str]:
+    """Les mots entre backticks, hors blocs clôturés.
+
+    Les blocs sont exclus parce qu'ils portent l'arbre d'un projet, dont les
+    chemins sont relatifs à `projects/<slug>/` et n'existent pas ici.
+    """
+    hors_blocs = re.sub(r"```.*?```", "", texte, flags=re.S)
+    return [t for t in re.findall(r"`([^`\n]+)`", hors_blocs) if " " not in t]
+
+
+def _section(texte: str, titre: str) -> str:
+    bloc = re.search(rf"^## {re.escape(titre)}\n(.*?)(?=^## |\Z)",
+                     texte, flags=re.S | re.M)
+    assert bloc, f"section « {titre} » absente de CLAUDE.md"
+    return bloc.group(1)
+
+
+def test_claude_md_ne_cite_que_des_chemins_qui_existent():
+    """Un renvoi vers un fichier disparu envoie la session dans le vide."""
+    for token in _codes_inline(_claude_md()):
+        if "<" in token:  # un gabarit, pas un chemin : `templates/<nom>.yaml`
+            continue
+        if token in FICHIERS_RACINE or token.startswith(RACINES_CITABLES):
+            assert Path(token).exists(), \
+                f"CLAUDE.md cite `{token}`, qui n'existe pas"
+
+
+def test_claude_md_ne_cite_que_des_commandes_qui_existent():
+    """Le tableau des commandes est le doublon le plus exposé du fichier :
+    il vieillit à chaque ajout au CLI, et personne ne le relit."""
+    source = Path("pipeline/fresque/cli.py").read_text(encoding="utf-8")
+    reelles = set(re.findall(r'\badd\(\s*"([a-z][a-z-]*)"', source))
+    reelles |= set(re.findall(r'add_parser\(\s*\n?\s*"([a-z][a-z-]*)"', source))
+    assert len(reelles) >= 15, "extraction des commandes cassée, pas le fichier"
+
+    cites = {t for t in _codes_inline(_section(_claude_md(), "Commandes"))
+             if re.fullmatch(r"[a-z][a-z-]*", t)}
+    assert cites - reelles == set(), \
+        f"CLAUDE.md cite des commandes absentes du CLI : {sorted(cites - reelles)}"
+
+
+def test_claude_md_ne_cite_que_des_reglages_qui_existent():
+    """Nommer un réglage mort — `budget.max_eur_par_projet` l'était en tant
+    que garde-fou — fait croire à une protection qui n'existe pas."""
+    import yaml
+
+    config = yaml.safe_load(Path("fresque.config.yaml").read_text(encoding="utf-8"))
+    for token in _codes_inline(_claude_md()):
+        if token.endswith(EXTENSIONS) or "/" in token or "<" in token:
+            continue
+        if not re.fullmatch(r"[a-z_]+(\.[a-z_]+)+", token):
+            continue
+        if token.startswith("fresque."):
+            module = token.split(".", 1)[1]
+            assert Path(f"pipeline/fresque/{module}.py").exists(), \
+                f"CLAUDE.md cite le module `{token}`, qui n'existe pas"
+            continue
+        noeud = config
+        for cle in token.split("."):
+            assert isinstance(noeud, dict) and cle in noeud, \
+                f"CLAUDE.md cite le réglage `{token}`, absent de fresque.config.yaml"
+            noeud = noeud[cle]
+
+
+def test_claude_md_tient_sous_son_budget():
+    """Le fichier a triplé en dix commits sans que personne ne le mesure.
+    Le budget n'est pas une élégance : c'est du contexte payé à chaque tour."""
+    texte = re.sub(r"^\s*\|", "", _claude_md(), flags=re.M).replace("|", " ")
+    mots = [m for m in texte.split() if m != "---"]
+    assert len(mots) <= BUDGET_MOTS_CLAUDE_MD, (
+        f"CLAUDE.md fait {len(mots)} mots pour un budget de "
+        f"{BUDGET_MOTS_CLAUDE_MD}. Déplacer avant d'ajouter."
+    )
