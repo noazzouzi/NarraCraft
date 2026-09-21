@@ -266,7 +266,13 @@ visuels:
     # Le choix n'est pas technique, il est comptable : depuis le 2 mars 2026,
     # le crédit d'essai Google Cloud de 300 $ ne paie plus AI Studio, mais il
     # paie Vertex. À 0,0336 $ l'image, 300 $ valent près de neuf mille images.
-    provider: gemini
+    #
+    # Le défaut était `gemini`, ce qui contredisait le paragraphe ci-dessus :
+    # une clé AI Studio sans facturation tombe sur le palier gratuit, dont le
+    # quota journalier d'images est épuisé dès la première tentative. Mesuré
+    # sur un film réel : quatorze plans générés remplacés par des cartes de
+    # substitution, sans que rien n'ait été facturé — donc sans raison.
+    provider: vertex
 
     vertex:
       # Il n'y a plus de `mode`. Il y en a eu deux — `express` et `projet` —
