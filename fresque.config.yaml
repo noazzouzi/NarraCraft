@@ -92,11 +92,13 @@ structure:
     phrase_mots_max: 20
 
 voix:
-  # Deux moteurs, interchangeables. L'alignement est découplé (voir plus bas),
-  # donc changer de provider n'impacte rien en aval du montage.
-  #   kokoro     — local, gratuit, illimité. Pour tout le travail d'itération.
-  #   elevenlabs — payant. Pour la finition d'une vidéo qu'on publie.
-  provider: kokoro
+  # Deux moteurs implémentés, interchangeables. L'alignement est découplé
+  # (voir plus bas), donc changer de provider n'impacte rien en aval.
+  #   edge   — voix neuronales de Microsoft Edge. Gratuites, sans clé, mais
+  #            par le réseau. Sept voix masculines francophones.
+  #   kokoro — local, gratuit, sans réseau. Une seule voix française, et
+  #            elle est féminine : il n'y a pas d'alternative dans ce modèle.
+  provider: edge
 
   # Un fichier audio par beat du script. Permet de régénérer un seul beat
   # sans refaire les quinze minutes, et correspond au calibre pour lequel
@@ -117,12 +119,23 @@ voix:
     model: models/kokoro-v1.0.onnx
     voices: models/voices-v1.0.bin
 
-  elevenlabs:
-    voice_id: ""               # à renseigner : voix FR grave, débit posé
-    model: eleven_multilingual_v2
-    stability: 0.45            # bas = plus expressif, haut = plus monotone
-    similarity_boost: 0.8
-    speed: 0.95
+  edge:
+    # Voix masculines de France : fr-FR-HenriNeural et
+    # fr-FR-RemyMultilingualNeural. `python -m fresque voix` les liste toutes.
+    voice: fr-FR-HenriNeural
+    # Débit, volume et hauteur, au format de Microsoft : un pourcentage
+    # signé, ou des hertz pour la hauteur.
+    #
+    # Mesuré sur un script réel de douze beats, silences du montage compris :
+    #   +0%   150 mots/min      -18%  129 mots/min
+    #   -12%  136 mots/min      -23%  123 mots/min
+    # La cible des templates est 124. Descendre plus bas traîne.
+    rate: "-23%"
+    volume: "+0%"
+    pitch: "+0Hz"
+
+  # ElevenLabs n'est pas implémenté. Le jour où il le sera, il aura son bloc
+  # ici et son moteur dans `voice.MOTEURS` — pas de réglage avant le code.
 
 alignement:
   # Découplé du TTS, volontairement. On réaligne le texte QU'ON CONNAÎT DÉJÀ

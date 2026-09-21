@@ -58,7 +58,14 @@ def cmd_voice(args: argparse.Namespace) -> int:
     print(f"✓ {project.audio_dir.name}/voix.wav")
     print(f"  {alignment['nb_beats']} beats · "
           f"{align.format_duration(alignment['duree_totale_s'])}")
-    print(f"  voix {alignment['voix']['voice']} · vitesse {alignment['voix']['speed']}")
+    # La fiche du moteur n'a pas les mêmes champs d'un moteur à l'autre :
+    # on l'affiche telle qu'elle vient plutôt que d'en nommer un.
+    fiche = alignment["voix"]
+    print("  " + " · ".join(f"{cle} {valeur}" for cle, valeur in fiche.items()))
+    mots = alignment["nb_mots"]
+    duree = alignment["duree_totale_s"]
+    if duree:
+        print(f"  {mots / duree * 60:.0f} mots/min, silences compris")
     print("  durées de beat mesurées sur l'audio réel")
     return 0
 
@@ -718,6 +725,49 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_voix(args: argparse.Namespace) -> int:
+    """Les voix que le moteur réglé sait rendre, et un essai facultatif.
+
+    Choisir une voix sans l'entendre ne veut rien dire : `--essai` écrit un
+    fichier avec la voix réellement configurée, au débit réellement réglé.
+    """
+    from . import config, voice
+
+    fournisseur = str(config.get("voix", "provider", default="kokoro"))
+    print(f"Moteur : {fournisseur}")
+
+    if fournisseur == "edge":
+        import asyncio
+
+        import edge_tts
+
+        toutes = asyncio.run(edge_tts.list_voices())
+        retenues = [v for v in toutes if v["Locale"].startswith(args.langue)]
+        if not retenues:
+            return _fail(f"aucune voix pour « {args.langue} ».")
+        actuelle = str(config.get("voix", "edge", "voice", default=""))
+        for v in sorted(retenues, key=lambda x: (x["Gender"], x["ShortName"])):
+            marque = "→" if v["ShortName"] == actuelle else " "
+            genre = "homme" if v["Gender"] == "Male" else "femme"
+            print(f" {marque} {v['ShortName']:32} {genre}")
+        print(f"\n{len(retenues)} voix. La régler dans `voix.edge.voice`.")
+    else:
+        print("  ff_siwis  femme — l'unique voix française de Kokoro v1.0")
+
+    if args.essai:
+        machine = voice.moteur()
+        samples, rate = machine.dire(args.essai)
+        sortie = config.repo_root() / f"essai-voix-{fournisseur}.wav"
+        voice._write_wav(sortie, samples, rate)
+        duree = len(samples) / rate
+        mots = len(args.essai.split())
+        print(
+            f"\n✓ {sortie.name} · {duree:.2f} s · "
+            f"{mots / duree * 60:.0f} mots/min"
+        )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="fresque", description="Étapes déterministes du pipeline Fresque."
@@ -823,6 +873,19 @@ def main(argv: list[str] | None = None) -> int:
         "doctor", help="Vérifier accès réseau, modèles et dépendances"
     )
     doctor_cmd.set_defaults(handler=cmd_doctor)
+
+    voix_cmd = sub.add_parser(
+        "voix", help="Lister les voix disponibles chez le moteur choisi"
+    )
+    voix_cmd.set_defaults(handler=cmd_voix)
+    voix_cmd.add_argument(
+        "--langue", default="fr",
+        help="préfixe de locale, par ex. fr ou fr-FR (défaut : fr)",
+    )
+    voix_cmd.add_argument(
+        "--essai", metavar="TEXTE", default=None,
+        help="synthétiser cette phrase avec la voix réglée, dans un fichier",
+    )
 
     template_cmd = sub.add_parser(
         "template", help="Voir ce qu'un template contient, et d'où vient chaque valeur"

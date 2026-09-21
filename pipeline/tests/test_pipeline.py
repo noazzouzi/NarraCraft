@@ -2101,20 +2101,23 @@ def test_a_beat_is_spoken_sentence_by_sentence_with_real_silence():
 
     appels = []
 
-    class FauxKokoro:
-        def create(self, texte, voice, speed, lang):
-            appels.append(texte)
+    class FauxMoteur(voice_mod.Moteur):
+        nom = "faux"
+        pause_naturelle_s = 0.10
+
+        def dire(self, phrase):
+            appels.append(phrase)
             # Une seconde de « parole » par phrase, à amplitude non nulle.
             return np.ones(voice_mod.SAMPLE_RATE, dtype="float32"), voice_mod.SAMPLE_RATE
 
+    machine = FauxMoteur()
     samples, rate = voice_mod._say_beat(
-        FauxKokoro(), "Trois mots. Puis trois. Et fin.",
-        "ff_siwis", 0.75, "fr-fr", 0.70)
+        machine, "Trois mots. Puis trois. Et fin.", 0.70)
 
     assert appels == ["Trois mots.", "Puis trois.", "Et fin."]
     # Trois secondes de parole, plus deux silences amputés de ce que le
     # moteur fournit déjà.
-    attendu = 3 + 2 * (0.70 - voice_mod._PAUSE_KOKORO_S)
+    attendu = 3 + 2 * (0.70 - machine.pause_naturelle_s)
     assert abs(len(samples) / rate - attendu) < 0.02
     assert (samples == 0).sum() > 0, "aucun silence n'a été inséré"
 
@@ -2128,14 +2131,60 @@ def test_a_single_sentence_beat_is_not_split():
 
     appels = []
 
-    class FauxKokoro:
-        def create(self, texte, voice, speed, lang):
-            appels.append(texte)
+    class FauxMoteur(voice_mod.Moteur):
+        def dire(self, phrase):
+            appels.append(phrase)
             return np.ones(100, dtype="float32"), voice_mod.SAMPLE_RATE
 
     texte = "Une seule phrase, avec une virgule."
-    voice_mod._say_beat(FauxKokoro(), texte, "ff_siwis", 0.75, "fr-fr", 0.70)
+    voice_mod._say_beat(FauxMoteur(), texte, 0.70)
     assert appels == [texte]
+
+
+def test_edge_trims_the_silence_it_wraps_each_sentence_in():
+    """Mesuré sur trois phrases courtes, Edge laisse 0,21 s avant et 0,92 s
+    après — plus d'une seconde de vide par phrase. Sur les quatre cents
+    phrases d'un quart d'heure, c'est plusieurs minutes de blanc que
+    personne n'a demandées, et qu'aucun réglage ne rattrape ensuite."""
+    import numpy as np
+
+    from fresque import voice as voice_mod
+
+    rate = voice_mod.SAMPLE_RATE
+    parole = np.ones(rate, dtype="float32")          # une seconde
+    avant = np.zeros(int(0.21 * rate), dtype="float32")
+    apres = np.zeros(int(0.92 * rate), dtype="float32")
+
+    rogne = voice_mod._rogner(np.concatenate([avant, parole, apres]), rate)
+
+    marge = voice_mod._MARGE_ROGNAGE_S
+    assert abs(len(rogne) / rate - (1 + 2 * marge)) < 0.01
+    # La marge existe pour ne pas couper une occlusive initiale.
+    assert marge > 0
+
+
+def test_trimming_a_silent_take_returns_it_whole():
+    """Rogner ce qui ne contient rien ne doit pas rendre un tableau vide :
+    un beat muet vaut mieux qu'un beat de longueur nulle, qui décalerait
+    tout le montage derrière lui."""
+    import numpy as np
+
+    from fresque import voice as voice_mod
+
+    muet = np.zeros(1000, dtype="float32")
+    assert len(voice_mod._rogner(muet, voice_mod.SAMPLE_RATE)) == 1000
+
+
+def test_an_unknown_voice_provider_says_which_ones_exist():
+    from fresque import config, voice as voice_mod
+
+    config.use_project_overrides({"voix": {"provider": "elevenlabs"}})
+    try:
+        with pytest.raises(voice_mod.VoiceError) as erreur:
+            voice_mod.moteur()
+        assert "edge" in str(erreur.value) and "kokoro" in str(erreur.value)
+    finally:
+        config.use_project_overrides(None)
 
 
 # --- Alignement forcé --------------------------------------------------------

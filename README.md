@@ -51,14 +51,29 @@ cp .env.example .env              # puis renseigner les clés
 pip install -r pipeline/requirements.txt
 npm install --prefix remotion     # moteur de rendu
 
-# Voix locale : modèle Kokoro (~340 Mo, une fois pour toutes)
+# Voix : rien à télécharger. Le moteur par défaut est `edge`, les voix
+# neuronales de Microsoft Edge — gratuites, sans clé, par le réseau.
+python -m fresque voix                     # les voix françaises
+python -m fresque voix --essai "Bonjour."  # entendre celle qui est réglée
+```
+
+Une seule clé est nécessaire, pour les images. La voix ne coûte rien.
+
+Deux moteurs de voix, réglés par `voix.provider` :
+
+| | Ce qu'il faut | Voix françaises |
+|---|---|---|
+| `edge` (défaut) | rien, mais du réseau | 13, dont 7 masculines |
+| `kokoro` | 340 Mo de modèle, aucun réseau | 1, féminine |
+
+`fr-FR-HenriNeural` à `-23 %` donne 123 mots/min silences compris, mesuré
+sur un script réel — la cible des templates est 124. Pour passer à Kokoro :
+
+```bash
 mkdir -p models && cd models
 curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
 curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
 ```
-
-Une seule clé est nécessaire, pour les images. La voix tourne en local avec
-Kokoro, gratuitement et sans limite.
 
 Deux portes mènent aux mêmes modèles d'image, et le choix est comptable :
 
@@ -95,8 +110,7 @@ dimensions réelles — le seul endroit où l'on constate si le format demandé 
 été honoré. Un modèle peut l'ignorer sans le dire : mesuré,
 `gemini-2.5-flash-image` rend 1344 px quand on lui demande du 2K.
 
-Deux clés optionnelles : **Pexels** (gratuite, pour le métrage vidéo libre)
-et **ElevenLabs** (payante, pour la finition d'une vidéo qu'on publie).
+Une clé optionnelle : **Pexels**, gratuite, pour le métrage vidéo libre.
 
 Il n'y a volontairement pas de clé Anthropic : Claude Code est lui-même le
 runtime LLM du projet. Le script, la recherche et le montage ne coûtent donc
@@ -121,7 +135,7 @@ Les étapes mécaniques s'appellent aussi à la main, sur n'importe quel projet 
 ```bash
 python -m fresque align  <slug>   # timings estimés, sans audio
 python -m fresque shots  <slug>   # valider le plan visuel
-python -m fresque voice  <slug>   # voix Kokoro + timings réels
+python -m fresque voice  <slug>   # synthèse + durées mesurées
 python -m fresque aligner <slug>  # position réelle de chaque mot (local)
 python -m fresque fetch  <slug>   # sourcer les archives libres
 python -m fresque timeline <slug> # construire le montage
@@ -186,7 +200,7 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 2 | Écriture : brief → recherche → script | fait |
 | 5 | Timeline et rendu Remotion | fait |
 | 4a | Plan visuel (skill) et validation | fait |
-| 3a | Voix off Kokoro, durées réelles | fait |
+| 3a | Voix off — Edge ou Kokoro, durées mesurées | fait, vérifié en réel |
 | 4b | Sourcing Wikimedia Commons + Openverse | fait, vérifié en réel |
 | 4c | Génération d'images (Gemini ou Vertex) | fait, vérifié en réel |
 | 3b | Alignement forcé mot-à-mot | fait, vérifié en réel |
@@ -194,7 +208,7 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | 6b | Planches de collage, style Vox | fait, vérifié au rendu |
 | 7 | Page de validation, miniature, export vers éditeur | page faite |
 
-Les durées de beat sont **mesurées sur l'audio Kokoro**, et depuis
+Les durées de beat sont **mesurées sur l'audio produit**, et depuis
 `fresque aligner` la position de chaque mot l'est aussi. L'écart valait la
 peine : l'estimation syllabique tombait à 305 ms de la position réelle en
 médiane, et jusqu'à 1,7 s. L'aligneur tourne en local, gratuitement.

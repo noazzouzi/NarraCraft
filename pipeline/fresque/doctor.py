@@ -76,9 +76,9 @@ GROUPS = [
     Group("Génération d'images — Gemini", [
         Host("generativelanguage.googleapis.com", "génération", "images"),
     ], fichiers_ailleurs="images renvoyées dans la réponse"),
-    Group("Voix de finition — ElevenLabs", [
-        Host("api.elevenlabs.io", "voix payante", "voice --provider elevenlabs"),
-    ], optional=True, fichiers_ailleurs="audio renvoyé dans la réponse"),
+    Group("Voix — Microsoft Edge", [
+        Host("speech.platform.bing.com", "synthèse", "voice"),
+    ], fichiers_ailleurs="audio renvoyé dans le flux, aucun hôte de fichiers"),
 ]
 
 
@@ -108,26 +108,39 @@ def probe(hostname: str) -> str:
 
 
 def check_local() -> list[tuple[str, bool, str]]:
-    """Things that must exist on disk, independent of the network."""
+    """Things that must exist on disk, independent of the network.
+
+    Ce que la voix exige dépend du moteur choisi : Kokoro veut 340 Mo de
+    modèle sur le disque, Edge ne veut qu'un paquet et du réseau. Vérifier
+    les deux enverrait télécharger un modèle dont on n'a pas besoin.
+    """
     root = config.repo_root()
-    model = root / str(config.get("voix", "kokoro", "model", default="models/kokoro-v1.0.onnx"))
-    voices = root / str(config.get("voix", "kokoro", "voices", default="models/voices-v1.0.bin"))
+    fournisseur = str(config.get("voix", "provider", default="kokoro"))
 
     checks: list[tuple[str, bool, str]] = [
-        ("modèle Kokoro", model.is_file(), str(model.relative_to(root))),
-        ("voix Kokoro", voices.is_file(), str(voices.relative_to(root))),
         ("Remotion installé", (root / "remotion" / "node_modules").is_dir(), "remotion/node_modules"),
+        ("moteur de voix", True, fournisseur),
     ]
 
-    try:
-        import kokoro_onnx  # noqa: F401
-        checks.append(("paquet kokoro-onnx", True, "importable"))
-    except ImportError:
-        checks.append(("paquet kokoro-onnx", False, "pip install kokoro-onnx soundfile"))
+    if fournisseur == "kokoro":
+        model = root / str(config.get("voix", "kokoro", "model", default="models/kokoro-v1.0.onnx"))
+        voices = root / str(config.get("voix", "kokoro", "voices", default="models/voices-v1.0.bin"))
+        checks.append(("modèle Kokoro", model.is_file(), str(model.relative_to(root))))
+        checks.append(("voix Kokoro", voices.is_file(), str(voices.relative_to(root))))
+        try:
+            import kokoro_onnx  # noqa: F401
+            checks.append(("paquet kokoro-onnx", True, "importable"))
+        except ImportError:
+            checks.append(("paquet kokoro-onnx", False, "pip install kokoro-onnx soundfile"))
+    elif fournisseur == "edge":
+        try:
+            import edge_tts  # noqa: F401
+            checks.append(("paquet edge-tts", True, "importable"))
+        except ImportError:
+            checks.append(("paquet edge-tts", False, "pip install edge-tts soundfile"))
 
     for key, needed_for in (
         ("GEMINI_API_KEY", "génération d'images"),
-        ("ELEVENLABS_API_KEY", "voix de finition (optionnel)"),
         ("PEXELS_API_KEY", "banque d'images (optionnel)"),
     ):
         checks.append((f"clé {key}", bool(os.environ.get(key)), needed_for))
