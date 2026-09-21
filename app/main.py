@@ -152,6 +152,50 @@ def _projet_yaml(dossier: Path) -> dict[str, Any]:
     return yaml.safe_load(fiche.read_text(encoding="utf-8")) or {}
 
 
+@app.get("/api/projets/{slug}/hook")
+def hook(slug: str) -> dict[str, Any]:
+    """Le premier beat du script : ce qu'on lit, avant de l'entendre.
+
+    Un script se valide en le lisant, alors qu'il sera entendu une seule
+    fois, sans retour en arrière. Cet écran met les deux côte à côte.
+    """
+    from fresque import script_parser
+
+    chemin = _dossier(slug) / "02-script.md"
+    if not chemin.is_file():
+        raise HTTPException(404, "pas encore de script")
+    try:
+        script = script_parser.parse(chemin)
+    except script_parser.ScriptError as erreur:
+        raise HTTPException(422, str(erreur))
+
+    beat = script.beats[0]
+    audio = _dossier(slug) / "04-audio" / f"essai-{beat.id}.wav"
+    return {
+        "beat": beat.id,
+        "texte": beat.text,
+        "intention": beat.intention,
+        "mots": beat.word_count,
+        "fichier": f"04-audio/essai-{beat.id}.wav" if audio.is_file() else None,
+    }
+
+
+@app.post("/api/projets/{slug}/hook")
+def dire_le_hook(slug: str) -> dict[str, Any]:
+    """Synthétise le hook, et rien d'autre.
+
+    Trois secondes de voix, pas quinze minutes : c'est ce qui permet de
+    l'entendre avant de décider. Synchrone parce que c'est court, et parce
+    qu'un bouton qui ouvre un journal pour trois secondes d'audio demande
+    plus d'attention qu'il n'en mérite.
+    """
+    _dossier(slug)
+    try:
+        return serveur.dire_beat(slug)
+    except ValueError as erreur:
+        raise HTTPException(400, str(erreur))
+
+
 @app.get("/api/templates")
 def templates() -> list[dict[str, Any]]:
     import yaml

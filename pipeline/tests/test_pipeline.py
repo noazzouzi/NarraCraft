@@ -2009,6 +2009,50 @@ def test_a_text_option_is_matched_before_it_reaches_an_argv():
         serveur.lancer("sarkozy-essai-2min", "render", {"frames": "$(whoami)"})
 
 
+def test_the_hook_is_heard_the_way_it_will_be_rendered(tmp_path, monkeypatch):
+    """Écouter le hook n'a de valeur que si c'est le vrai hook.
+
+    Une synthèse à part — le texte passé tel quel au moteur — donnerait un
+    fichier sans les silences entre phrases, alors que le silence est la
+    moitié du rythme. La commande passe donc par `_say_beat`, la fonction
+    même de la passe voix.
+    """
+    import numpy as np
+
+    from fresque import voice as voice_mod
+
+    appels: list[str] = []
+
+    class Faux(voice_mod.Moteur):
+        nom = "faux"
+        pause_naturelle_s = 0.0
+
+        def dire(self, phrase: str):
+            appels.append(phrase)
+            return np.zeros(int(0.5 * voice_mod.SAMPLE_RATE), "float32"), \
+                voice_mod.SAMPLE_RATE
+
+        def fiche(self):
+            return {"moteur": "faux"}
+
+    monkeypatch.setattr(voice_mod, "moteur", Faux)
+    samples, rate = voice_mod._say_beat(Faux(), "Une phrase. Puis une autre.", 0.45)
+
+    assert appels == ["Une phrase.", "Puis une autre."], \
+        "le beat doit être dit phrase par phrase"
+    assert len(samples) / rate == pytest.approx(0.5 + 0.45 + 0.5, abs=0.01), \
+        "le silence entre phrases doit être dans le fichier qu'on écoute"
+
+
+def test_a_beat_name_from_the_browser_is_matched_before_it_reaches_an_argv():
+    """Le nom d'un beat arrive d'une requête. Il est confronté à un motif,
+    comme toute option textuelle."""
+    from fresque import serveur
+
+    with pytest.raises(ValueError):
+        serveur.dire_beat("sarkozy-essai-2min", "B001; rm -rf /")
+
+
 def test_an_integer_option_does_not_reach_argparse_as_a_float():
     """Le numéro d'une piste arrive du navigateur comme texte. Converti en
     flottant, il donne `--piste 2.0`, et `argparse --piste type=int` refuse

@@ -177,6 +177,54 @@ def cmd_voice(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hook(args: argparse.Namespace) -> int:
+    """Faire entendre un beat, sans synthétiser tout le film.
+
+    Un script se valide en le lisant, alors qu'il sera entendu — une seule
+    fois, sans retour en arrière. Un hook qui ne marche pas s'entend en
+    quinze secondes ; en markdown il peut passer trois relectures.
+
+    C'est `_say_beat` qui travaille, la fonction même de la passe voix :
+    ce qu'on entend ici est exactement ce qui sortira, pauses comprises.
+    """
+    from . import voice as voice_mod
+
+    project = Project.open(args.slug)
+    script = script_parser.parse(project.script)
+
+    vise = (args.beat or script.beats[0].id).upper()
+    beat = next((b for b in script.beats if b.id == vise), None)
+    if beat is None:
+        return _fail(f"{vise} n'est pas un beat de ce script "
+                     f"({script.beats[0].id} à {script.beats[-1].id})")
+
+    try:
+        machine = voice_mod.moteur()
+        samples, rate = voice_mod._say_beat(
+            machine, beat.text,
+            float(config.get("narration", "pause_phrase_s", default=0.45)),
+        )
+    except voice_mod.VoiceError as erreur:
+        return _fail(str(erreur))
+
+    sortie = project.audio_dir / f"essai-{beat.id}.wav"
+    sortie.parent.mkdir(parents=True, exist_ok=True)
+    voice_mod._write_wav(sortie, samples, rate)
+
+    duree = len(samples) / rate
+    cible = float(config.get("structure", "hook_s", default=20))
+    print(f"✓ {sortie.relative_to(project.root)}")
+    ligne = (f"{beat.id} · {duree:.1f} s · {beat.word_count} mots · "
+             f"{beat.word_count / duree * 60:.0f} mots/min")
+    if beat.id == script.beats[0].id:
+        ligne += f" · cible {cible:.0f} s"
+    print(ligne)
+    if beat.id == script.beats[0].id and duree > cible:
+        print(f"  ⚠ {duree - cible:.1f} s de trop — la suite appartient au "
+              "beat suivant")
+    return 0
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     from . import lint as lint_mod
 
@@ -919,6 +967,11 @@ def main(argv: list[str] | None = None) -> int:
     align_cmd = add("align", "Estimer les timings depuis le script", cmd_align)
     align_cmd.add_argument("--target", type=float, help="durée cible en minutes")
     add("lint", "Vérifier le script contre les règles d'écriture", cmd_lint)
+    hook_cmd = add("hook", "Entendre un beat sans synthétiser le film", cmd_hook)
+    hook_cmd.add_argument(
+        "--beat", default=None, metavar="B00N",
+        help="beat à entendre (défaut : le premier, c'est-à-dire le hook)",
+    )
     add("shots", "Valider le plan visuel", cmd_shots)
     add("voice", "Synthétiser la voix off (Kokoro)", cmd_voice)
     fetch_cmd = add("fetch", "Sourcer les archives libres", cmd_fetch)

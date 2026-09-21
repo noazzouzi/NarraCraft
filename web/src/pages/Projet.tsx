@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type Commande, type ProjetDetail } from "../api";
 import Pistes from "./Pistes";
+import Hook from "./Hook";
 
 const CHECKPOINTS: Record<string, string> = {
   "02-script.md": "CHECKPOINT 1",
@@ -91,6 +92,7 @@ export default function Projet() {
   }
   const surLaChaine = new Set([...parProduit.values()].map((c) => c.nom));
   const pistesEcrites = projet.fichiers.find((f) => f.fichier === "pistes.md" && f.existe);
+  const scriptEcrit = projet.fichiers.find((f) => f.fichier === "02-script.md" && f.existe);
 
   return (
     <div className="colonnes">
@@ -137,6 +139,10 @@ export default function Projet() {
             surLancement={(id) => { setSuivi(id); recharger(); }}
           />
         )}
+
+        {/* Le script change : on relit le hook plutôt que de garder
+            affiché celui d'une version précédente. */}
+        {scriptEcrit && <Hook key={scriptEcrit.octets ?? 0} slug={slug} />}
 
         <h3 style={{ marginBottom: 14 }}>La chaîne</h3>
         {projet.fichiers.map((f, i) => {

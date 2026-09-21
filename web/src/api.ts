@@ -80,6 +80,18 @@ export type Catalogue = {
   retenue: number | null;
 };
 
+// Le premier beat du script. On le lit et on l'écoute côte à côte : il ne
+// sera jamais lu par personne d'autre, il sera entendu une seule fois.
+export type Hook = {
+  beat: string;
+  texte: string;
+  intention: string;
+  mots: number;
+  fichier: string | null;
+};
+
+export type HookDit = { fichier: string; mesure: string; alerte: string };
+
 export type EtatJournal = {
   texte: string;
   offset: number;
@@ -103,6 +115,15 @@ export const api = {
   commandes: () => lire<Record<string, Commande>>("/api/commandes"),
   templates: () => lire<Template[]>("/api/templates"),
   pistes: (slug: string) => lire<Catalogue>(`/api/projets/${slug}/pistes`),
+  hook: (slug: string) => lire<Hook>(`/api/projets/${slug}/hook`),
+
+  // Trois secondes de voix, pas quinze minutes. L'appel est synchrone :
+  // le serveur attend la synthèse et rend le chemin du fichier.
+  async direLeHook(slug: string) {
+    const reponse = await fetch(`/api/projets/${slug}/hook`, { method: "POST" });
+    if (!reponse.ok) throw new Error(await reponse.text());
+    return (await reponse.json()) as HookDit;
+  },
 
   // La barre de saisie : le sujet part, le dossier est créé et
   // l'exploration démarre. On récupère le slug et le journal à suivre.

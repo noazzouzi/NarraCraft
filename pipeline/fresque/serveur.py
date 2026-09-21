@@ -207,6 +207,36 @@ def _projet_dir(slug: str) -> Path:
     return chemin
 
 
+def dire_beat(slug: str, beat: str | None = None) -> dict[str, Any]:
+    """Synthétise un beat et rend son chemin, plus la ligne de mesure.
+
+    Même sous-processus que tout le reste, mais attendu plutôt que
+    journalisé : trois secondes d'audio n'ont pas besoin d'un flux. La
+    durée et le débit ne sont pas recalculés ici — on rend la ligne que la
+    commande a imprimée, telle quelle. Deux arithmétiques parallèles
+    divergent, et c'est toujours celle de l'affichage qui a tort.
+    """
+    argv = [sys.executable, "-m", "fresque", "hook", slug]
+    if beat:
+        if not re.match(r"^B\d{3}$", beat):
+            raise ValueError(f"beat {beat!r} — attendu B001, B002…")
+        argv += ["--beat", beat]
+
+    fait = subprocess.run(
+        argv, cwd=_racine(), env=_environnement(),
+        capture_output=True, text=True,
+    )
+    if fait.returncode != 0:
+        raise ValueError((fait.stderr or fait.stdout).strip().lstrip("✗ ")
+                         or "synthèse refusée")
+
+    lignes = [l.strip() for l in fait.stdout.splitlines() if l.strip()]
+    fichier = next((l[2:] for l in lignes if l.startswith("✓ ")), "")
+    mesure = next((l for l in lignes if l.startswith("B")), "")
+    alerte = next((l[2:] for l in lignes if l.startswith("⚠")), "")
+    return {"fichier": fichier, "mesure": mesure, "alerte": alerte}
+
+
 def _argv(nom: str, slug: str, options: dict[str, str]) -> list[str]:
     """La ligne de commande d'une exécution. Fonction pure, donc vérifiable.
 
