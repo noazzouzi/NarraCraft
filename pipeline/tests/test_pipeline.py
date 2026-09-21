@@ -201,6 +201,44 @@ def test_the_thumbnail_avoids_a_frame_with_a_subtitle_across_it():
     assert cli._instant_vignette(couvert, 30) == 1.0
 
 
+def test_filling_a_gap_never_erases_what_is_already_sourced(tmp_path):
+    """`placeholders` réécrivait le manifeste entier : lancée après `fetch`
+    pour boucher quatorze plans, elle détruisait les soixante-six autres,
+    leurs licences et leurs crédits. Aucun test ne la couvrait.
+
+    `merge_assets` fusionne et REND le manifeste ; c'est `write_assets` qui
+    l'écrit. Jeter le résultat de la première donne le même effet en plus
+    discret : les nouveaux visuels n'arrivent jamais.
+    """
+    from fresque import fetch as fetch_mod
+
+    chemin = tmp_path / "assets.json"
+    fetch_mod.write_assets({"S000": {"fichier": "a.jpg", "licence": "CC BY 4.0",
+                                     "auteur": "Quelqu'un"}}, chemin)
+
+    fetch_mod.write_assets(
+        fetch_mod.merge_assets(chemin, {"S001": {"fichier": "b.jpg",
+                                                 "source": "placeholder"}}),
+        chemin,
+    )
+
+    assets = json.loads(chemin.read_text(encoding="utf-8"))["assets"]
+    assert set(assets) == {"S000", "S001"}
+    assert assets["S000"]["licence"] == "CC BY 4.0", "l'archive doit survivre"
+    assert assets["S001"]["source"] == "placeholder"
+
+
+def test_replacing_every_visual_has_to_be_asked_for(capsys):
+    """Le comportement destructif existe encore — il se nomme, et il se
+    lit dans l'aide avant de coûter quarante-six archives."""
+    from fresque import cli
+
+    with pytest.raises(SystemExit):
+        cli.main(["placeholders", "--help"])
+    aide = capsys.readouterr().out
+    assert "--tout" in aide and "destructif" in aide
+
+
 # --- Les familles de sous-titres ---------------------------------------------
 #
 # Liste close, comme les sept mouvements de caméra et les treize panneaux :

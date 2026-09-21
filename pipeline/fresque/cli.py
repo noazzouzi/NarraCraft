@@ -577,27 +577,60 @@ def cmd_images(args: argparse.Namespace) -> int:
 
 
 def cmd_placeholders(args: argparse.Namespace) -> int:
+    """Boucher les trous, et rien d'autre.
+
+    Cette commande écrasait le manifeste entier : elle fabriquait une carte
+    pour CHAQUE plan et réécrivait `assets.json` de zéro. Quarante-six
+    archives sourcées, leurs licences et leurs crédits disparaissaient —
+    ainsi que les fichiers eux-mêmes, réécrits sous le même nom. Lancée
+    après `fetch` pour compléter quatorze plans, elle en détruisait
+    soixante-six.
+
+    `--tout` garde l'ancien comportement, nommément et volontairement.
+    """
+    from . import fetch as fetch_mod
     from .placeholders import card
 
     project = Project.open(args.slug)
     script = script_parser.parse(project.script)
     plan = shots_mod.load(project.shots, [b.id for b in script.beats])
 
+    deja: dict[str, dict] = {}
+    if project.assets.is_file() and not args.tout:
+        deja = json.loads(project.assets.read_text(encoding="utf-8")).get(
+            "assets", {})
+
     assets: dict[str, dict] = {}
     for shot in plan:
+        acquis = deja.get(shot.id)
+        if acquis and (project.root / acquis.get("fichier", "")).is_file():
+            continue
         name = f"{shot.id}.jpg"
         card(shot, project.visuals_dir / name)
         assets[shot.id] = {
             "fichier": f"05-visuals/{name}",
+            "shot": shot.id,
+            "beat": shot.beat,
             "source": "placeholder",
             "licence": "n/a",
             "credit": None,
         }
-    project.assets.write_text(
-        json.dumps({"assets": assets}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    print(f"✓ {len(assets)} visuels de substitution → {project.visuals_dir.name}/")
+
+    if args.tout:
+        project.assets.parent.mkdir(parents=True, exist_ok=True)
+        project.assets.write_text(
+            json.dumps({"assets": assets}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8")
+    else:
+        # `merge_assets` fusionne et REND le manifeste ; c'est
+        # `write_assets` qui l'écrit. Les deux sont nécessaires.
+        fetch_mod.write_assets(
+            fetch_mod.merge_assets(project.assets, assets), project.assets)
+
+    garde = len(plan) - len(assets)
+    print(f"✓ {len(assets)} visuel(s) de substitution → {project.visuals_dir.name}/")
+    if garde:
+        print(f"  {garde} plan(s) déjà pourvus, conservés")
     return 0
 
 
@@ -1400,7 +1433,12 @@ def main(argv: list[str] | None = None) -> int:
     essai_cmd.add_argument("--sortie", default=None,
                            help="dossier de destination (défaut : courant)")
     add("rushes", "Sourcer le métrage d'archive (Library of Congress)", cmd_rushes)
-    add("placeholders", "Générer des visuels de substitution", cmd_placeholders)
+    bouche_cmd = add(
+        "placeholders", "Boucher les plans sans visuel", cmd_placeholders)
+    bouche_cmd.add_argument(
+        "--tout", action="store_true",
+        help="remplacer TOUS les visuels, archives comprises — destructif",
+    )
     add("timeline", "Construire 06-timeline.json", cmd_timeline)
     render_cmd = add("render", "Rendre la vidéo avec Remotion", cmd_render)
     render_cmd.add_argument("--concurrency", type=int, default=4)
