@@ -137,10 +137,12 @@ visuels:
   # Le plafond qui l'attrape vraiment est `montage.duree_plan_max_s`.
   plans_par_minute: 25
   generation:
+    # Identique à la base : ce template est celui pour lequel elle a été
+    # écrite. Les interdits ne sont plus répétés ici — ils vivent dans leur
+    # propre champ, et le code les ajoute en queue de prompt.
     direction_artistique: >-
       Photographie documentaire d'archive, grain argentique fin,
-      lumière naturelle contrastée, palette désaturée, sans texte
-      ni inscription visible
+      lumière naturelle contrastée, palette désaturée
 
 # --- Rendu ------------------------------------------------------------------
 

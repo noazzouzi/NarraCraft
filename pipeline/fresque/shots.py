@@ -252,6 +252,79 @@ def ouverture(shots: list[Shot]) -> list[str]:
     return problems
 
 
+def variete(shots: list[Shot], beats: list[Any] | None = None) -> list[str]:
+    """Ce qui manque au plan pour ne pas être un diaporama.
+
+    Le premier film complet de ce pipeline tenait 141 planches de collage
+    sur 168 plans. Le skill disait « varier les types ». Personne ne
+    comptait, donc rien ne variait : le montage était conforme à toutes
+    les règles écrites et visuellement mort.
+
+    Comme `ouverture`, c'est un contrat éditorial : on le rapporte au
+    checkpoint plutôt que de le lever à la lecture du fichier, parce
+    qu'un plan d'essai de trois images n'a pas de variété à tenir.
+    """
+    from . import config
+
+    seuil = int(config.get("visuels", "variete", "a_partir_de_plans", default=20))
+    if len(shots) < seuil:
+        return []
+
+    problemes: list[str] = []
+    part_max = float(config.get("visuels", "variete", "part_max_par_type", default=0.45))
+    suite_max = int(config.get("visuels", "variete", "suite_max", default=4))
+    panneaux_min = int(config.get(
+        "visuels", "variete", "panneaux_min_par_acte", default=1))
+
+    comptes: dict[str, int] = {}
+    for shot in shots:
+        comptes[shot.type] = comptes.get(shot.type, 0) + 1
+    for kind, compte in sorted(comptes.items()):
+        part = compte / len(shots)
+        if part > part_max:
+            problemes.append(
+                f"{kind} occupe {part:.0%} du montage (maximum "
+                f"{part_max:.0%}) — {compte} plans sur {len(shots)}. "
+                "C'est ce qui fait un diaporama."
+            )
+
+    suite, debut = 1, shots[0]
+    for precedent, shot in zip(shots, shots[1:]):
+        if shot.type == precedent.type:
+            suite += 1
+            continue
+        if suite > suite_max:
+            problemes.append(
+                f"{debut.id} : {suite} plans « {precedent.type} » de suite "
+                f"(maximum {suite_max})."
+            )
+        suite, debut = 1, shot
+    if suite > suite_max:
+        problemes.append(
+            f"{debut.id} : {suite} plans « {shots[-1].type} » de suite "
+            f"(maximum {suite_max})."
+        )
+
+    if beats and panneaux_min > 0:
+        acte_de_beat = {beat.id: beat.act for beat in beats}
+        panneaux: dict[str, int] = {}
+        for beat in beats:
+            panneaux.setdefault(beat.act, 0)
+        for shot in shots:
+            acte = acte_de_beat.get(shot.beat)
+            if acte is not None and shot.type == "motion":
+                panneaux[acte] = panneaux.get(acte, 0) + 1
+        for acte, compte in panneaux.items():
+            if compte < panneaux_min:
+                problemes.append(
+                    f"acte {acte or '—'} : {compte} panneau(x) graphique(s) "
+                    f"(minimum {panneaux_min}) — c'est ce qui coupe une suite "
+                    "d'images et ce qui porte les chiffres de la recherche."
+                )
+
+    return problemes
+
+
 #: Les panneaux dont le surlignage peut être calé sur la narration.
 #: Ailleurs, `surligne_a` n'aurait rien à déclencher.
 SURLIGNABLES = ("document", "journal")

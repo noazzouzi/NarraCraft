@@ -196,6 +196,73 @@ def dire_le_hook(slug: str) -> dict[str, Any]:
         raise HTTPException(400, str(erreur))
 
 
+@app.get("/api/projets/{slug}/visuels")
+def visuels(slug: str) -> dict[str, Any]:
+    """Tous les éléments du montage, plan par plan.
+
+    C'est la galerie : chaque plan avec son fichier réel, sa source et sa
+    licence. Le seul endroit où l'on voit ce qui va entrer dans le film
+    avant qu'il soit monté — et donc le seul endroit où le remplacer coûte
+    encore trois secondes plutôt qu'un rendu.
+    """
+    dossier = _dossier(slug)
+    shots = dossier / "03-shots.json"
+    if not shots.is_file():
+        raise HTTPException(404, "pas encore de plan visuel")
+
+    plan = json.loads(shots.read_text(encoding="utf-8")).get("shots", [])
+    assets: dict[str, Any] = {}
+    fiche = dossier / "05-visuals" / "assets.json"
+    if fiche.is_file():
+        assets = json.loads(fiche.read_text(encoding="utf-8")).get("assets", {})
+
+    sorties = []
+    for index, brut in enumerate(plan):
+        identifiant = f"S{index:03d}"
+        acquis = assets.get(identifiant)
+        sorties.append({
+            "id": identifiant,
+            "beat": brut.get("beat", ""),
+            "type": brut.get("type", ""),
+            "intention": brut.get("intention", ""),
+            "requete": brut.get("requete") or brut.get("prompt", ""),
+            "accroche": brut.get("accroche", ""),
+            "panneau": (brut.get("motion") or {}).get("kind", ""),
+            "fichier": acquis.get("fichier") if acquis else None,
+            "titre": acquis.get("titre", "") if acquis else "",
+            "auteur": acquis.get("auteur", "") if acquis else "",
+            "licence": acquis.get("licence", "") if acquis else "",
+            "source": acquis.get("source", "") if acquis else "",
+            "url": acquis.get("url", "") if acquis else "",
+            "largeur": acquis.get("largeur") if acquis else None,
+            # Une requête élargie a pu ramener autre chose que ce qu'on
+            # demandait : c'est le premier endroit où regarder.
+            "relachee": bool(acquis.get("requete_relachee")) if acquis else False,
+        })
+
+    manquants = sum(1 for s in sorties
+                    if s["type"] != "motion" and not s["fichier"])
+    return {"plans": sorties, "manquants": manquants}
+
+
+class Refus(BaseModel):
+    raison: str = ""
+
+
+@app.post("/api/projets/{slug}/visuels/{plan}/remplacer")
+def remplacer(slug: str, plan: str, corps: Refus | None = None) -> dict[str, Any]:
+    """Refuser un visuel et en chercher un autre pour ce plan.
+
+    Le refus est écrit dans `05-visuals/rejets.jsonl` avant la nouvelle
+    recherche, donc deux clics ne rendent jamais la même image.
+    """
+    _dossier(slug)
+    try:
+        return serveur.remplacer(slug, plan, (corps.raison if corps else ""))
+    except ValueError as erreur:
+        raise HTTPException(400, str(erreur))
+
+
 @app.get("/api/templates")
 def templates() -> list[dict[str, Any]]:
     import yaml

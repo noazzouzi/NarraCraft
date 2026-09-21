@@ -225,6 +225,80 @@ def cmd_hook(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_refaire(args: argparse.Namespace) -> int:
+    """Remplacer le visuel d'un plan, et d'un seul.
+
+    C'est le bouton « Remplacer » de la galerie. Le refus est écrit dans
+    `05-visuals/rejets.jsonl` avant la nouvelle recherche : sans ce
+    registre, le second clic relance la même requête et retombe sur le même
+    candidat — on aurait un bouton qui ne fait rien.
+    """
+    from . import fetch as fetch_mod
+
+    project = Project.open(args.slug)
+    script = script_parser.parse(project.script)
+    plan = shots_mod.load(project.shots, [b.id for b in script.beats])
+
+    vise = args.plan.upper()
+    shot = next((s for s in plan if s.id == vise), None)
+    if shot is None:
+        return _fail(f"{vise} n'est pas un plan de ce projet "
+                     f"({plan[0].id} à {plan[-1].id})")
+    if shot.type == "motion":
+        return _fail(f"{vise} est un panneau graphique : il n'a pas de "
+                     "fichier à remplacer. Corriger son contenu dans "
+                     "03-shots.json.")
+
+    assets = {}
+    if project.assets.is_file():
+        assets = json.loads(project.assets.read_text(encoding="utf-8")).get(
+            "assets", {})
+    actuel = assets.get(vise)
+
+    if actuel:
+        fetch_mod.noter_rejet(project.visuals_dir, vise, actuel, args.raison or "")
+        ancien = project.root / actuel.get("fichier", "")
+        # Le fichier peut servir à un autre plan : une archive revient, et
+        # le manifeste l'enregistre deux fois. On ne le supprime que s'il
+        # n'est plus référencé nulle part.
+        assets.pop(vise, None)
+        encore = any(a.get("fichier") == actuel.get("fichier")
+                     for a in assets.values())
+        if ancien.is_file() and not encore:
+            ancien.unlink()
+        print(f"· {vise} refusé : {actuel.get('titre', '—')[:60]}")
+    else:
+        print(f"· {vise} n'avait pas de visuel")
+
+    if shot.type == "generated":
+        from . import images as images_mod
+
+        try:
+            assets[vise] = images_mod.generate(
+                shot, project.visuals_dir, report=lambda ligne: print(ligne))
+        except images_mod.ImageError as erreur:
+            fetch_mod.write_assets(assets, project.assets)
+            return _fail(str(erreur))
+    else:
+        nouveaux, manquants = fetch_mod.fetch_archives(
+            [shot], project.visuals_dir, report=lambda ligne: print(ligne),
+            deja={k: v for k, v in assets.items()},
+            refuses=fetch_mod.lire_rejets(project.visuals_dir),
+        )
+        if manquants:
+            fetch_mod.write_assets(assets, project.assets)
+            return _fail(f"{vise} : plus aucun candidat pour « "
+                         f"{shot.requete} » — changer la requête dans "
+                         "03-shots.json")
+        assets.update(nouveaux)
+
+    fetch_mod.write_assets(assets, project.assets)
+    nouveau = assets[vise]
+    print(f"✓ {vise} · {nouveau.get('titre', '')[:60]}")
+    print(f"  {nouveau.get('source', '')} · {nouveau.get('licence', '')}")
+    return 0
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     from . import lint as lint_mod
 
@@ -275,12 +349,18 @@ def cmd_shots(args: argparse.Namespace) -> int:
         if len(slow) > 12:
             print(f"    … et {len(slow) - 12} autre(s)")
 
-    # The opening is the one thing worth failing the checkpoint over: every
-    # other shot only matters to viewers who got past it.
+    # L'ouverture décide si le deuxième plan est vu. La variété décide si
+    # le film se regarde. Les deux font échouer le checkpoint, avant la
+    # moindre dépense.
     opening = shots_mod.ouverture(plan)
     for line in opening:
         print(f"\n✗ ouverture : {line}", file=sys.stderr)
-    return 1 if opening else 0
+
+    varie = shots_mod.variete(plan, script.beats)
+    for line in varie:
+        print(f"✗ variété : {line}", file=sys.stderr)
+
+    return 1 if (opening or varie) else 0
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -967,6 +1047,10 @@ def main(argv: list[str] | None = None) -> int:
     align_cmd = add("align", "Estimer les timings depuis le script", cmd_align)
     align_cmd.add_argument("--target", type=float, help="durée cible en minutes")
     add("lint", "Vérifier le script contre les règles d'écriture", cmd_lint)
+    refaire_cmd = add("refaire", "Remplacer le visuel d'un seul plan", cmd_refaire)
+    refaire_cmd.add_argument("plan", help="identifiant du plan, ex. S012")
+    refaire_cmd.add_argument(
+        "--raison", default=None, help="pourquoi ce visuel est refusé")
     hook_cmd = add("hook", "Entendre un beat sans synthétiser le film", cmd_hook)
     hook_cmd.add_argument(
         "--beat", default=None, metavar="B00N",

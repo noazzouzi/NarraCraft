@@ -128,12 +128,38 @@ def _art_direction() -> str:
     return str(config.get("visuels", "generation", "direction_artistique", default="")).strip()
 
 
+def _interdits() -> str:
+    return str(config.get("visuels", "generation", "interdits", default="")).strip()
+
+
+class PromptSansDirection(ValueError):
+    """Le template n'a pas dit comment ses images doivent avoir l'air."""
+
+
 def build_prompt(shot: Shot) -> str:
-    """Art direction first, then the shot. Never a real person's name, never
-    text in the image — both are set in the fresque-plan-visuel skill, this is
-    the mechanical belt-and-braces."""
+    """Direction artistique, puis le sujet, puis les interdits.
+
+    Le partage est la règle du projet : **Claude n'écrit que le sujet.**
+    « un homme de dos devant un restaurant aux rideaux baissés » est un
+    jugement éditorial. « collage découpé, aplats francs sur papier crème »
+    est la direction artistique du template — c'est de la donnée, elle
+    s'applique à tous les plans, et changer de template la change partout.
+
+    Sans ce partage, la cohérence dépend de ce que Claude a pensé à
+    répéter dans cent vingt prompts. Mesuré sur le premier film : le
+    template collage n'avait aucun bloc `generation`, donc ses images
+    sortaient en « photographie documentaire, grain argentique » — soit
+    l'exact opposé de sa direction artistique.
+    """
     direction = _art_direction()
-    parts = [direction, shot.prompt] if direction else [shot.prompt]
+    if not direction:
+        raise PromptSansDirection(
+            "`visuels.generation.direction_artistique` est vide — le "
+            "template ne dit pas de quoi ses images ont l'air. Cinq styles "
+            "différents détruisent l'illusion bien plus vite qu'une image "
+            "moyenne."
+        )
+    parts = [direction, shot.prompt, _interdits()]
     return ". ".join(p.strip().rstrip(".") for p in parts if p.strip()) + "."
 
 

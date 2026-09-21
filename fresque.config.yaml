@@ -314,12 +314,40 @@ visuels:
     # différents détruisent l'illusion, une image moyenne non.
     direction_artistique: >-
       Photographie documentaire d'archive, grain argentique fin,
-      lumière naturelle contrastée, palette désaturée, sans texte
-      ni inscription visible
+      lumière naturelle contrastée, palette désaturée
+    # Ajoutés en queue de chaque prompt. Séparés de la direction
+    # artistique parce qu'ils ne décrivent pas un style : ils listent ce
+    # qui casse un plan quoi qu'il arrive. Un texte incrusté par le
+    # modèle est illisible et faux ; un visage photoréaliste d'une
+    # personne réelle n'a rien à faire dans un documentaire.
+    interdits: >-
+      sans aucun texte ni inscription, sans logo, sans filigrane,
+      sans visage photoréaliste d'une personne identifiable
     # Plafond de sécurité : au-delà, le pipeline s'arrête et demande.
     max_images_par_projet: 120
   # Nombre de visuels visé par minute de montage.
   plans_par_minute: 8
+
+  # CE QUI A PRODUIT LE DIAPORAMA
+  # =============================
+  # Le premier film complet tenait 141 planches de collage sur 168 plans.
+  # Aucune règle ne l'interdisait : le skill disait « varier les types »,
+  # et personne ne comptait. Le montage était techniquement conforme et
+  # visuellement mort.
+  #
+  # Ces trois plafonds sont vérifiés par `fresque shots`, au checkpoint,
+  # avant la moindre dépense.
+  variete:
+    # Part maximale d'un même type de plan sur tout le montage.
+    part_max_par_type: 0.45
+    # Nombre de plans consécutifs du même type. Au-delà, c'est une série.
+    suite_max: 4
+    # Au moins un panneau graphique par acte : c'est ce qui coupe une
+    # suite d'images et ce qui porte les chiffres de la recherche.
+    panneaux_min_par_acte: 1
+    # En dessous de ce nombre de plans, rien n'est vérifié : un montage
+    # d'essai n'a pas de variété à tenir.
+    a_partir_de_plans: 20
 
   # Une même image peut resservir. Mesuré sur un sujet judiciaire français
   # contemporain : les fonds libres réellement pertinents plafonnent autour

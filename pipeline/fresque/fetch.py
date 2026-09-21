@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -128,6 +129,7 @@ def fetch_archives(
     dry_run: bool = False,
     cascade: tuple[str, ...] = CASCADE,
     deja: dict[str, dict[str, Any]] | None = None,
+    refuses: dict[str, set[str]] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Return (assets by shot id, list of shots left unsourced).
 
@@ -179,7 +181,8 @@ def fetch_archives(
             continue
 
         record = _source_one(shot, visuals_dir, session, cascade, say, dry_run,
-                             histoire, cache, position, ecart)
+                             histoire, cache, position, ecart,
+                             (refuses or {}).get(shot.id, ()))
         if record is None:
             unsourced.append(shot.id)
         else:
@@ -195,7 +198,51 @@ def fetch_archives(
     return assets, unsourced
 
 
-def _eligibles(candidates, histoire, position, ecart, beat):
+REJETS = "rejets.jsonl"
+
+
+def lire_rejets(visuals_dir: Path) -> dict[str, set[str]]:
+    """Ce que l'utilisateur a refusé, par plan.
+
+    Append-only, comme le journal de sources de la recherche : un refus est
+    un fait daté, pas un état qu'on écrase. C'est aussi ce qui empêche le
+    bouton « Remplacer » de rendre deux fois la même image — sans ce
+    registre, le second clic relance la même recherche et retombe sur le
+    premier candidat.
+    """
+    chemin = visuals_dir / REJETS
+    refuses: dict[str, set[str]] = {}
+    if not chemin.is_file():
+        return refuses
+    for ligne in chemin.read_text(encoding="utf-8").splitlines():
+        ligne = ligne.strip()
+        if not ligne:
+            continue
+        try:
+            donnees = json.loads(ligne)
+        except json.JSONDecodeError:
+            continue
+        shot, url = donnees.get("shot"), donnees.get("url")
+        if shot and url:
+            refuses.setdefault(shot, set()).add(url)
+    return refuses
+
+
+def noter_rejet(visuals_dir: Path, shot: str, record: dict[str, Any],
+                raison: str = "") -> None:
+    visuals_dir.mkdir(parents=True, exist_ok=True)
+    with (visuals_dir / REJETS).open("a", encoding="utf-8") as flux:
+        flux.write(json.dumps({
+            "shot": shot,
+            "url": record.get("url", ""),
+            "titre": record.get("titre", ""),
+            "source": record.get("source", ""),
+            "raison": raison,
+            "quand": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }, ensure_ascii=False) + "\n")
+
+
+def _eligibles(candidates, histoire, position, ecart, beat, refuses=()):
     """Split candidates into never-seen, reusable, and too-close.
 
     A file already on screen is not disqualified for ever — on a subject
@@ -207,6 +254,11 @@ def _eligibles(candidates, histoire, position, ecart, beat):
     """
     neufs, reutilisables = [], []
     for candidate in candidates:
+        # Un candidat refusé pour CE plan ne revient jamais. Il reste
+        # disponible ailleurs : le refus porte sur l'accord entre l'image et
+        # le plan, pas sur l'image.
+        if candidate.page_url in refuses:
+            continue
         vu = histoire.get(candidate.page_url)
         if vu is None:
             neufs.append(candidate)
@@ -218,7 +270,8 @@ def _eligibles(candidates, histoire, position, ecart, beat):
 
 
 def _source_one(shot, visuals_dir, session, cascade, say, dry_run,
-                histoire=None, cache=None, position=0, ecart=25):
+                histoire=None, cache=None, position=0, ecart=25,
+                refuses=()):
     """Walk the cascade until one provider yields a usable file."""
     histoire = histoire if histoire is not None else {}
     cache = cache if cache is not None else {}
@@ -235,7 +288,7 @@ def _source_one(shot, visuals_dir, session, cascade, say, dry_run,
             continue
 
         neufs, reutilisables = _eligibles(
-            candidates, histoire, position, ecart, shot.beat
+            candidates, histoire, position, ecart, shot.beat, refuses
         )
         if not neufs and reutilisables:
             # Nothing new under this query. Bring back the file that has been

@@ -92,6 +92,28 @@ export type Hook = {
 
 export type HookDit = { fichier: string; mesure: string; alerte: string };
 
+// Un élément du montage. C'est ce que la galerie montre, et ce que le
+// bouton « Remplacer » remplace.
+export type Visuel = {
+  id: string;
+  beat: string;
+  type: "archive" | "collage" | "video" | "motion" | "generated" | string;
+  intention: string;
+  requete: string;
+  accroche: string;
+  panneau: string;
+  fichier: string | null;
+  titre: string;
+  auteur: string;
+  licence: string;
+  source: string;
+  url: string;
+  largeur: number | null;
+  relachee: boolean;
+};
+
+export type Galerie = { plans: Visuel[]; manquants: number };
+
 export type EtatJournal = {
   texte: string;
   offset: number;
@@ -116,6 +138,22 @@ export const api = {
   templates: () => lire<Template[]>("/api/templates"),
   pistes: (slug: string) => lire<Catalogue>(`/api/projets/${slug}/pistes`),
   hook: (slug: string) => lire<Hook>(`/api/projets/${slug}/hook`),
+  visuels: (slug: string) => lire<Galerie>(`/api/projets/${slug}/visuels`),
+
+  // Refuser un visuel et en chercher un autre. Le refus est gardé, donc
+  // deux clics ne rendent jamais la même image.
+  async remplacer(slug: string, plan: string, raison = "") {
+    const reponse = await fetch(
+      `/api/projets/${slug}/visuels/${plan}/remplacer`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ raison }),
+      },
+    );
+    if (!reponse.ok) throw new Error(await reponse.text());
+    return (await reponse.json()) as { sortie: string };
+  },
 
   // Trois secondes de voix, pas quinze minutes. L'appel est synchrone :
   // le serveur attend la synthèse et rend le chemin du fichier.

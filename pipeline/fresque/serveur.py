@@ -237,6 +237,33 @@ def dire_beat(slug: str, beat: str | None = None) -> dict[str, Any]:
     return {"fichier": fichier, "mesure": mesure, "alerte": alerte}
 
 
+_ID_PLAN = re.compile(r"^S\d{3}$")
+
+
+def remplacer(slug: str, plan: str, raison: str = "") -> dict[str, Any]:
+    """Le bouton « Remplacer » de la galerie.
+
+    Attendu plutôt que journalisé, comme la synthèse d'un hook : un clic
+    sur une vignette ne mérite pas qu'on ouvre un flux. Une archive prend
+    quelques secondes, une image générée davantage — c'est le prix d'un
+    bouton qui rend la nouvelle image plutôt qu'un identifiant de journal.
+    """
+    if not _ID_PLAN.match(plan):
+        raise ValueError(f"plan {plan!r} — attendu S001, S002…")
+    argv = [sys.executable, "-m", "fresque", "refaire", slug, plan]
+    if raison:
+        argv += ["--raison", raison]
+
+    fait = subprocess.run(
+        argv, cwd=_racine(), env=_environnement(),
+        capture_output=True, text=True,
+    )
+    if fait.returncode != 0:
+        raise ValueError((fait.stderr or fait.stdout).strip().lstrip("✗ ")
+                         or "remplacement refusé")
+    return {"sortie": fait.stdout.strip()}
+
+
 def _argv(nom: str, slug: str, options: dict[str, str]) -> list[str]:
     """La ligne de commande d'une exécution. Fonction pure, donc vérifiable.
 

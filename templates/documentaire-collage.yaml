@@ -69,6 +69,31 @@ controle:
 visuels:
   plans_par_minute: 25
 
+  # CE BLOC MANQUAIT, ET ÇA SE VOYAIT
+  # =================================
+  # Ce template repeint tout le montage — papier crème, aplats rouges,
+  # duotone, tampons déchirés — mais il n'avait aucun bloc `generation`.
+  # Les images générées héritaient donc de la direction artistique de base,
+  # « photographie documentaire d'archive, grain argentique fin », c'est-à-
+  # dire l'exact opposé de ce que le reste du template construit.
+  #
+  # Une image générée arrivait au milieu de planches de collage avec son
+  # grain de pellicule. C'est précisément le « cinq styles différents » que
+  # la config de base met en garde contre, et il était dans le projet.
+  generation:
+    direction_artistique: >-
+      Illustration éditoriale en collage découpé, aplats de couleur
+      franche posés sur papier crème texturé, bords de papier déchiré,
+      ombres portées dures et nettes, palette rouge brique, ocre et
+      encre sombre, formes simplifiées et géométriques
+    # Les dégradés lisses et le photoréalisme sont ce qui trahit une image
+    # générée au milieu d'un collage : la planche est faite de papier, et
+    # le papier n'a pas de dégradé.
+    interdits: >-
+      sans aucun texte ni inscription, sans logo, sans filigrane,
+      sans visage photoréaliste d'une personne identifiable,
+      sans dégradé lisse, sans rendu photographique, sans effet 3D
+
 montage:
   # Une planche bouge tout du long : ses pièces glissent à des vitesses
   # différentes. Elle tient donc l'écran plus longtemps qu'une photographie,

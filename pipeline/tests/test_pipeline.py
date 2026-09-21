@@ -295,6 +295,47 @@ def test_prompt_carries_the_art_direction():
     assert prompt.endswith(".")
 
 
+def test_the_template_decides_what_a_generated_image_looks_like():
+    """Claude n'écrit que le sujet du plan. Le style vient du template.
+
+    Le template collage n'avait aucun bloc `generation` : ses images
+    sortaient donc en « photographie documentaire, grain argentique », au
+    milieu de planches de papier découpé. C'est exactement le « cinq styles
+    différents » contre lequel la config met en garde, et il était dans le
+    projet.
+    """
+    from fresque import config
+
+    shot = Shot(index=0, beat="B001", type="generated",
+                prompt="un homme de dos devant un restaurant fermé")
+    try:
+        config.use_template("documentaire-collage")
+        collage = build_prompt(shot)
+        config.use_template("documentaire-historique")
+        historique = build_prompt(shot)
+    finally:
+        config.use_template(None)
+
+    assert "collage" in collage.lower() and "papier" in collage.lower()
+    assert "argentique" in historique.lower()
+    assert "argentique" not in collage.lower(), \
+        "le template collage ne doit pas hériter du grain de pellicule"
+    for prompt in (collage, historique):
+        assert "un homme de dos devant un restaurant fermé" in prompt
+        assert "sans aucun texte" in prompt, "les interdits suivent partout"
+
+
+def test_a_template_without_an_art_direction_refuses_to_generate(monkeypatch):
+    """Générer sans direction artistique coûte de l'argent pour produire
+    une image qui ne ressemblera à aucune autre du film."""
+    from fresque import images as images_mod
+
+    monkeypatch.setattr(images_mod, "_art_direction", lambda: "")
+    shot = Shot(index=0, beat="B001", type="generated", prompt="x")
+    with pytest.raises(images_mod.PromptSansDirection):
+        build_prompt(shot)
+
+
 def test_image_is_extracted_from_inline_data():
     payload = {"candidates": [{"content": {"parts": [
         {"text": "voici"},
@@ -1136,6 +1177,51 @@ def test_density_catches_a_beat_planned_with_too_few_shots(tmp_path):
         Shot(index=1, beat="B001", type="archive", requete="y", poids=9),
     ]
     assert density(desequilibre, beats)
+
+
+def test_a_run_of_identical_shots_is_refused():
+    """Ce qui a produit le diaporama.
+
+    Le premier film complet tenait quatorze archives d'affilée au même
+    endroit. Le skill disait « varier les types ». Personne ne comptait,
+    donc rien ne variait : le montage était conforme à toutes les règles
+    écrites et visuellement mort.
+    """
+    from fresque.shots import variete
+
+    suite = [Shot(index=i, beat=f"B{i // 3 + 1:03d}", type="archive",
+                  requete="x") for i in range(30)]
+    problemes = variete(suite)
+    assert any("de suite" in p for p in problemes)
+    assert any("%" in p for p in problemes), \
+        "trente plans d'un seul type dépassent aussi la part maximale"
+
+
+def test_variety_says_nothing_about_a_test_montage():
+    """Un plan d'essai de trois images n'a pas de variété à tenir."""
+    from fresque.shots import variete
+
+    assert variete([Shot(index=i, beat="B001", type="archive", requete="x")
+                    for i in range(3)]) == []
+
+
+def test_an_act_without_a_single_panel_is_reported(tmp_path):
+    """Un panneau graphique par acte : c'est ce qui coupe une suite
+    d'images, et ce qui porte les chiffres de la recherche."""
+    from fresque.shots import variete
+
+    corps = "".join(
+        f"### B{i:03d}\n> intention: x\n" + "mot " * 30 + "\n" for i in range(1, 6))
+    chemin = tmp_path / "02-script.md"
+    chemin.write_text(f"# T\n\n## Acte I — A\n\n{corps}", encoding="utf-8")
+    beats = script_parser.parse(chemin).beats
+
+    melange = []
+    for i in range(24):
+        melange.append(Shot(index=i, beat=f"B{i % 5 + 1:03d}",
+                            type="archive" if i % 2 else "collage",
+                            requete="x"))
+    assert any("panneau" in p for p in variete(melange, beats))
 
 
 def test_the_opening_shot_must_carry_a_hook_sentence():
@@ -2042,6 +2128,43 @@ def test_the_hook_is_heard_the_way_it_will_be_rendered(tmp_path, monkeypatch):
         "le beat doit être dit phrase par phrase"
     assert len(samples) / rate == pytest.approx(0.5 + 0.45 + 0.5, abs=0.01), \
         "le silence entre phrases doit être dans le fichier qu'on écoute"
+
+
+def test_a_refused_visual_never_comes_back_for_the_same_shot(tmp_path):
+    """Le bouton « Remplacer » sans registre de refus est un bouton qui ne
+    fait rien : le second clic relance la même requête et retombe sur le
+    même candidat."""
+    from fresque import fetch as fetch_mod
+    from fresque.sources.base import Candidate
+
+    visuels = tmp_path / "05-visuals"
+    fetch_mod.noter_rejet(
+        visuels, "S002",
+        {"url": "https://exemple.org/a", "titre": "Une façade"},
+        "montre le décor, pas le sujet",
+    )
+    refuses = fetch_mod.lire_rejets(visuels)
+    assert refuses == {"S002": {"https://exemple.org/a"}}
+
+    def _candidat(url: str) -> Candidate:
+        return Candidate(
+            provider="wikimedia_commons", title="t", author="a",
+            licence="CC BY 4.0", licence_url="", page_url=url,
+            file_url=url, width=2000, height=1200, mime="image/jpeg",
+        )
+
+    neufs, _ = fetch_mod._eligibles(
+        [_candidat("https://exemple.org/a"), _candidat("https://exemple.org/b")],
+        {}, 0, 25, "B002", refuses["S002"],
+    )
+    assert [c.page_url for c in neufs] == ["https://exemple.org/b"]
+
+
+def test_a_shot_name_from_the_browser_is_matched_before_it_reaches_an_argv():
+    from fresque import serveur
+
+    with pytest.raises(ValueError):
+        serveur.remplacer("sarkozy-essai-2min", "S002; rm -rf /")
 
 
 def test_a_beat_name_from_the_browser_is_matched_before_it_reaches_an_argv():
