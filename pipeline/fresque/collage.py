@@ -92,6 +92,29 @@ MARGE_HAUT = 0.05
 #: vu au rendu : un aplat rouge derrière la première ligne du texte.
 DEBORD_BLOC = 0.03
 
+#: Marge latérale. Rien ne touche le bord gauche ou droit du cadre.
+MARGE_COTE = 0.03
+
+#: De combien le papier dépasse la photo. Lu aux deux endroits qui en
+#: dépendent — la photo se dimensionne pour que SON papier tienne dans le
+#: cadre, et le papier se dessine à la même échelle. Deux valeurs qui
+#: divergent donnent un papier plus petit que sa photo.
+BLOC_ECHELLE = (1.10, 1.26)
+
+#: Ce que la planche — papier compris — remplit de la zone utile.
+#:
+#: Ce réglage n'existait pas : la photo avait une largeur fixe, de 0,40 à
+#: 0,52 du cadre. Cette valeur avait été calibrée pour une planche surmontée
+#: d'une accroche, qui lui prenait la moitié haute de l'image. Or une seule
+#: planche par documentaire porte une accroche : sur les 141 du premier film
+#: complet, les 141 avaient `bande_titre: 0`.
+#:
+#: Mesuré sur ce montage : la photo couvrait 25,6 % de l'écran en moyenne,
+#: 16,8 % au pire. Le reste était du fond vide — et c'est ce qui faisait
+#: regarder le film comme un diaporama, bien plus que la caméra, dont
+#: l'amplitude est calée sur la mesure Frontier.
+CADRAGE = (0.82, 0.95)
+
 #: Le vocabulaire de formes. Volontairement court : ce sont les pièces
 #: relevées sur les planches Frontier, et rien d'autre. Une forme de plus
 #: qu'on n'a pas vue chez eux est une invention, pas une reproduction.
@@ -131,17 +154,24 @@ def _photo(shot: Shot, ratio_photo: float | None, haut: float) -> dict[str, Any]
     cadre = _ratio_cadre()
     ratio = ratio_photo or 1.4
 
-    largeur = _entre(shot.id, "photo_w", 0.40, 0.52)
-    hauteur = largeur * cadre / ratio
-
     # La photo se cadre dans une zone déjà rétrécie du débord du tampon :
     # c'est le tampon qui doit tenir sous le titre, pas seulement la photo.
     plafond = haut + DEBORD_BLOC
     plancher = 1.0 - MARGE_BAS - DEBORD_BLOC
     dispo = plancher - plafond
-    if hauteur > dispo:
-        hauteur = dispo
-        largeur = hauteur * ratio / cadre
+
+    # On cadre le PAPIER, pas la photo : c'est la plus grande pièce, donc
+    # celle qui décide de ce que la planche remplit. La photo s'en déduit.
+    # `_entre` est déterministe sur la graine, donc `_bloc` retrouvera
+    # exactement la même échelle sans qu'on la lui passe.
+    echelle = _entre(shot.id, "bloc_k", *BLOC_ECHELLE)
+    visee = _entre(shot.id, "cadrage", *CADRAGE)
+    bloc_large = (1.0 - 2 * MARGE_COTE) * visee
+    bloc_haut = dispo * visee
+    # Une photo panoramique bute sur la largeur, une photo en portrait sur
+    # la hauteur. On prend celle des deux qui contraint.
+    largeur = min(bloc_large, bloc_haut * ratio / cadre) / echelle
+    hauteur = largeur * cadre / ratio
 
     rotation = _entre(shot.id, "photo_rot", -3.0, 3.0)
     demi = _demi_hauteur(largeur, hauteur, rotation)
@@ -181,7 +211,9 @@ def _bloc(shot: Shot, photo: dict[str, Any], haut: float) -> dict[str, Any]:
     déborder. Au premier rendu, elle passait derrière la première ligne de
     l'accroche.
     """
-    echelle = _entre(shot.id, "bloc_k", 1.10, 1.26)
+    # La même graine que dans `_photo`, donc la même valeur : la photo s'est
+    # dimensionnée pour que ce papier-ci tienne dans le cadre.
+    echelle = _entre(shot.id, "bloc_k", *BLOC_ECHELLE)
     largeur, hauteur = photo["w"] * echelle, photo["h"] * echelle
     rotation = _entre(shot.id, "bloc_rot", -4.0, 4.0)
 
@@ -267,12 +299,6 @@ def _accents(shot: Shot, photo: dict[str, Any], haut: float) -> list[dict[str, A
 
         taille = _entre(graine, "taille", 0.028, 0.062)
         hauteur = taille * _ratio_cadre()
-        if not (MARGE_HAUT + hauteur / 2 <= cy <= 1 - MARGE_BAS - hauteur / 2):
-            continue
-        if cy - hauteur / 2 < haut:
-            continue
-        if not (0.03 + taille / 2 <= cx <= 0.97 - taille / 2):
-            continue
 
         forme = formes[len(pieces) % len(formes)]
         # Une flèche qui ne désigne rien n'est qu'un chevron. Celle-ci pointe
@@ -281,6 +307,20 @@ def _accents(shot: Shot, photo: dict[str, Any], haut: float) -> list[dict[str, A
             rotation = math.degrees(math.atan2(photo["y"] - cy, photo["x"] - cx)) + 90
         else:
             rotation = _entre(graine, "rot", -20.0, 20.0)
+
+        # On mesure la pièce UNE FOIS TOURNÉE : un zigzag incliné de vingt
+        # degrés monte plus haut que sa hauteur au repos. La mesurer au
+        # repos suffisait tant que les planches étaient petites et les
+        # accents bas ; dès qu'elles ont rempli le cadre, un accent est
+        # entré dans la bande du titre. Même erreur que celle déjà payée
+        # sur le tampon, au même endroit du raisonnement.
+        demi = _demi_hauteur(taille, hauteur, rotation)
+        if not (MARGE_HAUT + demi <= cy <= 1 - MARGE_BAS - demi):
+            continue
+        if cy - demi < haut:
+            continue
+        if not (0.03 + taille / 2 <= cx <= 0.97 - taille / 2):
+            continue
 
         pieces.append({
             "role": "accent",

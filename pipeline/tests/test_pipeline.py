@@ -3183,3 +3183,21 @@ def test_claude_md_tient_sous_son_budget():
         f"CLAUDE.md fait {len(mots)} mots pour un budget de "
         f"{BUDGET_MOTS_CLAUDE_MD}. Déplacer avant d'ajouter."
     )
+
+
+def test_a_plate_without_a_title_fills_the_frame():
+    """Le défaut mesuré sur le premier documentaire complet : la photo était
+    dimensionnée par une largeur fixe, calibrée pour une planche surmontée
+    d'une accroche. Or une seule planche par film en porte une — sur les 141
+    de ce montage, les 141 avaient `bande_titre: 0`. La photo couvrait 25,6 %
+    de l'écran, et le film se regardait comme un diaporama."""
+    aires = []
+    for index in range(60):
+        shot = Shot(index=index, beat="B001", type="collage", requete="q")
+        planche = collage_mod.compose(shot, 1.5)
+        assert planche["bande_titre"] == 0
+        bloc = next(p for p in planche["pieces"] if p["role"] == "bloc")
+        aires.append(bloc["w"] * bloc["h"])
+
+    moyenne = sum(aires) / len(aires)
+    assert moyenne > 0.42, f"la planche ne remplit que {moyenne:.0%} du cadre"
