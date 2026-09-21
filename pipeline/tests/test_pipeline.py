@@ -1777,6 +1777,89 @@ def test_review_is_a_projection_not_a_source(tmp_path):
     assert "<script" not in page, "la page doit être statique"
 
 
+# --- Les pistes --------------------------------------------------------------
+#
+# `pistes.md` est écrit par Claude et lu par le code. C'est la seule
+# frontière où une sortie de modèle devient une interface cliquable : ce
+# qui est vérifié ici, c'est qu'elle ne passe pas à moitié remplie.
+
+PISTES_TYPE = """# Pistes — La faillite de Subway
+
+> 17 recherches · 2026-09-21
+
+## Piste 1 — La redevance sur les recettes
+
+- **angle** : Le contrat payait le siège sur le chiffre d'affaires.
+- **pivot** : Ce n'était pas une croissance ratée, c'était un modèle.
+- **risque** : Les documents varient d'une année à l'autre.
+
+**Preuves**
+1. Huit pour cent du chiffre d'affaires hebdomadaire — [FDD 2019](https://exemple.org/fdd)
+2. Six mille cinq cents fermetures entre 2015 et 2021 — [Rapport](https://exemple.org/r)
+3. Aucune clause de protection territoriale — [FDD 2019](https://exemple.org/fdd)
+
+**Titres**
+- Pourquoi Subway a fermé 6 500 restaurants — preuve 2
+- 8 % sur tout ce que vous vendez, bénéfice ou pas — preuve 1
+"""
+
+
+def test_a_piste_keeps_its_source_out_of_its_text():
+    """La carte affiche le fait d'un côté et le lien de l'autre. Laisser le
+    markdown du lien dans le texte donnait « … — [FDD 2019](https://… ) »
+    en clair au milieu de la phrase."""
+    from fresque import pistes as pistes_mod
+
+    catalogue = pistes_mod.analyser(PISTES_TYPE)
+    preuve = catalogue["pistes"][0]["preuves"][0]
+
+    assert preuve["texte"] == "Huit pour cent du chiffre d'affaires hebdomadaire"
+    assert preuve["url"] == "https://exemple.org/fdd"
+    assert preuve["source"] == "FDD 2019"
+    assert catalogue["sujet"] == "La faillite de Subway"
+
+
+def test_the_most_aggressive_title_is_the_last_one():
+    """Le format classe les titres du plus sobre au plus agressif. C'est
+    ce qui permet à l'interface de mettre le dernier en grand sans demander
+    à un modèle lequel est lequel."""
+    from fresque import pistes as pistes_mod
+
+    piste = pistes_mod.analyser(PISTES_TYPE)["pistes"][0]
+    assert pistes_mod.choisie(piste) == "8 % sur tout ce que vous vendez, bénéfice ou pas"
+
+
+def test_a_title_whose_proof_is_missing_is_refused():
+    """« Un titre dont la preuve manque n'est pas proposé » est la règle du
+    skill. Une règle qu'aucun code ne vérifie est une suggestion : un titre
+    agressif sans rien dessous est exactement ce qu'on ne veut pas voir
+    arriver jusqu'au navigateur."""
+    from fresque import pistes as pistes_mod
+
+    with pytest.raises(pistes_mod.PistesError, match="preuve 9"):
+        pistes_mod.analyser(PISTES_TYPE.replace("— preuve 2", "— preuve 9"))
+
+
+def test_a_piste_with_two_proofs_is_refused():
+    from fresque import pistes as pistes_mod
+
+    ampute = PISTES_TYPE.replace(
+        "3. Aucune clause de protection territoriale — [FDD 2019](https://exemple.org/fdd)\n",
+        "",
+    )
+    with pytest.raises(pistes_mod.PistesError, match="2 preuve"):
+        pistes_mod.analyser(ampute)
+
+
+def test_a_file_without_a_piste_says_so():
+    """Claude peut écrire un fichier hors format. Mieux vaut une erreur
+    nette qu'une page de cartes vides."""
+    from fresque import pistes as pistes_mod
+
+    with pytest.raises(pistes_mod.PistesError):
+        pistes_mod.analyser("# Pistes — Subway\n\nJe n'ai rien trouvé.\n")
+
+
 # --- Le serveur d'atelier ----------------------------------------------------
 #
 # Ce qui est vérifié ici n'est pas que les pages s'affichent — un coup d'œil
@@ -1804,6 +1887,32 @@ def test_a_text_option_is_matched_before_it_reaches_an_argv():
         serveur.lancer("sarkozy-essai-2min", "render", {"frames": "0-450; rm -rf /"})
     with pytest.raises(ValueError):
         serveur.lancer("sarkozy-essai-2min", "render", {"frames": "$(whoami)"})
+
+
+def test_an_integer_option_does_not_reach_argparse_as_a_float():
+    """Le numéro d'une piste arrive du navigateur comme texte. Converti en
+    flottant, il donne `--piste 2.0`, et `argparse --piste type=int` refuse
+    la commande : choisir une piste échouait sans rien dire d'utile."""
+    from fresque import serveur
+
+    argv = serveur._argv("brief", "sarkozy-essai-2min", {"piste": "2"})
+    assert argv[-2:] == ["--piste", "2"]
+
+
+def test_every_step_claude_holds_writes_the_file_the_chain_waits_for():
+    """Trois listes décrivent les mêmes étapes : les skills dans `claude`,
+    les commandes lançables dans `serveur`, et les fichiers de la chaîne.
+    Si elles divergent, un bouton lance un skill dont personne ne lit la
+    sortie — et l'étape reste éternellement « pas encore écrite »."""
+    from fresque import claude as claude_mod, serveur
+
+    fichiers = {relatif for _, relatif in serveur.ETAPES}
+    for nom, etape in claude_mod.ETAPES.items():
+        assert nom in serveur.COMMANDES, f"{nom} n'est pas lançable"
+        assert serveur.COMMANDES[nom].produit == etape.produit
+        assert etape.produit in fichiers, f"{etape.produit} n'est pas dans la chaîne"
+        skill = RACINE / ".claude" / "skills" / etape.skill / "SKILL.md"
+        assert skill.is_file(), f"skill introuvable : {etape.skill}"
 
 
 def test_a_run_interrupted_by_a_restart_is_not_a_success():

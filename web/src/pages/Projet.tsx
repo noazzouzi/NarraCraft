@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type Commande, type ProjetDetail } from "../api";
+import Pistes from "./Pistes";
 
 const CHECKPOINTS: Record<string, string> = {
   "02-script.md": "CHECKPOINT 1",
@@ -89,6 +90,7 @@ export default function Projet() {
     if (c.produit && !parProduit.has(c.produit)) parProduit.set(c.produit, c);
   }
   const surLaChaine = new Set([...parProduit.values()].map((c) => c.nom));
+  const pistesEcrites = projet.fichiers.find((f) => f.fichier === "pistes.md" && f.existe);
 
   return (
     <div className="colonnes">
@@ -124,6 +126,17 @@ export default function Projet() {
             )}
           </div>
         </header>
+
+        {/* Le fichier change quand l'exploration se termine : sa taille
+            sert de clé, donc les cartes se relisent toutes seules. */}
+        {pistesEcrites && (
+          <Pistes
+            key={pistesEcrites.octets ?? 0}
+            slug={slug}
+            vivant={vivant}
+            surLancement={(id) => { setSuivi(id); recharger(); }}
+          />
+        )}
 
         <h3 style={{ marginBottom: 14 }}>La chaîne</h3>
         {projet.fichiers.map((f, i) => {

@@ -11,8 +11,10 @@ Transformer des mots-clés en quatre pistes de documentaire, et laisser l'utilis
 
 ## ENTRÉE
 
-- Les mots-clés donnés par l'utilisateur.
-- `projects/<slug>/projet.yaml` — template visé, durée cible.
+- `projects/<slug>/projet.yaml` — son champ `sujet` porte les mots-clés
+  tapés par l'utilisateur. C'est le point de départ, et il est dans le
+  fichier, pas dans la conversation. Le champ `template` donne la direction
+  artistique visée.
 - Le web. 10 à 20 recherches, pas plus. On cherche des angles, pas des faits.
 
 ## SORTIE

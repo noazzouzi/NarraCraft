@@ -19,6 +19,116 @@ def _fail(message: str) -> int:
     return 1
 
 
+# --- Les étapes confiées à Claude --------------------------------------------
+#
+# Elles ne font rien elles-mêmes : elles vérifient ce qui doit exister,
+# lancent le bon skill, et laissent Claude écrire le fichier. Le partage
+# tient en une phrase — Claude juge, le code exécute — et ces quatre
+# fonctions sont la frontière.
+
+def cmd_nouveau(args: argparse.Namespace) -> int:
+    """Un sujet tapé par l'utilisateur devient un dossier. Rien de plus."""
+    from .project import slugify
+
+    sujet = (args.sujet or "").strip()
+    if not sujet:
+        return _fail("un sujet vide ne donne pas de documentaire")
+    slug = slugify(sujet)
+    if not slug:
+        return _fail(f"« {sujet} » ne donne aucun slug utilisable")
+    if (config.repo_root() / "projects" / slug).is_dir():
+        return _fail(f"projects/{slug} existe déjà")
+
+    project = Project.create(sujet, args.template)
+    print(f"✓ projects/{project.slug}/projet.yaml")
+    print(f"  sujet : {sujet}")
+    if args.template:
+        print(f"  template : {args.template}")
+    print("  suivant : fresque explorer " + project.slug)
+    return 0
+
+
+def _claude(nom: str, args: argparse.Namespace) -> int:
+    from . import claude as claude_mod
+
+    Project.open(args.slug)  # valide le slug et charge le template
+    try:
+        return claude_mod.lancer(nom, args.slug, getattr(args, "modele", None))
+    except claude_mod.ClaudeError as erreur:
+        return _fail(str(erreur))
+
+
+def cmd_explorer(args: argparse.Namespace) -> int:
+    return _claude("explorer", args)
+
+
+def cmd_brief(args: argparse.Namespace) -> int:
+    """Le choix d'une piste. C'est le seul endroit où un clic devient un fait.
+
+    Le numéro est confronté à `pistes.md` avant d'être écrit : une piste 7
+    dans un fichier qui en contient quatre est une erreur, pas un brief sur
+    un angle vide.
+    """
+    from . import pistes as pistes_mod
+
+    project = Project.open(args.slug)
+    if args.piste is not None:
+        try:
+            catalogue = pistes_mod.lire(project.pistes)
+        except FileNotFoundError:
+            return _fail("pistes.md manque — lancer `fresque explorer` d'abord")
+        except pistes_mod.PistesError as erreur:
+            return _fail(str(erreur))
+        numeros = [p["numero"] for p in catalogue["pistes"]]
+        if args.piste not in numeros:
+            return _fail(f"piste {args.piste} inconnue (présentes : "
+                         f"{', '.join(str(n) for n in numeros)})")
+        retenue = next(p for p in catalogue["pistes"] if p["numero"] == args.piste)
+        project.set_valeurs(piste=args.piste, titre=pistes_mod.choisie(retenue))
+        print(f"· piste {args.piste} — {retenue['resume']}")
+    elif project.piste is None and project.pistes.is_file():
+        return _fail("aucune piste retenue — relancer avec --piste N")
+
+    return _claude("brief", args)
+
+
+def cmd_recherche(args: argparse.Namespace) -> int:
+    return _claude("recherche", args)
+
+
+def cmd_ecrire(args: argparse.Namespace) -> int:
+    return _claude("ecrire", args)
+
+
+def cmd_plans(args: argparse.Namespace) -> int:
+    return _claude("plans", args)
+
+
+def cmd_pistes(args: argparse.Namespace) -> int:
+    """Relit `pistes.md` et le contrôle — le même contrôle que l'interface."""
+    from . import pistes as pistes_mod
+
+    project = Project.open(args.slug)
+    try:
+        catalogue = pistes_mod.lire(project.pistes)
+    except FileNotFoundError:
+        return _fail("pistes.md manque — lancer `fresque explorer` d'abord")
+    except pistes_mod.PistesError as erreur:
+        return _fail(str(erreur))
+
+    retenue = project.piste
+    for piste in catalogue["pistes"]:
+        marque = "▸" if piste["numero"] == retenue else " "
+        print(f"{marque} {piste['numero']}. {piste['resume']}")
+        print(f"    {piste['angle']}")
+        print(f"    pivot : {piste['pivot']}")
+        for titre in piste["titres"]:
+            print(f"    « {titre['texte']} »  (preuve {titre['preuve']})")
+        print(f"    {len(piste['preuves'])} preuves · risque : "
+              f"{piste['risque'] or '—'}")
+    return 0
+
+
 def cmd_align(args: argparse.Namespace) -> int:
     project = Project.open(args.slug)
     script = script_parser.parse(project.script)
@@ -780,6 +890,35 @@ def main(argv: list[str] | None = None) -> int:
             node.add_argument("slug")
         node.set_defaults(handler=handler)
         return node
+
+    # Les étapes que Claude tient. Toutes acceptent --modele : la recherche
+    # coûte cher en tours, et on veut pouvoir l'essayer plus bas.
+    nouveau_cmd = sub.add_parser(
+        "nouveau", help="Créer un projet à partir d'un sujet"
+    )
+    nouveau_cmd.set_defaults(handler=cmd_nouveau)
+    nouveau_cmd.add_argument("sujet", help="quelques mots-clés, entre guillemets")
+    nouveau_cmd.add_argument(
+        "--template", default=None,
+        choices=config.available_templates() or None,
+        help="direction artistique (défaut : la config de base)",
+    )
+
+    explorer_cmd = add(
+        "explorer", "Proposer quatre pistes à partir du sujet", cmd_explorer)
+    add("pistes", "Relire et contrôler pistes.md", cmd_pistes)
+    brief_cmd = add("brief", "Écrire le brief de la piste retenue", cmd_brief)
+    brief_cmd.add_argument(
+        "--piste", type=int, default=None,
+        help="numéro de la piste choisie dans pistes.md",
+    )
+    recherche_cmd = add(
+        "recherche", "Mener la recherche documentaire", cmd_recherche)
+    ecrire_cmd = add("ecrire", "Écrire le script", cmd_ecrire)
+    plans_cmd = add("plans", "Écrire le plan visuel", cmd_plans)
+    for node in (explorer_cmd, brief_cmd, recherche_cmd, ecrire_cmd, plans_cmd):
+        node.add_argument(
+            "--modele", default=None, help="modèle Claude (défaut : opus)")
 
     align_cmd = add("align", "Estimer les timings depuis le script", cmd_align)
     align_cmd.add_argument("--target", type=float, help="durée cible en minutes")

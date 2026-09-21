@@ -53,6 +53,33 @@ export type Commande = {
   options: Option[];
 };
 
+export type Template = {
+  nom: string;
+  titre: string;
+  description: string;
+};
+
+// `pistes.md`, relu par le serveur. Un titre cite toujours la preuve qui
+// le tient : c'est ce qui sépare une accroche d'une invention.
+export type Preuve = { numero: number; texte: string; source: string; url: string };
+export type Titre = { texte: string; preuve: number };
+
+export type Piste = {
+  numero: number;
+  resume: string;
+  angle: string;
+  pivot: string;
+  risque: string;
+  preuves: Preuve[];
+  titres: Titre[];
+};
+
+export type Catalogue = {
+  sujet: string;
+  pistes: Piste[];
+  retenue: number | null;
+};
+
 export type EtatJournal = {
   texte: string;
   offset: number;
@@ -74,6 +101,26 @@ export const api = {
   projets: () => lire<Projet[]>("/api/projets"),
   projet: (slug: string) => lire<ProjetDetail>(`/api/projets/${slug}`),
   commandes: () => lire<Record<string, Commande>>("/api/commandes"),
+  templates: () => lire<Template[]>("/api/templates"),
+  pistes: (slug: string) => lire<Catalogue>(`/api/projets/${slug}/pistes`),
+
+  // La barre de saisie : le sujet part, le dossier est créé et
+  // l'exploration démarre. On récupère le slug et le journal à suivre.
+  async creer(sujet: string, template: string | null) {
+    const reponse = await fetch("/api/projets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sujet, template }),
+    });
+    if (!reponse.ok) throw new Error(await reponse.text());
+    return (await reponse.json()) as { slug: string; id: string };
+  },
+
+  // Le choix d'une piste. Il n'y a pas de route dédiée : choisir, c'est
+  // lancer le brief sur cette piste — et le numéro est vérifié contre
+  // `pistes.md` côté serveur avant d'entrer dans un argv.
+  choisir: (slug: string, numero: number) =>
+    api.lancer(slug, "brief", { piste: String(numero) }),
 
   async lancer(slug: string, nom: string, options: Record<string, string> = {}) {
     const reponse = await fetch(`/api/projets/${slug}/lancer`, {

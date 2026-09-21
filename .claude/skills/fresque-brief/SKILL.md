@@ -27,20 +27,27 @@ le spectateur en quatre minutes.
 
 ## Procédure
 
-**1. Cadrer le sujet.** Si l'utilisateur donne un sujet vague, faire une
-recherche web rapide (3-5 requêtes) pour repérer les angles disponibles. Ne
-pas faire la recherche documentaire complète — c'est le travail de
-`fresque-recherche`.
+**1. Lire la piste retenue.** `projet.yaml` porte `piste: N` — le numéro
+que l'utilisateur a choisi. Ouvrir `pistes.md` et prendre la piste N : son
+angle, son pivot, ses preuves et son titre sont déjà décidés. Le brief les
+développe, il ne les rediscute pas.
 
-**2. Choisir un angle, en proposer deux.** Toujours présenter à
-l'utilisateur l'angle retenu **et** une alternative sérieuse, en une phrase
-chacun, avec la raison du choix. S'il ne réagit pas, continuer avec le
-premier.
+Pas de `pistes.md`, ou pas de `piste` dans `projet.yaml` : partir du champ
+`sujet`, et faire une recherche web rapide (3-5 requêtes) pour repérer les
+angles disponibles. Ne pas faire la recherche documentaire complète — c'est
+le travail de `fresque-recherche`.
 
-**3. Écrire le brief** au format ci-dessous.
+**2. Vérifier que l'angle tient.** Les preuves de la piste sont lues, pas
+crues sur parole. Si l'une d'elles ne dit pas ce que la piste lui fait
+dire, le signaler et proposer de reprendre l'exploration, plutôt que
+d'écrire un brief sur un angle vide.
 
-**4. Créer le dossier projet** `projects/<slug>/` (kebab-case, sans accent)
-et y écrire `00-brief.md`.
+**3. Écrire le brief** au format ci-dessous. Le titre de travail est le
+titre le plus agressif de la piste. Les interdits du script restent entiers :
+le titre fait cliquer, la narration reste sobre.
+
+**4. Écrire `projects/<slug>/00-brief.md`.** Le dossier existe déjà : il a
+été créé avec le sujet. Ne pas en créer un autre.
 
 **5. Annoncer la suite** : une ligne indiquant que `fresque-recherche` est
 l'étape suivante. Ne pas l'enchaîner automatiquement.

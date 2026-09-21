@@ -27,7 +27,7 @@ from pydantic import BaseModel
 RACINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RACINE / "pipeline"))
 
-from fresque import serveur  # noqa: E402
+from fresque import pistes as pistes_mod, serveur  # noqa: E402
 
 WEB = RACINE / "web" / "dist"
 
@@ -124,6 +124,34 @@ def timeline(slug: str) -> Any:
     return json.loads(chemin.read_text(encoding="utf-8"))
 
 
+@app.get("/api/projets/{slug}/pistes")
+def pistes(slug: str) -> dict[str, Any]:
+    """`pistes.md` relu par le code, jamais par un modèle.
+
+    L'interface a besoin de cartes cliquables ; le fichier reste la vérité.
+    `retenue` dit laquelle a déjà été choisie, pour que rouvrir la page ne
+    perde pas le choix — il est dans `projet.yaml`, pas dans le navigateur.
+    """
+    dossier = _dossier(slug)
+    try:
+        catalogue = pistes_mod.lire(dossier / "pistes.md")
+    except FileNotFoundError:
+        raise HTTPException(404, "pas encore de pistes")
+    except pistes_mod.PistesError as erreur:
+        raise HTTPException(422, str(erreur))
+    catalogue["retenue"] = _projet_yaml(dossier).get("piste")
+    return catalogue
+
+
+def _projet_yaml(dossier: Path) -> dict[str, Any]:
+    import yaml
+
+    fiche = dossier / "projet.yaml"
+    if not fiche.is_file():
+        return {}
+    return yaml.safe_load(fiche.read_text(encoding="utf-8")) or {}
+
+
 @app.get("/api/templates")
 def templates() -> list[dict[str, Any]]:
     import yaml
@@ -163,6 +191,27 @@ def media(slug: str, chemin: str) -> FileResponse:
 
 
 # --- Action ------------------------------------------------------------------
+
+class Sujet(BaseModel):
+    sujet: str
+    template: str | None = None
+
+
+@app.post("/api/projets")
+def creer(corps: Sujet) -> dict[str, str]:
+    """La barre de saisie. Un sujet entre, l'exploration part.
+
+    Deux gestes en un appel, parce que c'est un seul geste pour
+    l'utilisateur : le dossier est créé, puis `explorer` est lancé comme
+    n'importe quelle autre commande — même sous-processus, même journal,
+    même flux. Fermer l'onglet n'interrompt rien.
+    """
+    try:
+        slug = serveur.creer(corps.sujet.strip(), corps.template)
+    except ValueError as erreur:
+        raise HTTPException(400, str(erreur))
+    return {"slug": slug, "id": serveur.lancer(slug, "explorer", {})}
+
 
 class Lancement(BaseModel):
     nom: str

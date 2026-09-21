@@ -54,6 +54,10 @@ JOURNAL_DIR = "journal"
 #: Les fichiers numérotés, dans l'ordre. Sert à dessiner l'avancement d'un
 #: projet sans l'ouvrir : leur simple présence *est* l'état du projet.
 ETAPES: tuple[tuple[str, str], ...] = (
+    # `pistes.md` n'est pas numéroté : il précède le brief, et renuméroter
+    # huit fichiers pour lui faire une place aurait cassé tous les projets
+    # déjà montés.
+    ("pistes", "pistes.md"),
     ("brief", "00-brief.md"),
     ("recherche", "01-research.md"),
     ("script", "02-script.md"),
@@ -75,7 +79,7 @@ class Option:
     """
     nom: str
     libelle: str
-    type: str                      # "drapeau" | "nombre" | "texte"
+    type: str                      # "drapeau" | "nombre" | "entier" | "texte"
     defaut: str = ""
     motif: str = r"^[0-9]+-[0-9]+$"
 
@@ -93,6 +97,30 @@ class Commande:
 #: Liste close. Une commande absente d'ici n'est pas lançable depuis le
 #: navigateur, quoi qu'il arrive dans la requête.
 COMMANDES: dict[str, Commande] = {
+    # Les cinq premières sont tenues par Claude — elles lancent un skill et
+    # attendent son fichier. Elles sont ici pour la même raison que les
+    # autres : une commande absente de cette liste n'est pas lançable depuis
+    # le navigateur, qu'elle soit jugée ou calculée.
+    "explorer": Commande(
+        "Proposer quatre pistes", produit="pistes.md", longue=True,
+    ),
+    "brief": Commande(
+        "Écrire le brief", exige="pistes.md", produit="00-brief.md",
+        longue=True,
+        options=(Option("piste", "piste retenue", "entier"),),
+    ),
+    "recherche": Commande(
+        "Mener la recherche", exige="00-brief.md",
+        produit="01-research.md", longue=True,
+    ),
+    "ecrire": Commande(
+        "Écrire le script", exige="01-research.md",
+        produit="02-script.md", longue=True,
+    ),
+    "plans": Commande(
+        "Écrire le plan visuel", exige="02-script.md",
+        produit="03-shots.json", longue=True,
+    ),
     "status": Commande("État d'avancement"),
     "lint": Commande("Vérifier le script", exige="02-script.md"),
     "align": Commande(
@@ -181,13 +209,14 @@ def _projet_dir(slug: str) -> Path:
     return chemin
 
 
-def lancer(slug: str, nom: str, options: dict[str, str]) -> str:
-    """Lance une commande du pipeline et retourne l'identifiant du journal."""
-    commande = COMMANDES.get(nom)
-    if commande is None:
-        raise KeyError(nom)
-    dossier = _projet_dir(slug)
+def _argv(nom: str, slug: str, options: dict[str, str]) -> list[str]:
+    """La ligne de commande d'une exécution. Fonction pure, donc vérifiable.
 
+    C'est le seul endroit où ce qui vient du navigateur entre dans un
+    `argv` : chaque valeur est convertie selon le type déclaré de son
+    option, et une option textuelle est confrontée à son motif.
+    """
+    commande = COMMANDES[nom]
     argv = [sys.executable, "-m", "fresque", nom, slug]
     for option in commande.options:
         brut = options.get(option.nom)
@@ -197,10 +226,52 @@ def lancer(slug: str, nom: str, options: dict[str, str]) -> str:
             argv.append(f"--{option.nom}")
         elif option.type == "nombre":
             argv += [f"--{option.nom}", str(float(brut))]
+        elif option.type == "entier":
+            # `--piste 2.0` fait échouer un `type=int` côté argparse. Une
+            # option entière se convertit en entier, pas en flottant.
+            argv += [f"--{option.nom}", str(int(float(brut)))]
         else:
             if not re.match(option.motif, str(brut)):
                 raise ValueError(f"{option.nom} : {brut!r} n'est pas une valeur valide")
             argv += [f"--{option.nom}", str(brut)]
+    return argv
+
+
+def creer(sujet: str, template: str | None = None) -> str:
+    """Un sujet tapé dans la barre devient un dossier. Rend le slug.
+
+    Passe par `python -m fresque nouveau`, comme tout le reste : le serveur
+    n'écrit pas dans `projects/` lui-même. C'est synchrone parce que ça ne
+    fait que créer trois dossiers et un `projet.yaml`, et que la page a
+    besoin du slug pour naviguer — mais c'est le même sous-processus que si
+    on l'avait tapé au terminal.
+    """
+    argv = [sys.executable, "-m", "fresque", "nouveau", sujet]
+    if template:
+        argv += ["--template", template]
+    fait = subprocess.run(
+        argv, cwd=_racine(), env=_environnement(),
+        capture_output=True, text=True,
+    )
+    if fait.returncode != 0:
+        # `_fail` préfixe ses messages d'une croix, utile au terminal et
+        # bruyante dans une bulle d'erreur du navigateur.
+        motif = (fait.stderr or fait.stdout).strip().lstrip("✗ ")
+        raise ValueError(motif or "création refusée")
+    for ligne in fait.stdout.splitlines():
+        if ligne.startswith("✓ projects/"):
+            return ligne.split("/")[1]
+    raise ValueError("création sans slug — voir le journal")
+
+
+def lancer(slug: str, nom: str, options: dict[str, str]) -> str:
+    """Lance une commande du pipeline et retourne l'identifiant du journal."""
+    commande = COMMANDES.get(nom)
+    if commande is None:
+        raise KeyError(nom)
+    dossier = _projet_dir(slug)
+
+    argv = _argv(nom, slug, options)
 
     identifiant = f"{time.strftime('%Y%m%d-%H%M%S')}-{nom}"
     journal = dossier / JOURNAL_DIR
@@ -355,7 +426,12 @@ def projets() -> list[dict[str, Any]]:
         faits = [(nom, _etape_faite(dossier, rel)) for nom, rel in ETAPES]
         sorties.append({
             "slug": dossier.name,
-            "titre": _titre(dossier / "00-brief.md") or dossier.name,
+            # Avant le brief, un projet n'a pas de titre : il n'a que le
+            # sujet tapé par l'utilisateur, puis le titre de la piste qu'il
+            # a retenue. Afficher le slug à la place se lisait comme un bug.
+            "titre": (_titre(dossier / "00-brief.md")
+                      or donnees.get("titre") or donnees.get("sujet")
+                      or dossier.name),
             "template": donnees.get("template"),
             "etapes": faits,
             "avancement": sum(1 for _, ok in faits if ok),

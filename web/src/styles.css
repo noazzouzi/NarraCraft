@@ -177,3 +177,54 @@ h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; margin: 0; }
   border: 1px solid var(--bord); background: #000;
   max-width: 1280px;
 }
+
+/* La barre de saisie — le seul champ de texte libre de l'atelier. */
+.barre { display: flex; gap: 10px; margin-bottom: 26px; }
+.barre input, .barre select {
+  font-family: inherit; font-size: 15px; color: var(--texte);
+  background: var(--panneau); border: 1px solid var(--bord);
+  border-radius: 9px; height: 46px; padding: 0 14px;
+}
+.barre input { flex-grow: 1; min-width: 0; }
+.barre input::placeholder { color: var(--pale); }
+.barre select { color: var(--doux); font-size: 13.5px; }
+.barre button {
+  height: 46px; padding: 0 22px; font-weight: 600;
+  background: var(--accent); color: #17110e; border-color: var(--accent);
+}
+.barre button:hover:not(:disabled) { background: #ec8f6f; }
+
+/* Les pistes. C'est un checkpoint : l'écran doit se lire, pas se survoler. */
+.pistes { display: flex; flex-direction: column; gap: 14px; margin-bottom: 34px; }
+.piste {
+  border: 1px solid var(--bord); border-radius: 12px;
+  background: var(--panneau); padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.piste.retenue { border-color: var(--ok); }
+.piste header { display: flex; align-items: flex-start; gap: 14px; }
+.piste header > div { flex-grow: 1; min-width: 0; }
+.piste .numero {
+  width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panneau-haut); color: var(--doux);
+  font-family: var(--mono); font-size: 12px;
+}
+.piste.retenue .numero { background: var(--ok); color: #10140f; }
+.piste h4 {
+  margin: 0; font-family: var(--serif); font-size: 21px;
+  font-weight: 600; letter-spacing: -0.01em; text-wrap: balance;
+}
+.piste .sous { margin: 4px 0 0; font-size: 12.5px; color: var(--pale); }
+.piste .angle { margin: 0; font-size: 14.5px; color: var(--texte); }
+.piste .pivot { margin: 0; font-size: 13.5px; color: var(--doux); }
+.piste .pivot b { color: var(--texte); font-weight: 500; }
+.piste .autres-titres {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 13px; color: var(--doux);
+  padding-left: 12px; border-left: 2px solid var(--bord);
+}
+.piste .autres-titres em { color: var(--pale); font-size: 11.5px; font-style: normal; }
+.piste .preuves { margin: 0; padding-left: 20px; font-size: 13px; color: var(--doux); }
+.piste .preuves li { margin-bottom: 4px; }
+.piste .risque { margin: 0; font-size: 12.5px; color: var(--attention); }

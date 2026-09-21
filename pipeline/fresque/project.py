@@ -45,9 +45,34 @@ class Project:
         (root / "05-visuals").mkdir(parents=True, exist_ok=True)
         (root / "07-out").mkdir(parents=True, exist_ok=True)
         project = cls(slug=slug, root=root)
+        # Le sujet est le seul texte que l'utilisateur tape. Il vit dans le
+        # projet, pas dans une ligne de commande : l'exploration peut être
+        # relancée six mois plus tard sans le retaper.
+        project.set_valeurs(sujet=title)
         if template:
             project.set_template(template)
         return project
+
+    @property
+    def sujet(self) -> str:
+        return str(self._data().get("sujet") or "")
+
+    @property
+    def piste(self) -> int | None:
+        """La piste retenue dans `pistes.md`, une fois que l'utilisateur a
+        choisi. C'est le seul état que produit un clic dans l'interface, et
+        il est dans un fichier comme tout le reste."""
+        valeur = self._data().get("piste")
+        return int(valeur) if isinstance(valeur, (int, str)) and str(valeur).isdigit() else None
+
+    @property
+    def pistes(self) -> Path: return self.root / "pistes.md"
+
+    def _data(self) -> dict:
+        path = self.root / "projet.yaml"
+        if not path.is_file():
+            return {}
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
     @property
     def template(self) -> str | None:
@@ -57,11 +82,7 @@ class Project:
         re-run six months later reproduces the same thing — the project stays
         self-describing, like every other piece of its state.
         """
-        path = self.root / "projet.yaml"
-        if not path.is_file():
-            return None
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        return data.get("template")
+        return self._data().get("template")
 
     @property
     def reglages(self) -> dict:
@@ -76,22 +97,21 @@ class Project:
               production:
                 duree_cible_min: 2
         """
-        path = self.root / "projet.yaml"
-        if not path.is_file():
-            return {}
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        return data.get("reglages") or {}
+        return self._data().get("reglages") or {}
 
-    def set_template(self, name: str) -> None:
+    def set_valeurs(self, **champs) -> None:
+        """Écrit des champs dans `projet.yaml`, en gardant le reste."""
         path = self.root / "projet.yaml"
-        data = {}
-        if path.is_file():
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        data["template"] = name
+        data = self._data()
+        data.update(champs)
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
             encoding="utf-8",
         )
+
+    def set_template(self, name: str) -> None:
+        self.set_valeurs(template=name)
 
     # Numbered files are read in order; a step never reads what follows it.
     @property
