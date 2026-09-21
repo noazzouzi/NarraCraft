@@ -718,6 +718,36 @@ montage:
     actifs: true
     mots_par_ligne: 7
 
+    # LA FAMILLE DE SOUS-TITRES
+    # =========================
+    # Liste close, connue du moteur de rendu. Un template en choisit une,
+    # un projet peut la changer, et l'interface la propose — mais personne
+    # n'en invente une : chaque nom correspond à une mise en page que
+    # `SousTitre.tsx` sait dessiner.
+    #
+    #   surligne  la phrase entière, et le mot dit change de couleur.
+    #             C'est ce qui est mesuré chez Frontier, et le défaut.
+    #   marqueur  le mot dit reçoit un bloc de couleur derrière lui.
+    #             Tient sur du papier clair, où une couleur de texte seule
+    #             se voit mal.
+    #   bloc      toute la phrase sur un bandeau plein. Le plus lisible sur
+    #             des archives très claires, le moins discret.
+    #   mot       un seul mot à l'écran, en grand. Format court.
+    #
+    # `actifs: false` les supprime tous.
+    style: surligne
+
+    # La casse et la place. Séparées de la famille : elles se combinent
+    # avec n'importe laquelle.
+    majuscules: false
+    position: bas          # bas | centre
+
+    # Les couleurs. Vides, elles suivent la palette du template — c'est ce
+    # qui fait qu'un template repeint ses sous-titres sans les régler.
+    couleur_texte: ""      # défaut : palette.sous_titre
+    couleur_mot: ""        # défaut : surlignage.couleur
+    couleur_fond: ""       # `bloc` et `marqueur` seulement
+
     # Le mot prononcé change de couleur. Ce n'est pas un ornement : c'est ce
     # qui fait qu'on lit la phrase entière tout en sachant où en est la voix.
     # Mesuré chez Frontier (`docs/analyse-frontier.md`) — blanc #FAFAFA, mot

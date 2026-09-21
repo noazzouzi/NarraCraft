@@ -243,6 +243,123 @@ def dire_beat(slug: str, beat: str | None = None) -> dict[str, Any]:
     return {"fichier": fichier, "mesure": mesure, "alerte": alerte}
 
 
+#: Ce que l'interface propose pour les sous-titres. Le libellé est ici, la
+#: liste des familles vient de `timeline` — une seule source, sinon
+#: l'interface proposerait un jour une famille que le moteur ne dessine pas.
+LIBELLES_SOUS_TITRES = {
+    "surligne": ("Surlignage", "la phrase entière, le mot dit change de couleur"),
+    "marqueur": ("Marqueur", "un bloc de couleur derrière le mot dit"),
+    "bloc": ("Bandeau", "toute la phrase sur un fond plein"),
+    "mot": ("Mot par mot", "un seul mot à l'écran, en grand"),
+}
+
+_COULEUR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def sous_titres(slug: str) -> dict[str, Any]:
+    """Les réglages de sous-titres de ce projet, couleurs résolues.
+
+    L'interface a besoin des couleurs RÉELLES pour les afficher, pas des
+    champs vides qui disent « suis la palette ». La résolution se fait donc
+    ici, avec le template du projet chargé — sous le verrou, parce
+    qu'ouvrir un projet change la configuration active du processus.
+    """
+    from .project import Project
+    from .timeline import FAMILLES_SOUS_TITRES
+
+    with _VERROU_CONFIG:
+        memoire = config.etat()
+        Project.open(slug)
+        palette = config.get("montage", "palette", default={}) or {}
+        reglage = config.get("montage", "sous_titres", default={}) or {}
+        surlignage = config.get("montage", "sous_titres", "surlignage",
+                                default={}) or {}
+        typo = config.get("montage", "typographie", default={}) or {}
+        sortie = {
+            "familles": [
+                {"nom": nom, "titre": LIBELLES_SOUS_TITRES[nom][0],
+                 "note": LIBELLES_SOUS_TITRES[nom][1]}
+                for nom in FAMILLES_SOUS_TITRES
+            ],
+            "actifs": bool(reglage.get("actifs", True)),
+            "style": str(reglage.get("style", "surligne")),
+            "majuscules": bool(reglage.get("majuscules", False)),
+            "position": str(reglage.get("position", "bas")),
+            # Résolues : ce que le moteur affichera vraiment.
+            "couleur_texte": (reglage.get("couleur_texte")
+                              or palette.get("sous_titre", "#FAFAFA")),
+            "couleur_mot": (reglage.get("couleur_mot")
+                            or surlignage.get("couleur", "#F5BC4D")),
+            "couleur_fond": (reglage.get("couleur_fond")
+                             or palette.get("voile", "#000000")),
+            "ligne_de_base_pct": float(reglage.get("ligne_de_base_pct", 90.8)),
+            "voile": bool(reglage.get("voile", True)),
+            # De quoi dessiner un aperçu fidèle côté navigateur.
+            "famille_police": str(typo.get("famille", "sans-serif")),
+            "taille": float(typo.get("taille", 44)),
+            "graisse": int(typo.get("graisse", 600)),
+        }
+        # Le serveur répond à des requêtes, pas à un projet : laisser la
+        # configuration du dernier lu déborderait sur la suivante.
+        config.restaurer(memoire)
+    return sortie
+
+
+def choisir_sous_titres(slug: str, reglages: dict[str, Any]) -> dict[str, Any]:
+    """Écrit les réglages de sous-titres dans `projet.yaml`.
+
+    Chaque valeur est confrontée à ce que le moteur sait dessiner avant
+    d'être écrite : une famille inconnue ou une couleur qui n'en est pas
+    donneraient un film sans sous-titres, découvert après le rendu.
+    """
+    from .project import Project
+    from .timeline import FAMILLES_SOUS_TITRES
+
+    retenu: dict[str, Any] = {}
+    famille = reglages.get("style")
+    if famille is not None:
+        if famille not in FAMILLES_SOUS_TITRES:
+            raise ValueError(f"famille {famille!r} — attendu "
+                             f"{', '.join(FAMILLES_SOUS_TITRES)}")
+        retenu["style"] = famille
+
+    position = reglages.get("position")
+    if position is not None:
+        if position not in ("bas", "centre"):
+            raise ValueError(f"position {position!r} — attendu bas ou centre")
+        retenu["position"] = position
+
+    for nom in ("couleur_texte", "couleur_mot", "couleur_fond"):
+        valeur = reglages.get(nom)
+        if valeur is None:
+            continue
+        # Une chaîne vide est un choix : « suis la palette du template ».
+        if valeur and not _COULEUR.match(str(valeur)):
+            raise ValueError(f"{nom} : {valeur!r} n'est pas une couleur #RRGGBB")
+        retenu[nom] = valeur
+
+    for nom in ("actifs", "majuscules", "voile"):
+        if reglages.get(nom) is not None:
+            retenu[nom] = bool(reglages[nom])
+
+    base = reglages.get("ligne_de_base_pct")
+    if base is not None:
+        if not 50 <= float(base) <= 99:
+            raise ValueError("ligne_de_base_pct doit tenir entre 50 et 99")
+        retenu["ligne_de_base_pct"] = float(base)
+
+    with _VERROU_CONFIG:
+        memoire = config.etat()
+        projet = Project.open(slug)
+        ensemble = projet.reglages
+        montage = dict(ensemble.get("montage") or {})
+        montage["sous_titres"] = {**(montage.get("sous_titres") or {}), **retenu}
+        ensemble["montage"] = montage
+        projet.set_valeurs(reglages=ensemble)
+        config.restaurer(memoire)
+    return retenu
+
+
 _ID_PLAN = re.compile(r"^S\d{3}$")
 #: Les identifiants de voix des trois fournisseurs : `ff_siwis`,
 #: `fr-FR-HenriNeural`, ou les vingt caractères d'ElevenLabs.

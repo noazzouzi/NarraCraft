@@ -94,6 +94,26 @@ export type SurlignageStyle = {
   fondu_frames: number;
 };
 
+/** La famille de sous-titres, et ce qui se combine avec elle.
+ *
+ *  Liste close, connue du pipeline, qui refuse un nom inconnu avant le
+ *  rendu : une famille inventée donnerait un film sans sous-titres,
+ *  découvert après vingt minutes. Un template en choisit une, un projet
+ *  peut la changer, l'interface la propose. */
+export type FamilleSousTitre = "surligne" | "marqueur" | "bloc" | "mot";
+
+export type SousTitreStyle = {
+  style?: FamilleSousTitre;
+  majuscules?: boolean;
+  position?: "bas" | "centre";
+  /** Vides, ces couleurs retombent sur la palette du template. */
+  couleur_texte?: string;
+  couleur_mot?: string;
+  couleur_fond?: string;
+  ligne_de_base_pct?: number;
+  voile?: boolean;
+};
+
 export type SousTitre = {
   texte: string;
   debut_frame: number;
@@ -191,7 +211,7 @@ export type Style = {
   motion: MotionStyle;
   transitions: StyleTransitions;
   surlignage?: SurlignageStyle;
-  sous_titres?: { ligne_de_base_pct?: number; voile?: boolean };
+  sous_titres?: SousTitreStyle;
   collage?: CollageStyle;
 };
 

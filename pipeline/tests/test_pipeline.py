@@ -201,6 +201,77 @@ def test_the_thumbnail_avoids_a_frame_with_a_subtitle_across_it():
     assert cli._instant_vignette(couvert, 30) == 1.0
 
 
+# --- Les familles de sous-titres ---------------------------------------------
+#
+# Liste close, comme les sept mouvements de caméra et les treize panneaux :
+# le moteur sait en dessiner quatre, un template en choisit une, personne
+# n'en invente. Une famille inconnue donnerait un film sans sous-titres,
+# découvert après vingt minutes de rendu.
+
+def test_an_unknown_subtitle_family_is_refused_before_the_render():
+    from fresque import config
+
+    config.use_project_overrides({"montage": {"sous_titres": {"style": "neon"}}})
+    try:
+        with pytest.raises(timeline_mod.TimelineError) as erreur:
+            timeline_mod._famille_sous_titres()
+        for connue in timeline_mod.FAMILLES_SOUS_TITRES:
+            assert connue in str(erreur.value)
+    finally:
+        config.use_project_overrides(None)
+
+
+def test_the_subtitle_settings_reach_the_renderer(script):
+    alignment = align.estimate(script)
+    shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]
+    assets = {s.id: {"fichier": f"{s.id}.jpg"} for s in shots}
+
+    reglages = timeline_mod.build(alignment, shots, assets)["style"]["sous_titres"]
+    assert reglages["style"] in timeline_mod.FAMILLES_SOUS_TITRES
+    for champ in ("majuscules", "position", "couleur_texte", "couleur_mot",
+                  "couleur_fond", "ligne_de_base_pct", "voile"):
+        assert champ in reglages
+
+
+def test_the_collage_template_marks_instead_of_colouring():
+    """Sur du papier crème, une couleur de TEXTE se distingue mal : le rouge
+    des tampons n'a pas le contraste du jaune Frontier sur du noir. Un bloc
+    derrière le mot se voit quel que soit le fond."""
+    from fresque import config
+
+    try:
+        config.use_template("documentaire-collage")
+        assert timeline_mod._famille_sous_titres() == "marqueur"
+        config.use_template("documentaire-historique")
+        assert timeline_mod._famille_sous_titres() == "surligne"
+    finally:
+        config.use_template(None)
+
+
+def test_what_the_browser_sends_is_checked_before_it_reaches_projet_yaml():
+    """Une famille inventée ou une couleur qui n'en est pas donneraient un
+    film sans sous-titres, découvert après le rendu."""
+    from fresque import serveur
+
+    for mauvais in ({"style": "neon"},
+                    {"couleur_mot": "red"},
+                    {"couleur_texte": "#FFF"},
+                    {"position": "gauche"},
+                    {"ligne_de_base_pct": 150}):
+        with pytest.raises(ValueError):
+            serveur.choisir_sous_titres("sarkozy-essai-2min", mauvais)
+
+
+def test_an_empty_colour_is_a_choice_not_an_error():
+    """« Vide » veut dire « suis la palette du template ». C'est ce qui
+    permet de rendre la main au template après l'avoir débordé."""
+    from fresque import serveur
+
+    retenu = serveur.choisir_sous_titres("sarkozy-essai-2min",
+                                         {"couleur_mot": ""})
+    assert retenu == {"couleur_mot": ""}
+
+
 # --- Le carton de fin --------------------------------------------------------
 #
 # `timeline.py` construisait un tableau `credits` depuis toujours, et aucun

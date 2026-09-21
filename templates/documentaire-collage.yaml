@@ -152,6 +152,14 @@ montage:
   sous_titres:
     mots_par_ligne: 6
     ligne_de_base_pct: 90.8
+
+    # Marqueur, pas surlignage de texte. Sur une planche de papier crème,
+    # une couleur de TEXTE se distingue mal du reste : le rouge des tampons
+    # sur du crème n'a pas le contraste du jaune Frontier sur du noir. Un
+    # bloc de couleur derrière le mot, lui, se voit quel que soit le fond —
+    # et c'est exactement le geste du marqueur sur un document, qui est le
+    # vocabulaire de ce template.
+    style: marqueur
     # Rallumé, contrairement au documentaire historique : sur une planche, la
     # ligne de sous-titres passe tantôt sur du papier, tantôt sur une photo
     # en duotone. Sans voile, elle change de lisibilité d'un plan à l'autre.

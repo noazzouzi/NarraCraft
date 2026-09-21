@@ -331,6 +331,46 @@ def audio(slug: str) -> dict[str, Any]:
     }
 
 
+@app.get("/api/projets/{slug}/sous-titres")
+def sous_titres(slug: str) -> dict[str, Any]:
+    """Les réglages de sous-titres, couleurs résolues.
+
+    L'interface affiche des couleurs, pas des champs vides qui veulent dire
+    « suis la palette » : la résolution se fait côté serveur, avec le
+    template du projet chargé.
+    """
+    _dossier(slug)
+    return serveur.sous_titres(slug)
+
+
+class ReglagesSousTitres(BaseModel):
+    style: str | None = None
+    position: str | None = None
+    majuscules: bool | None = None
+    actifs: bool | None = None
+    voile: bool | None = None
+    couleur_texte: str | None = None
+    couleur_mot: str | None = None
+    couleur_fond: str | None = None
+    ligne_de_base_pct: float | None = None
+
+
+@app.post("/api/projets/{slug}/sous-titres")
+def choisir_sous_titres(slug: str, corps: ReglagesSousTitres) -> dict[str, Any]:
+    """Retient une famille et ses couleurs pour ce projet.
+
+    Chaque valeur est confrontée à ce que le moteur sait dessiner avant
+    d'atteindre `projet.yaml` : une famille inventée donnerait un film sans
+    sous-titres, découvert après vingt minutes de rendu.
+    """
+    _dossier(slug)
+    try:
+        return serveur.choisir_sous_titres(
+            slug, corps.model_dump(exclude_none=True))
+    except ValueError as erreur:
+        raise HTTPException(400, str(erreur))
+
+
 @app.get("/api/fournisseurs")
 def fournisseurs() -> list[dict[str, Any]]:
     """Les trois moteurs, et ce qu'ils coûtent. Liste close."""

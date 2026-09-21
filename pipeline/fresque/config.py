@@ -74,6 +74,24 @@ def project_overrides() -> dict[str, Any]:
     return _project_overrides
 
 
+def etat() -> tuple[str | None, dict[str, Any]]:
+    """Ce qui est actuellement chargé : template actif et réglages projet.
+
+    Un processus qui n'ouvre qu'un projet n'en a pas besoin — c'est le cas
+    de chaque commande. Le serveur, lui, en ouvre un par requête : sans
+    restauration, la configuration du dernier projet lu reste active et
+    déborde sur la requête suivante.
+    """
+    return _active_template, dict(_project_overrides)
+
+
+def restaurer(memoire: tuple[str | None, dict[str, Any]]) -> None:
+    """Remet la configuration telle que `etat()` l'a trouvée."""
+    template, reglages = memoire
+    use_template(template)
+    use_project_overrides(reglages)
+
+
 def active_template() -> str | None:
     return _active_template
 

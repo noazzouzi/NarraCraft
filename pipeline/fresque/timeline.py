@@ -428,6 +428,31 @@ def generique(credits: list[dict[str, Any]], fps: int) -> dict[str, Any] | None:
     }
 
 
+#: Les familles de sous-titres que `SousTitre.tsx` sait dessiner. Liste
+#: close, comme les mouvements de caméra et les treize panneaux : un
+#: template en choisit une, il n'en invente pas.
+FAMILLES_SOUS_TITRES = ("surligne", "marqueur", "bloc", "mot")
+
+
+class TimelineError(ValueError):
+    """Un réglage de montage que le moteur ne saurait pas dessiner."""
+
+
+def _famille_sous_titres() -> str:
+    """La famille réglée, vérifiée avant d'atteindre le moteur.
+
+    Une famille inconnue donnerait un rendu sans sous-titres, découvert
+    après vingt minutes de rendu. On refuse ici, où ça coûte une seconde.
+    """
+    nom = str(config.get("montage", "sous_titres", "style", default="surligne"))
+    if nom not in FAMILLES_SOUS_TITRES:
+        raise TimelineError(
+            f"`montage.sous_titres.style: {nom}` n'existe pas. "
+            f"Choisir parmi : {', '.join(FAMILLES_SOUS_TITRES)}."
+        )
+    return nom
+
+
 def _caler_sur_silence(instant: float, mots: list[dict[str, Any]],
                        tolerance_s: float) -> tuple[float, float]:
     """Rapproche une coupe du blanc le plus large autour d'elle.
@@ -711,7 +736,23 @@ def build(
                                                "surlignage", "fondu_frames",
                                                default=3)),
             },
+            # La famille de sous-titres, sa casse, sa place et ses
+            # couleurs. Le moteur sait dessiner les quatre familles ; il
+            # n'en choisit aucune, et ne devine aucune couleur — une
+            # couleur vide retombe sur la palette, côté moteur, pour que le
+            # template reste la seule source de la direction artistique.
             "sous_titres": {
+                "style": _famille_sous_titres(),
+                "majuscules": bool(config.get(
+                    "montage", "sous_titres", "majuscules", default=False)),
+                "position": str(config.get(
+                    "montage", "sous_titres", "position", default="bas")),
+                "couleur_texte": str(config.get(
+                    "montage", "sous_titres", "couleur_texte", default="")),
+                "couleur_mot": str(config.get(
+                    "montage", "sous_titres", "couleur_mot", default="")),
+                "couleur_fond": str(config.get(
+                    "montage", "sous_titres", "couleur_fond", default="")),
                 "ligne_de_base_pct": float(config.get(
                     "montage", "sous_titres", "ligne_de_base_pct", default=90.8)),
                 "voile": bool(config.get(

@@ -124,6 +124,11 @@ export default function Projet() {
                 Choisir la voix →
               </Link>
             )}
+            {projet.fichiers.find((f) => f.fichier === "02-script.md")?.existe && (
+              <Link to={`/projets/${slug}/sous-titres`} className="leger">
+                Régler les sous-titres →
+              </Link>
+            )}
             {projet.fichiers.find((f) => f.fichier === "03-shots.json")?.existe && (
               <Link to={`/projets/${slug}/visuels`} className="leger">
                 Voir les {Object.values(projet.composition).reduce((a, b) => a + b, 0)} éléments →

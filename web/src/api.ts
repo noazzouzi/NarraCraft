@@ -152,6 +152,27 @@ export type PisteAudio = {
   voix: Record<string, string | number>;
 };
 
+// Les sous-titres. La famille est une liste close connue du moteur ; les
+// couleurs arrivent résolues, parce que l'interface en affiche et qu'un
+// champ vide veut dire « suis la palette du template ».
+export type FamilleSousTitre = { nom: string; titre: string; note: string };
+
+export type SousTitres = {
+  familles: FamilleSousTitre[];
+  actifs: boolean;
+  style: string;
+  majuscules: boolean;
+  position: "bas" | "centre" | string;
+  couleur_texte: string;
+  couleur_mot: string;
+  couleur_fond: string;
+  ligne_de_base_pct: number;
+  voile: boolean;
+  famille_police: string;
+  taille: number;
+  graisse: number;
+};
+
 export type EtatJournal = {
   texte: string;
   offset: number;
@@ -189,6 +210,13 @@ export const api = {
   visuels: (slug: string) => lire<Galerie>(`/api/projets/${slug}/visuels`),
   fournisseurs: () => lire<Fournisseur[]>("/api/fournisseurs"),
   audio: (slug: string) => lire<PisteAudio>(`/api/projets/${slug}/audio`),
+  sousTitres: (slug: string) =>
+    lire<SousTitres>(`/api/projets/${slug}/sous-titres`),
+
+  async choisirSousTitres(slug: string, reglages: Partial<SousTitres>) {
+    return poster<Record<string, unknown>>(
+      `/api/projets/${slug}/sous-titres`, reglages);
+  },
   choixVoix: (slug: string) => lire<ChoixVoix>(`/api/projets/${slug}/voix`),
 
   bibliotheque: (provider: string, langue: string, genre: string) =>

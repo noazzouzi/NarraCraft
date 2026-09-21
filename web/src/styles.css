@@ -354,3 +354,58 @@ h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; margin: 0; }
   display: block; height: 100%; background: var(--accent);
   transition: width 0.3s ease-out;
 }
+
+/* Les sous-titres. On les choisit en les voyant. */
+.sous-titres { padding: 30px 40px; display: flex; flex-direction: column; gap: 22px; }
+.sous-titres section { display: flex; flex-direction: column; gap: 11px; }
+.sous-titres .ok { color: var(--ok); }
+.bascule { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--doux); }
+
+.apercu-st {
+  position: relative; width: 100%; max-width: 620px; aspect-ratio: 16 / 9;
+  border: 1px solid var(--bord); border-radius: 10px; overflow: hidden;
+  background: var(--fond-creux);
+}
+.apercu-st img, .apercu-st .sansfond {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+}
+.apercu-st .pose {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center; padding-inline: 8%;
+}
+
+.familles { display: flex; gap: 10px; flex-wrap: wrap; }
+.familles .famille {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  min-height: 58px; padding: 9px 14px; text-align: left; max-width: 250px;
+}
+.familles .famille.choisie { border-color: var(--accent); }
+.familles .famille .leger { font-size: 11.5px; }
+
+.couleurs { display: flex; gap: 22px; flex-wrap: wrap; }
+.couleur { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+.pastille-couleur {
+  position: relative; display: block;
+  width: 42px; height: 42px; border-radius: 8px;
+  border: 1px solid var(--bord); overflow: hidden; flex-shrink: 0;
+  /* Un damier sous l'aplat : une couleur translucide se lit alors comme
+     translucide, au lieu de passer pour un gris. */
+  background-image: linear-gradient(45deg, #3a3a42 25%, transparent 25%),
+                    linear-gradient(-45deg, #3a3a42 25%, transparent 25%);
+  background-size: 10px 10px;
+}
+.couleur input[type="color"] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; padding: 0; border: none; cursor: pointer;
+}
+.couleur > span { display: flex; flex-direction: column; font-size: 13.5px; gap: 2px; }
+.couleur .leger { font-size: 11px; }
+
+.pose-reglages { display: flex; gap: 26px; flex-wrap: wrap; align-items: center; }
+.pose-reglages label { display: inline-flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--doux); }
+.pose-reglages select {
+  font-family: inherit; font-size: 13.5px; color: var(--texte);
+  background: var(--panneau); border: 1px solid var(--bord);
+  border-radius: 8px; height: 34px; padding: 0 10px;
+}
