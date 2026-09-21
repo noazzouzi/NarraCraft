@@ -5,8 +5,8 @@ description: Établit le plan visuel d'un documentaire Fresque — un ou plusieu
 
 # Plan visuel
 
-Produire `projects/<slug>/03-shots.json` à partir de `00-brief.md`,
-`01-research.md` et `02-script.md`.
+Produire `projects/<slug>/03-shots.json` à partir de `pistes.md` (la
+piste retenue), `01-research.md` et `02-script.md`.
 
 C'est le **checkpoint 2** : le dernier point avant que le pipeline ne dépense
 en génération d'images. Tout ce qui est validé ici sera payé.
@@ -82,7 +82,8 @@ refusées mécaniquement par `fresque shots` :
    documentaire de ce pipeline ouvrait sur une façade de prison pendant que
    la narration nommait un ancien président : rien à quoi accrocher la phrase.
 2. **Il porte une `accroche`** : la phrase choc incrustée en grand à l'écran,
-   `accroche_mots_max` mots au plus. Le brief l'a déjà écrite.
+   `accroche_mots_max` mots au plus. Le titre de la piste retenue en est
+   la matière première.
 
 ```json
 {"beat":"B001","type":"archive","intention":"le visage, plan serré",

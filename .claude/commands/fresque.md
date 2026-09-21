@@ -1,25 +1,28 @@
 ---
-description: Démarre un nouveau documentaire Fresque — brief, recherche, script — jusqu'au premier checkpoint
+description: Démarre un nouveau documentaire Fresque — exploration, recherche, script — jusqu'au premier checkpoint
 ---
 
 Démarrer un nouveau projet de documentaire Fresque sur le sujet suivant :
 
 $ARGUMENTS
 
-Enchaîner les trois étapes d'écriture, sans t'arrêter entre elles :
+Créer le projet avec `python -m fresque nouveau "<sujet>"`, puis enchaîner
+les trois étapes d'écriture :
 
-1. `fresque-brief` → `00-brief.md`
-2. `fresque-recherche` → `01-research.md`
-3. `fresque-script` → `02-script.md`
+1. `fresque-exploration` → `pistes.md`
+2. **S'arrêter.** Présenter les quatre pistes et demander laquelle retenir.
+   Écrire le choix avec `python -m fresque recherche <slug> --piste N`.
+3. `fresque-recherche` → `01-research.md`
+4. `fresque-script` → `02-script.md`
 
-Si la recherche contredit l'angle du brief, corriger le brief avant
-d'écrire le script, et le signaler.
+Si la recherche contredit la piste retenue, le dire avant d'écrire le
+script.
 
 T'arrêter après le script : c'est le checkpoint 1. Présenter alors, de
 façon compacte :
 
 - le slug du projet et le chemin de ses fichiers
-- l'angle retenu en une phrase, et l'alternative écartée
+- la piste retenue en une phrase
 - le compte de mots réel contre la cible
 - ce qui est solide dans la recherche, et ce qui est fragile
 - les deux ou trois passages du script dont tu es le moins sûr

@@ -117,10 +117,10 @@ export const api = {
   },
 
   // Le choix d'une piste. Il n'y a pas de route dédiée : choisir, c'est
-  // lancer le brief sur cette piste — et le numéro est vérifié contre
+  // lancer la recherche sur cette piste — et le numéro est vérifié contre
   // `pistes.md` côté serveur avant d'entrer dans un argv.
   choisir: (slug: string, numero: number) =>
-    api.lancer(slug, "brief", { piste: String(numero) }),
+    api.lancer(slug, "recherche", { piste: String(numero) }),
 
   async lancer(slug: string, nom: string, options: Record<string, string> = {}) {
     const reponse = await fetch(`/api/projets/${slug}/lancer`, {

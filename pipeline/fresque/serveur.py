@@ -54,11 +54,10 @@ JOURNAL_DIR = "journal"
 #: Les fichiers numérotés, dans l'ordre. Sert à dessiner l'avancement d'un
 #: projet sans l'ouvrir : leur simple présence *est* l'état du projet.
 ETAPES: tuple[tuple[str, str], ...] = (
-    # `pistes.md` n'est pas numéroté : il précède le brief, et renuméroter
-    # huit fichiers pour lui faire une place aurait cassé tous les projets
-    # déjà montés.
+    # `pistes.md` n'est pas numéroté : il a pris la place du brief, et
+    # renuméroter les fichiers restants aurait cassé tous les projets déjà
+    # montés.
     ("pistes", "pistes.md"),
-    ("brief", "00-brief.md"),
     ("recherche", "01-research.md"),
     ("script", "02-script.md"),
     ("plan visuel", "03-shots.json"),
@@ -104,14 +103,13 @@ COMMANDES: dict[str, Commande] = {
     "explorer": Commande(
         "Proposer quatre pistes", produit="pistes.md", longue=True,
     ),
-    "brief": Commande(
-        "Écrire le brief", exige="pistes.md", produit="00-brief.md",
-        longue=True,
-        options=(Option("piste", "piste retenue", "entier"),),
-    ),
+    # Choisir une piste, c'est lancer la recherche dessus. Il n'y a plus
+    # d'étape entre les deux : l'angle et le pivot sont déjà dans la piste,
+    # et le reste du brief se calculait depuis la config.
     "recherche": Commande(
-        "Mener la recherche", exige="00-brief.md",
+        "Mener la recherche", exige="pistes.md",
         produit="01-research.md", longue=True,
+        options=(Option("piste", "piste retenue", "entier"),),
     ),
     "ecrire": Commande(
         "Écrire le script", exige="01-research.md",
@@ -426,12 +424,13 @@ def projets() -> list[dict[str, Any]]:
         faits = [(nom, _etape_faite(dossier, rel)) for nom, rel in ETAPES]
         sorties.append({
             "slug": dossier.name,
-            # Avant le brief, un projet n'a pas de titre : il n'a que le
-            # sujet tapé par l'utilisateur, puis le titre de la piste qu'il
-            # a retenue. Afficher le slug à la place se lisait comme un bug.
-            "titre": (_titre(dossier / "00-brief.md")
-                      or donnees.get("titre") or donnees.get("sujet")
-                      or dossier.name),
+            # Le titre d'un projet est celui de la piste retenue, et avant
+            # ça le sujet tapé par l'utilisateur. Afficher le slug à la
+            # place se lisait comme un bug.
+            # `00-brief.md` en dernier recours : l'étape n'existe plus, mais
+            # les projets montés avant sa suppression ont le leur.
+            "titre": (donnees.get("titre") or donnees.get("sujet")
+                      or _titre(dossier / "00-brief.md") or dossier.name),
             "template": donnees.get("template"),
             "etapes": faits,
             "avancement": sum(1 for _, ok in faits if ok),

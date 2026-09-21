@@ -20,6 +20,16 @@ INTENT_RE = re.compile(r"^>\s*intention\s*:\s*(.+?)\s*$", re.IGNORECASE)
 RELANCE_RE = re.compile(r"^>\s*relance\s*:\s*(.+?)\s*$", re.IGNORECASE)
 HEADING_RE = re.compile(r"^#{1,6}\s")
 
+#: Le tableau de fin de fichier. Toutes les métadonnées de contrôle y sont
+#: rassemblées — lien, boucle, relance — plutôt que dispersées en lignes
+#: `>` au-dessus de chaque beat. Un checkpoint se lit mieux quand la
+#: narration reste nue et que la mécanique tient sur un seul tableau.
+CONTROLE_RE = re.compile(r"^##\s+Contr[oô]le\s*$", re.IGNORECASE)
+LIGNE_CONTROLE_RE = re.compile(r"^\|(.+)\|\s*$")
+BOUCLE_RE = re.compile(
+    r"^(ouvre|ferme)\s+(L\d+)\s*(?:[—–-]\s*(.*))?$", re.IGNORECASE)
+LIENS = ("donc", "mais")
+
 # Stage directions that must never reach the speech synthesiser.
 STAGE_DIRECTION_RE = re.compile(r"[\[\](){}]|^\s*[-*]\s")
 
@@ -39,6 +49,9 @@ class Beat:
     #: Non-empty when this beat is declared a retention beat, and saying what
     #: kind. See RELANCE_RE.
     relance: str = ""
+    #: `donc` ou `mais` — comment ce beat s'enchaîne au précédent. Vide pour
+    #: le premier, et pour un script qui n'a pas de tableau de contrôle.
+    lien: str = ""
 
     @property
     def word_count(self) -> int:
@@ -46,9 +59,25 @@ class Beat:
 
 
 @dataclass
+class Boucle:
+    """Une question posée à un beat, répondue à un autre.
+
+    C'est la seule chose qui fait attendre un spectateur plusieurs minutes.
+    Aucune machine ne peut la reconnaître dans le texte — un fait dont la
+    cause manque et un fait ordinaire sont les mêmes mots — donc l'auteur la
+    déclare, et le lint vérifie qu'elle se ferme, et assez tard.
+    """
+    nom: str
+    question: str = ""
+    ouvre: str = ""
+    ferme: str = ""
+
+
+@dataclass
 class Script:
     title: str
     beats: list[Beat] = field(default_factory=list)
+    boucles: list[Boucle] = field(default_factory=list)
 
     @property
     def word_count(self) -> int:
@@ -79,12 +108,30 @@ def parse(path: Path) -> Script:
         script.beats.append(current)
         current, body = None, []
 
+    controle: list[tuple[int, list[str]]] = []
+    dans_controle = False
+
     for number, raw in enumerate(lines, start=1):
         line = raw.rstrip()
 
         if not title and line.startswith("# "):
             title = line[2:].strip()
             continue
+
+        if CONTROLE_RE.match(line):
+            close_beat()
+            dans_controle = True
+            continue
+
+        if dans_controle:
+            if HEADING_RE.match(line):
+                dans_controle = False
+            else:
+                cellules = LIGNE_CONTROLE_RE.match(line)
+                if cellules:
+                    controle.append(
+                        (number, [c.strip() for c in cellules.group(1).split("|")]))
+                continue
 
         act_match = ACT_RE.match(line)
         if act_match:
@@ -140,9 +187,62 @@ def parse(path: Path) -> Script:
 
     close_beat()
     script.title = title or path.stem
+    _lire_controle(script, controle)
 
     _validate(script)
     return script
+
+
+def _lire_controle(script: Script, lignes: list[tuple[int, list[str]]]) -> None:
+    """Range le tableau de contrôle dans les beats et les boucles.
+
+    Le tableau est optionnel : un script écrit avant qu'il existe se lit
+    toujours. C'est le lint qui le réclame, parce que c'est lui qui sait
+    quoi en faire.
+    """
+    par_id = {beat.id: beat for beat in script.beats}
+    boucles: dict[str, Boucle] = {}
+
+    for numero, cellules in lignes:
+        identifiant = cellules[0]
+        if not BEAT_RE.match(f"### {identifiant}"):
+            continue  # en-tête du tableau, ou ligne de séparation
+        beat = par_id.get(identifiant)
+        if beat is None:
+            raise ScriptError(
+                f"ligne {numero} : le tableau de contrôle nomme {identifiant}, "
+                "qui n'est pas un beat du script."
+            )
+        lien = cellules[1].lower() if len(cellules) > 1 else ""
+        if lien in LIENS:
+            beat.lien = lien
+        elif lien and lien not in ("—", "-", "–"):
+            raise ScriptError(
+                f"{identifiant} : lien {lien!r} — attendu « donc » ou « mais ». "
+                "Un beat qui ne peut dire que « et » est un élément de liste : "
+                "le fusionner ou le couper."
+            )
+
+        brut = cellules[2] if len(cellules) > 2 else ""
+        marque = BOUCLE_RE.match(brut)
+        if marque:
+            sens, nom, question = marque.group(1).lower(), marque.group(2).upper(), \
+                (marque.group(3) or "").strip()
+            boucle = boucles.setdefault(nom, Boucle(nom=nom))
+            if sens == "ouvre":
+                boucle.ouvre, boucle.question = identifiant, question or boucle.question
+            else:
+                boucle.ferme = identifiant
+        elif brut:
+            raise ScriptError(
+                f"{identifiant} : boucle {brut!r} — attendu « ouvre L<n> — "
+                "<question> » ou « ferme L<n> »."
+            )
+
+        if len(cellules) > 3 and cellules[3] and not beat.relance:
+            beat.relance = cellules[3]
+
+    script.boucles = [boucles[nom] for nom in sorted(boucles)]
 
 
 def _validate(script: Script) -> None:

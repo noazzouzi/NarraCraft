@@ -60,10 +60,6 @@ ETAPES: dict[str, Etape] = {
         "fresque-exploration", "pistes.md",
         ("Read", "Write", "WebSearch", "WebFetch"), tours_max=40,
     ),
-    "brief": Etape(
-        "fresque-brief", "00-brief.md",
-        ("Read", "Write", "WebSearch", "WebFetch"), tours_max=30,
-    ),
     # Cinq axes en parallèle, donc `Task`. C'est la seule étape qui en a
     # besoin, et la seule qui dure assez longtemps pour qu'un crash coûte.
     "recherche": Etape(

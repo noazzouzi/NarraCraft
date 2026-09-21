@@ -279,6 +279,181 @@ def rule_hook(script: Script, plan: Plan) -> Iterator[Violation]:
         )
 
 
+def _assez_long(script: Script) -> bool:
+    """Un script assez long pour avoir une structure à vérifier.
+
+    Un montage d'essai de deux minutes n'a ni boucles ni enchaînement : lui
+    réclamer un tableau de contrôle ferait du lint un obstacle au lieu d'un
+    garde-fou, et on apprendrait à passer outre.
+    """
+    seuil = int(config.get("structure", "boucles", "a_partir_de_beats", default=8))
+    return len(script.beats) >= seuil
+
+
+def rule_enchainement(script: Script, plan: Plan) -> Iterator[Violation]:
+    """`mais` ou `donc`, jamais `et`.
+
+    C'est la règle qui sépare un documentaire d'un exposé. Un beat qui ne
+    s'enchaîne au précédent ni par une conséquence ni par un retournement
+    est un élément de liste — et une liste de faits perd le spectateur en
+    quatre minutes, quelle que soit la qualité des faits.
+
+    La machine ne peut pas lire le lien dans le texte. L'auteur le déclare
+    dans le tableau de contrôle, et on vérifie qu'il l'a fait pour chacun.
+    """
+    if not _assez_long(script):
+        return
+
+    suivants = script.beats[1:]
+    if not any(beat.lien for beat in suivants):
+        yield Violation(
+            "—", "enchaînement",
+            f"aucun lien déclaré sur {len(suivants)} beats — il manque le "
+            "tableau `## Contrôle` en fin de fichier : une ligne par beat, "
+            "avec « donc » ou « mais ».",
+        )
+        return
+
+    for beat in suivants:
+        if not beat.lien:
+            yield Violation(
+                beat.id, "enchaînement",
+                "aucun lien au beat précédent. « donc » pour une "
+                "conséquence, « mais » pour un retournement. Si seul « et » "
+                "convient, ce beat est un élément de liste : le fusionner "
+                "ou le couper.",
+            )
+
+
+def rule_boucles(script: Script, plan: Plan) -> Iterator[Violation]:
+    """Ce qui fait rester un spectateur plusieurs minutes.
+
+    Une boucle est une question posée à un beat et répondue bien plus loin.
+    Tout se vérifie ici sauf la seule chose qui ne se vérifie pas : qu'elle
+    soit intéressante.
+    """
+    if not _assez_long(script):
+        return
+
+    min_s = float(config.get("structure", "boucles", "min_s", default=90))
+    max_ouvertes = int(config.get("structure", "boucles", "max_simultanees", default=3))
+    fin_s = float(config.get("structure", "boucles", "fin_sans_boucle_s", default=30))
+
+    if not script.boucles:
+        yield Violation(
+            "—", "boucle",
+            "aucune boucle déclarée — sans question en suspens, il n'y a "
+            "aucune raison de regarder la minute suivante. Le hook ouvre L1, "
+            "chaque acte ouvre la sienne.",
+        )
+        return
+
+    durees = {b["id"]: float(b["duree_s"]) for b in plan["beats"]}
+    rang = {beat.id: index for index, beat in enumerate(script.beats)}
+    debut = {}
+    cumul = 0.0
+    for beat in script.beats:
+        debut[beat.id] = cumul
+        cumul += durees.get(beat.id, 0.0)
+    totale = cumul
+
+    for boucle in script.boucles:
+        if not boucle.ouvre:
+            yield Violation(
+                boucle.ferme or "—", "boucle",
+                f"{boucle.nom} est fermée sans avoir été ouverte.",
+            )
+            continue
+        if not boucle.ferme:
+            yield Violation(
+                boucle.ouvre, "boucle",
+                f"{boucle.nom} n'est jamais fermée — « {boucle.question} » "
+                "reste sans réponse. Une promesse non tenue se paie en "
+                "commentaires.",
+            )
+            continue
+        if rang.get(boucle.ferme, 0) <= rang.get(boucle.ouvre, 0):
+            yield Violation(
+                boucle.ouvre, "boucle",
+                f"{boucle.nom} se ferme avant de s'ouvrir.",
+            )
+            continue
+        tenue = debut[boucle.ferme] - debut[boucle.ouvre]
+        if tenue < min_s:
+            yield Violation(
+                boucle.ouvre, "boucle-courte",
+                f"{boucle.nom} tenue {tenue:.0f} s (minimum {min_s:.0f} s) — "
+                "à cette distance ce n'est pas une boucle, c'est une phrase. "
+                "La fermer plus tard, ou ne pas l'ouvrir.",
+            )
+
+    # Combien de questions restent en suspens, beat par beat.
+    ouvertures: dict[str, list[str]] = {}
+    fermetures: dict[str, list[str]] = {}
+    for boucle in script.boucles:
+        if boucle.ouvre and boucle.ferme:
+            ouvertures.setdefault(boucle.ouvre, []).append(boucle.nom)
+            fermetures.setdefault(boucle.ferme, []).append(boucle.nom)
+
+    ouvertes: set[str] = set()
+    signale_vide = signale_trop = False
+    for beat in script.beats:
+        ouvertes |= set(ouvertures.get(beat.id, []))
+        if len(ouvertes) > max_ouvertes and not signale_trop:
+            signale_trop = True
+            yield Violation(
+                beat.id, "boucle-trop",
+                f"{len(ouvertes)} boucles ouvertes en même temps (maximum "
+                f"{max_ouvertes}) — le spectateur ne retient plus ce qu'on "
+                "lui a promis. En fermer une avant d'en ouvrir une autre.",
+                blocking=False,
+            )
+        ouvertes -= set(fermetures.get(beat.id, []))
+        reste = totale - (debut[beat.id] + durees.get(beat.id, 0.0))
+        if not ouvertes and reste > fin_s and not signale_vide:
+            signale_vide = True
+            yield Violation(
+                beat.id, "boucle-vide",
+                f"plus aucune question en suspens, et il reste "
+                f"{align.format_duration(reste)} de film. C'est là qu'on "
+                "décroche : ouvrir la boucle suivante avant de fermer "
+                "celle-ci.",
+            )
+
+
+def rule_souffle(script: Script, plan: Plan) -> Iterator[Violation]:
+    """Une phrase courte, régulièrement, ou le texte sonne plat.
+
+    Le débit ne suffit pas : un script entier écrit en phrases de vingt
+    mots respecte toutes les autres règles et reste illisible à l'oreille.
+    """
+    courte = int(config.get("controle", "phrase_courte_mots", default=0))
+    fenetre = int(config.get("controle", "phrase_courte_tous_les_beats", default=5))
+    if courte <= 0 or fenetre <= 0 or len(script.beats) < fenetre:
+        return
+
+    def a_du_souffle(beat: Beat) -> bool:
+        return any(
+            0 < len(_words(phrase)) <= courte
+            for phrase in SENTENCE_SPLIT_RE.split(beat.text)
+        )
+
+    index = 0
+    while index + fenetre <= len(script.beats):
+        tranche = script.beats[index:index + fenetre]
+        if any(a_du_souffle(beat) for beat in tranche):
+            index += 1
+            continue
+        yield Violation(
+            tranche[0].id, "souffle",
+            f"{fenetre} beats sans une seule phrase de {courte} mots ou "
+            "moins. Le silence est un outil : une phrase courte isolée "
+            "frappe plus fort que n'importe quel adjectif.",
+            blocking=False,
+        )
+        index += fenetre
+
+
 RULES: list[Callable[[Script, Plan], Iterator[Violation]]] = [
     rule_word_budget,
     rule_air,
@@ -289,6 +464,9 @@ RULES: list[Callable[[Script, Plan], Iterator[Violation]]] = [
     rule_acronyms,
     rule_forbidden,
     rule_retention,
+    rule_enchainement,
+    rule_boucles,
+    rule_souffle,
 ]
 
 

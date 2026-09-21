@@ -44,15 +44,6 @@ def _lire(chemin: Path, defaut: Any = None) -> Any:
     return json.loads(chemin.read_text(encoding="utf-8"))
 
 
-def _titre(brief: Path) -> str:
-    if not brief.is_file():
-        return ""
-    for ligne in brief.read_text(encoding="utf-8").splitlines():
-        if ligne.startswith("# "):
-            return ligne[2:].strip()
-    return ""
-
-
 def alertes(shots: list[Shot], assets: dict[str, Any],
             timeline: dict[str, Any] | None) -> list[tuple[str, str, list[str]]]:
     """Ce qui mérite un second regard, par ordre de gravité.
@@ -302,7 +293,7 @@ def construire(slug: str) -> Path:
 <html lang="fr"><head><meta charset="utf-8">
 <title>Review — {html.escape(slug)}</title>
 <style>{_STYLE}</style></head><body><main>
-<h1>{html.escape(_titre(projet.brief) or slug)}</h1>
+<h1>{html.escape(projet.titre)}</h1>
 <p class="sous">{html.escape(slug)} · template {html.escape(projet.template or '—')}
  · page régénérée par <code>fresque review {html.escape(slug)}</code></p>
 

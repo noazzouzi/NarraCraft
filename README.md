@@ -197,7 +197,7 @@ structure en actes, voix, modèle d'image, style de mouvement, budget maximal.
 | Jalon | Contenu | État |
 |---|---|---|
 | 1 | Structure, configuration, conventions | fait |
-| 2 | Écriture : brief → recherche → script | fait |
+| 2 | Écriture : exploration → recherche → script | fait |
 | 5 | Timeline et rendu Remotion | fait |
 | 4a | Plan visuel (skill) et validation | fait |
 | 3a | Voix off — Edge ou Kokoro, durées mesurées | fait, vérifié en réel |

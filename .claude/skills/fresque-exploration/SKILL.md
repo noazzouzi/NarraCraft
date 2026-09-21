@@ -1,6 +1,6 @@
 ---
 name: fresque-exploration
-description: Transforme quelques mots-clés en quatre pistes de documentaire, chacune avec un angle, un pivot, ses preuves et trois titres agressifs. Produit `pistes.md`. Première étape du pipeline Fresque — à utiliser dès que l'utilisateur entre un sujet ("la faillite de Subway", "la mort de Michael Jackson") et avant `fresque-brief`.
+description: Transforme quelques mots-clés en quatre pistes de documentaire, chacune avec un angle, un pivot, ses preuves et trois titres agressifs. Produit `pistes.md`. Première étape du pipeline Fresque — à utiliser dès que l'utilisateur entre un sujet ("la faillite de Subway", "la mort de Michael Jackson") et avant `fresque-recherche`.
 ---
 
 # Exploration
@@ -79,3 +79,5 @@ Mieux vaut échouer que deviner.
 ## FIN
 
 Présenter les quatre pistes à l'utilisateur en quatre lignes — une par piste, le titre le plus agressif et le pivot. Puis s'arrêter. C'est lui qui choisit.
+
+Son choix lance directement la recherche : `python -m fresque recherche <slug> --piste N`. Il n'y a pas d'étape entre les deux — l'angle et le pivot sont déjà ici.

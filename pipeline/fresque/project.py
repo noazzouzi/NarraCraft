@@ -113,9 +113,24 @@ class Project:
     def set_template(self, name: str) -> None:
         self.set_valeurs(template=name)
 
-    # Numbered files are read in order; a step never reads what follows it.
     @property
-    def brief(self) -> Path: return self.root / "00-brief.md"
+    def titre(self) -> str:
+        """Le titre publié : celui de la piste retenue.
+
+        `00-brief.md` en dernier recours — l'étape brief n'existe plus, mais
+        les projets montés avant sa suppression ont le leur.
+        """
+        depuis_yaml = self._data().get("titre") or self._data().get("sujet")
+        if depuis_yaml:
+            return str(depuis_yaml)
+        brief = self.root / "00-brief.md"
+        if brief.is_file():
+            for ligne in brief.read_text(encoding="utf-8").splitlines():
+                if ligne.startswith("# "):
+                    return ligne[2:].strip()
+        return self.slug
+
+    # Numbered files are read in order; a step never reads what follows it.
     @property
     def research(self) -> Path: return self.root / "01-research.md"
     @property

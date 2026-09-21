@@ -62,12 +62,13 @@ def cmd_explorer(args: argparse.Namespace) -> int:
     return _claude("explorer", args)
 
 
-def cmd_brief(args: argparse.Namespace) -> int:
-    """Le choix d'une piste. C'est le seul endroit où un clic devient un fait.
+def cmd_recherche(args: argparse.Namespace) -> int:
+    """Le choix d'une piste, puis la recherche dessus.
 
-    Le numéro est confronté à `pistes.md` avant d'être écrit : une piste 7
-    dans un fichier qui en contient quatre est une erreur, pas un brief sur
-    un angle vide.
+    C'est le seul endroit où un clic devient un fait. Le numéro est
+    confronté à `pistes.md` avant d'être écrit : une piste 7 dans un
+    fichier qui en contient quatre est une erreur, pas une recherche sur un
+    angle vide.
     """
     from . import pistes as pistes_mod
 
@@ -89,10 +90,6 @@ def cmd_brief(args: argparse.Namespace) -> int:
     elif project.piste is None and project.pistes.is_file():
         return _fail("aucune piste retenue — relancer avec --piste N")
 
-    return _claude("brief", args)
-
-
-def cmd_recherche(args: argparse.Namespace) -> int:
     return _claude("recherche", args)
 
 
@@ -820,7 +817,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     project = Project.open(args.slug)
     steps = [
-        ("00-brief.md", project.brief),
+        ("pistes.md", project.pistes),
         ("01-research.md", project.research),
         ("02-script.md", project.script),
         ("03-shots.json", project.shots),
@@ -907,16 +904,15 @@ def main(argv: list[str] | None = None) -> int:
     explorer_cmd = add(
         "explorer", "Proposer quatre pistes à partir du sujet", cmd_explorer)
     add("pistes", "Relire et contrôler pistes.md", cmd_pistes)
-    brief_cmd = add("brief", "Écrire le brief de la piste retenue", cmd_brief)
-    brief_cmd.add_argument(
+    recherche_cmd = add(
+        "recherche", "Mener la recherche sur la piste retenue", cmd_recherche)
+    recherche_cmd.add_argument(
         "--piste", type=int, default=None,
         help="numéro de la piste choisie dans pistes.md",
     )
-    recherche_cmd = add(
-        "recherche", "Mener la recherche documentaire", cmd_recherche)
     ecrire_cmd = add("ecrire", "Écrire le script", cmd_ecrire)
     plans_cmd = add("plans", "Écrire le plan visuel", cmd_plans)
-    for node in (explorer_cmd, brief_cmd, recherche_cmd, ecrire_cmd, plans_cmd):
+    for node in (explorer_cmd, recherche_cmd, ecrire_cmd, plans_cmd):
         node.add_argument(
             "--modele", default=None, help="modèle Claude (défaut : opus)")
 

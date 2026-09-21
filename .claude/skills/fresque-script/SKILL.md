@@ -1,154 +1,102 @@
 ---
 name: fresque-script
-description: Écrit la narration d'un documentaire Fresque à partir du brief et de la recherche — découpée en beats numérotés, calibrée en durée, optimisée pour la synthèse vocale française. Produit `02-script.md`, premier checkpoint humain du pipeline. À utiliser après `fresque-recherche`, ou quand l'utilisateur demande d'écrire, réécrire ou retravailler le script d'un projet Fresque.
+description: Écrit la narration d'un documentaire Fresque à partir de la piste retenue et de la recherche — découpée en beats numérotés, tenue par des boucles ouvertes, calibrée en durée, optimisée pour la synthèse vocale française. Produit `02-script.md`, premier checkpoint humain. À utiliser après `fresque-recherche`, ou quand l'utilisateur demande d'écrire, réécrire ou retravailler le script d'un projet Fresque.
 ---
 
-# Écriture du script
+# Script
 
-Produire `projects/<slug>/02-script.md` à partir de `00-brief.md` et
-`01-research.md`. C'est le **checkpoint 1** : le fichier sera lu et corrigé
-par un humain avant toute dépense d'API.
+## RÔLE
 
-Lire `projet.yaml` pour connaître le template, puis `templates/<template>.yaml` : ses champs `meta.registre`, `meta.structure_narrative` et `meta.interdits_specifiques` priment sur les consignes génériques de ce skill.
+Écrire la narration. C'est l'étape qui décide si le film est regardé jusqu'au bout.
 
-Lire `fresque.config.yaml` : `mots_par_minute`, `duree_cible_min`,
-`relance_retention_s` et `hook_s` pilotent l'écriture.
+## ENTRÉE
 
-## Parler lentement, pour que le montage puisse aller vite
+- `projects/<slug>/projet.yaml` — `piste` : le numéro retenu. `titre` : le titre publié.
+- `projects/<slug>/pistes.md` — la piste N : angle, pivot, preuves.
+- `projects/<slug>/01-research.md` — les faits. **Rien d'autre n'est une source.**
+- `templates/<template>.yaml` — `meta.registre`, `meta.structure_narrative`, `meta.interdits_specifiques` priment sur ce skill.
+- `fresque.config.yaml` — `duree_cible_min`, `mots_par_minute`, `hook_s`, `relance_retention_s`, `controle.*`.
 
-C'est la règle la moins intuitive de ce pipeline, et elle vient d'une
-mesure. Sur deux documentaires du concurrent Frontier, la voix tient
-environ 105 mots par minute quand elle parle, 70 sur la durée totale —
-parce qu'elle se tait un tiers du temps. Pendant ce temps, le montage
-coupe vingt-cinq fois par minute (`docs/analyse-frontier.md`).
+## SORTIE
 
-Leurs phrases entières : « August 31st, 2026. » « It started in Rosario. »
-« A World Cup in Qatar. » Trois à six mots, puis du silence.
+`projects/<slug>/02-script.md`. Format en bas de page, c'est un contrat.
 
-Le premier documentaire de ce pipeline a été jugé ennuyant, et la réponse
-a été d'accélérer la narration de 140 à 170 mots par minute. C'était la
-mauvaise moitié du problème : **le rythme se joue à l'image, et la voix
-doit laisser la place pour qu'on le sente.** Une narration dense sur un
-montage rapide ne donne pas du rythme, elle donne du bruit.
-
-Donc : des phrases courtes, un point plutôt qu'une virgule, et un beat qui
-dit une seule chose. Chaque point produit une vraie pause — c'est la
-ponctuation qui fabrique le silence, pas les réglages.
-
-## Ce qui distingue une narration documentaire
-
-Ce texte ne sera **jamais lu**. Il sera **entendu**, une seule fois, sans
-possibilité de revenir en arrière. Tout découle de là :
-
-- Une idée par phrase. Le spectateur ne peut pas relire.
-- Le sujet avant le verbe, et vite. Les longues subordonnées avant le verbe
-  principal se perdent à l'oral.
-- Les chiffres sont ancrés : « trois mille deux cents tonnes — le poids d'un
-  Airbus à vide ». Un chiffre nu ne laisse aucune trace.
-- Le silence est un outil. Une phrase courte isolée après un paragraphe dense
-  frappe plus fort que n'importe quel adjectif.
-- On ne commente pas les faits, on les ordonne. L'émotion vient du montage
-  des informations, pas des adjectifs qu'on met dessus.
-
-## Procédure
-
-**1. Budget de mots.** `duree_cible_min × mots_par_minute` = budget total.
-Répartir par acte selon le brief. Le noter en tête de fichier.
-
-**2. Écrire le hook en premier**, et le réécrire trois fois. Les quinze
-premières secondes décident du reste. Un hook réussi pose un fait précis et
-troublant, sans le résoudre, et sans annoncer qu'il va être résolu.
-
-Trois contraintes, vérifiées par `fresque lint` :
-
-- **`B001` tient dans `hook_s`**, soit `hook_s × mots_par_minute / 60` mots.
-  Ce qui dépasse appartient à `B002`.
-- **La première phrase fait vingt mots au plus.** Le fait qui fait rester
-  tombe d'un bloc, pas au bout de trois subordonnées.
-- **Aucune question dans `B001`.** On pose un fait.
-
-Le fait retenu est le plus dérangeant dont on dispose, pourvu qu'il soit
-exact et sourcé dans `01-research.md`. Le brief a déjà choisi lequel et a
-noté l'accroche de huit mots qui l'accompagnera à l'écran : s'y tenir.
-
-**3. Écrire acte par acte**, en gardant le compte de mots.
-
-**4. Placer les relances.** Tous les `relance_retention_s` secondes au
-maximum — c'est-à-dire tous les ~`relance_retention_s × mots_par_minute / 60`
-mots — il faut un changement d'état : une révélation, une question ouverte,
-un changement de rythme, un changement de lieu ou d'échelle.
-
-**Les déclarer dans le beat**, avec une ligne `> relance:` juste après
-l'intention :
-
-```markdown
-### B038
-> intention: une vue de Beyrouth, toits et mer
-> relance: révélation : le témoin meurt deux jours avant le verdict
-Le 23 septembre 2025, Ziad Takieddine meurt à Beyrouth.
-```
-
-Une relance ne se reconnaît pas au texte : une révélation et une explication
-sont les mêmes mots pour une machine. C'est donc toi qui la déclares, et le
-lint ne vérifie que l'espacement. Un beat de fin d'acte compte déjà comme un
-changement d'état, la ligne y est facultative.
-
-**5. Lancer `python -m fresque lint <slug>`** et corriger jusqu'à ce qu'il ne
-reste aucune violation bloquante. Ce n'est pas optionnel : les règles de ce
-skill y sont vérifiées mécaniquement, et l'utilisateur ne doit relire qu'un
-script qui passe déjà cette barre. Recommencer autant de fois que nécessaire.
-
-**6. Présenter à l'utilisateur** : le compte de mots réel vs cible, les
-points où l'on s'est écarté du brief et pourquoi, et les deux ou trois
-passages dont on est le moins sûr. Puis s'arrêter — c'est un checkpoint.
-
-## Format de `02-script.md`
-
-Le fichier est parsé par le pipeline. **La structure ci-dessous est un
-contrat, pas une suggestion.**
-
-```markdown
-# Script — <titre>
-
-- **mots** : <réel> / <budget> · **durée estimée** : <n> min <n> s
-- **statut** : brouillon | validé
+Le fichier contient la narration et rien d'autre. Toutes les métadonnées de contrôle sont dans le tableau de fin.
 
 ---
 
-## Acte I — <titre>
+## LA MÉCANIQUE
 
-### B001
-> intention: <une ligne — ce qu'on voit pendant ce beat>
-Le texte de la narration. Une ou plusieurs phrases, en paragraphes.
-Tel qu'il sera prononcé, mot pour mot.
+Un documentaire se regarde jusqu'au bout pour une seule raison : **le spectateur attend une réponse qu'on ne lui a pas encore donnée.**
 
-### B002
-> intention: <...>
-> relance: <facultatif — la nature du changement d'état>
-...
-```
+### Les boucles
 
-Règles de format, strictes :
+Une boucle, c'est une question posée à un beat et répondue bien plus loin.
 
-- Les beats sont numérotés `B001`, `B002`… en continu à travers tout le
-  document, sans trou et sans reprise à chaque acte.
-- Un beat = **une idée**, pas un plan visuel. Sa longueur est bornée par
-  `controle.mots_par_beat`, qui est court : le montage lui donnera
-  plusieurs plans, et c'est lui qui porte le rythme.
-- La ligne `> intention:` est obligatoire et fait **une seule ligne**. Elle
-  décrit ce que le spectateur voit, pas ce qu'il entend.
-- La ligne `> relance:` est facultative, et fait une seule ligne aussi. Elle
-  dit la nature du changement d'état, et rien de plus.
-- Le corps du beat ne contient **que le texte prononcé**. Aucune didascalie,
-  aucun crochet, aucune indication de mise en scène — tout cela partirait
-  tel quel dans la synthèse vocale.
+- Le hook ouvre **L1**, la boucle du film. Elle se ferme au dernier acte.
+- Chaque acte ouvre au moins une boucle secondaire.
+- Une boucle tient au moins 90 secondes. En dessous, ce n'est pas une boucle, c'est une phrase.
+- Jamais plus de trois boucles ouvertes en même temps : au-delà, le spectateur lâche le fil.
+- Jamais zéro boucle ouverte, sauf dans les 30 dernières secondes.
 
-## Écrire pour la synthèse vocale française
+Une boucle n'est pas une question posée à voix haute. C'est un fait donné dont la cause manque. « À neuf heures du matin, le médecin a commandé quatre litres de propofol » ouvre une boucle. « Mais pourquoi ? » n'en ouvre pas — ça l'annonce, ce qui la tue.
 
-Ces règles ne sont pas cosmétiques : chaque violation produit une erreur
-audible dans le fichier final, qu'il faudra corriger à la main.
+### `mais` ou `donc`, jamais `et`
 
-**À écrire en toutes lettres :**
+Chaque beat s'enchaîne au précédent par l'un des deux :
+
+- **donc** — conséquence. Ce qui précède cause ce qui suit.
+- **mais** — retournement. Ce qui suit contredit ce qui précède.
+
+Un beat qui ne peut dire que « et » est un élément de liste. On le fusionne avec son voisin, ou on le coupe. C'est la règle qui sépare un documentaire d'un exposé, et c'est celle qui coupe le plus de texte.
+
+### Le hook
+
+Les quinze premières secondes décident du reste.
+
+- `hook_s` secondes au maximum. Un seul beat.
+- Ouvre sur un **fait**, jamais sur une question.
+- Contient un nombre, une heure ou une date.
+- Contient le trou, pas sa réponse.
+- Première phrase de 20 mots au plus : le fait tombe d'un bloc, pas au bout de trois subordonnées.
+- **Trois versions écrites.** La retenue devient B001, les deux autres restent en fin de fichier. L'utilisateur peut échanger sans relancer Claude.
+
+### Le rythme
+
+Le texte ne sera jamais lu. Il sera entendu, une fois, sans retour en arrière.
+
+- Une idée par phrase.
+- Le sujet avant le verbe, et vite.
+- Une phrase de 8 mots ou moins au moins tous les cinq beats. Le silence est un outil : une phrase courte isolée après un paragraphe dense frappe plus fort que n'importe quel adjectif.
+- Deux beats consécutifs ne commencent pas par le même mot.
+- Les chiffres sont ancrés : « trois mille deux cents tonnes — le poids d'un Airbus à vide ». Un chiffre nu ne laisse aucune trace.
+- On ne commente pas les faits, on les ordonne. L'émotion vient du montage des informations, pas des adjectifs posés dessus.
+
+---
+
+## PROCÉDURE
+
+**1. Le budget.** `duree_cible_min × mots_par_minute` = budget de mots. Le répartir entre les actes. L'écrire en tête de fichier.
+
+**2. La colonne vertébrale.** Avant d'écrire une seule phrase : lister 8 à 12 retournements, une ligne chacun, avec leur lien `mais`/`donc` et les boucles qu'ils ouvrent ou ferment. Le pivot de la piste est l'un d'eux, aux deux tiers environ. Si la chaîne ne tient pas ici, elle ne tiendra pas non plus en 2000 mots.
+
+**3. Le hook.** Trois versions, avant le reste.
+
+**4. Les beats**, acte par acte, budget en main.
+
+**5. La passe de coupe.** Relire en retirant chaque beat mentalement. Si son absence ne casse aucune chaîne `mais`/`donc` et ne laisse aucune boucle béante, le retirer pour de bon. La coupe est le meilleur outil de rétention qui existe.
+
+**6. Le tableau de contrôle**, en fin de fichier. Il n'est pas décoratif : le lint le lit.
+
+**7. `python -m fresque lint <slug>`**, jusqu'à zéro violation bloquante. Recommencer autant de fois que nécessaire. L'utilisateur ne doit relire qu'un script qui passe déjà cette barre.
+
+**8. Présenter** : compte de mots réel contre cible, les boucles et leur tenue, les deux ou trois passages les moins sûrs. Puis s'arrêter — c'est un checkpoint.
+
+---
+
+## ÉCRIRE POUR LA SYNTHÈSE VOCALE FRANÇAISE
+
+Chaque violation produit une erreur audible dans le fichier final.
 
 | Ne pas écrire | Écrire |
 |---|---|
@@ -160,71 +108,99 @@ audible dans le fichier final, qu'il faudra corriger à la main.
 | `1er`, `2e` | `premier`, `deuxième` |
 | `&`, `+`, `=` | `et`, `plus`, `égale` |
 
-**Les années en chiffres sont correctement lues** (`1986`, `2004`) et
-restent plus lisibles à la relecture humaine. Les garder ainsi.
+- **Les années en chiffres sont bien lues** (`1986`, `2004`). Les garder ainsi.
+- **Acronymes** : ceux qui se lisent comme un mot s'écrivent normalement (`OTAN`, `SIDA`). Ceux qui s'épellent se ponctuent : `U.R.S.S.`, `F.B.I.`
+- **Noms propres étrangers** : quand la prononciation française attendue diffère de l'orthographe, écrire la forme phonétique et le signaler au checkpoint.
+- **Ponctuation = respiration.** Le point produit une vraie pause, la virgule une courte. Points de suspension et tiret cadratin donnent des résultats imprévisibles : les éviter. Pour un silence appuyé, une phrase de trois mots sur sa propre ligne.
+- **Pas de parenthèses.** Lues à plat. Ce qui est entre parenthèses est soit une phrase entière, soit à supprimer.
+- **Citations** : chacune dans son propre beat, en annonçant qui parle avant. La voix ne changera pas — c'est la phrase qui doit le faire comprendre.
 
-**Acronymes.** Ceux qui se lisent comme un mot s'écrivent normalement
-(`OTAN`, `SIDA`). Ceux qui s'épellent se ponctuent : `U.R.S.S.`, `F.B.I.`,
-`E.D.F.`. Sans quoi la synthèse tranchera au hasard.
+---
 
-**Noms propres étrangers.** Quand la prononciation française attendue diffère
-de l'orthographe, écrire la forme phonétique dans le texte et signaler le
-choix à l'utilisateur au moment de présenter le script.
+## LES FAITS
 
-**Ponctuation = respiration.** Le point produit une vraie pause, la virgule
-une courte. Les points de suspension et le tiret cadratin donnent des
-résultats imprévisibles : les éviter. Pour un silence appuyé, faire une
-phrase de trois mots sur sa propre ligne.
+- **Ne jamais introduire un fait absent de `01-research.md`.** En cas de manque, s'arrêter et le signaler plutôt que combler. C'est ainsi qu'un documentaire se fait démonter en commentaires.
+- Ce que la recherche marque contesté est énoncé comme contesté, avec la formulation exacte de sa colonne « Comment le script doit traiter ».
+- Les trous s'assument à voix haute. « On ne sait pas ce qui s'est dit dans cette pièce » est une phrase de documentaire. L'inventer ne l'est pas.
+- **Le titre est agressif, la narration ne l'est pas.** Le titre vit en dehors du script. Aucun superlatif, aucun suspense artificiel, aucune spéculation au même ton que les faits.
 
-**Pas de parenthèses.** Elles sont lues à plat et cassent la phrase. Ce qui
-est entre parenthèses est soit une phrase à part entière, soit à supprimer.
+---
 
-**Citations.** Isoler toute citation dans son propre beat, en annonçant qui
-parle avant. La synthèse ne changera pas de voix — c'est la construction de
-la phrase qui doit le faire comprendre.
+## REFUS
 
-## Traitement des faits
+Mieux vaut échouer que deviner.
 
-- Ce qui est marqué contesté dans `01-research.md` est énoncé comme contesté.
-  La formulation exacte est indiquée dans la colonne « Comment le script doit
-  traiter » de la recherche : la respecter.
-- Ne jamais introduire un fait absent de `01-research.md`. En cas de manque,
-  s'arrêter et le signaler plutôt que de combler. C'est ainsi qu'un
-  documentaire se fait démonter en commentaires.
-- Les trous documentaires s'assument à voix haute : « on ne sait pas ce qui
-  s'est dit dans cette pièce » est une phrase de documentaire. L'inventer ne
-  l'est pas.
+- Pas de `01-research.md` → s'arrêter. Pas de script sans faits.
+- Un beat qui ne s'enchaîne ni par `mais` ni par `donc` → le couper, pas le garder avec un « et ».
+- Une boucle qu'on ne sait pas fermer → ne pas l'ouvrir.
+- Un fait qui manque pour tenir le pivot → le dire, et proposer de relancer la recherche sur ce point. Ne pas écrire autour du trou en faisant comme s'il n'existait pas.
+
+---
+
+## Format de `02-script.md`
+
+```markdown
+# Script — <titre publié>
+
+- **mots** : <réel> / <budget> · **durée estimée** : <n> min <n> s
+- **statut** : brouillon | validé
+
+---
+
+## Acte I — <titre>
+
+### B001
+> intention: <une ligne — ce qu'on VOIT pendant ce beat>
+Le texte de la narration, tel qu'il sera prononcé, mot pour mot.
+
+### B002
+> intention: <...>
+...
+
+---
 
 ## Contrôle
 
-Avant de présenter le script, le relire une fois **à voix haute, dans sa
-tête**, et vérifier :
+| beat | lien | boucle | relance |
+|---|---|---|---|
+| B001 | — | ouvre L1 — pourquoi quatre litres de propofol | hook |
+| B002 | donc | | |
+| B003 | mais | ouvre L2 — qui a signé l'ordonnance | révélation |
+| ... | | | |
+| B031 | donc | ferme L2 | |
+| B047 | donc | ferme L1 | résolution |
 
-- [ ] Le hook tient en `hook_s` secondes et pose un fait, pas une question.
-- [ ] Aucune phrase ne dépasse `controle.mots_par_phrase_max` mots.
+## Hooks écartés
+
+- <version 2, telle qu'elle aurait été prononcée>
+- <version 3>
+
+## Points fragiles
+
+- <ce dont on est le moins sûr, et pourquoi>
+```
+
+Règles de format, strictes :
+
+- Beats numérotés `B001`, `B002`… en continu à travers tout le document, sans trou et sans reprise à chaque acte.
+- Un beat = un plan visuel = 10 à 25 secondes, soit ~25 à 60 mots. Plus long, l'image ne tient pas ; plus court, le montage devient haché.
+- La ligne `> intention:` est obligatoire et fait **une seule ligne**. Elle décrit ce que le spectateur voit, pas ce qu'il entend.
+- Le corps d'un beat ne contient **que le texte prononcé**. Aucune didascalie, aucun crochet, aucune indication de mise en scène — tout partirait tel quel dans la voix.
+- Le tableau `## Contrôle` porte **une ligne par beat**, dans l'ordre. `lien` vaut `—` pour B001, `donc` ou `mais` ensuite. `boucle` vaut `ouvre L<n> — <la question>`, `ferme L<n>`, ou rien. `relance` nomme le changement d'état, ou rien.
+
+---
+
+## Ce que le lint vérifie
+
+Lancer `python -m fresque lint` plutôt que de vérifier à l'œil. Il ne passe rien :
+
+longueur des beats et des phrases · pièges de synthèse vocale · formules proscrites · budget de mots · part de silence · longueur du hook · espacement des relances · présence d'un lien par beat · boucles ouvertes et jamais fermées · boucles trop courtes · trop de boucles simultanées · phrase courte tous les cinq beats.
+
+Le reste reste ton travail, parce qu'aucune machine ne le voit :
+
+- [ ] Le hook pose un fait, et le fait est le bon.
+- [ ] Chaque `mais` est un vrai retournement, pas un `et` déguisé.
+- [ ] Le pivot est audible : on entend le moment où l'histoire bascule.
+- [ ] Chaque acte se termine sur une boucle ouverte, sauf le dernier.
 - [ ] Aucune phrase ne demande de reprendre son souffle en cours de route.
-- [ ] Chaque chiffre important a son ordre de grandeur concret.
-- [ ] Une relance au moins tous les `relance_retention_s` secondes.
-- [ ] Chaque acte se termine sur une question ouverte, sauf le dernier.
-- [ ] Le pivot du brief est bien présent, et il est audible.
-- [ ] Aucun interdit du brief n'a été enfreint.
-- [ ] Aucune didascalie n'a survécu dans le corps d'un beat.
-- [ ] Le compte de mots est dans la tolérance de `fresque.config.yaml`.
-- [ ] Tout beat tient dans `controle.mots_par_beat`.
-- [ ] La part de silence atteint `controle.part_silence_min`.
-
-Les points de cette liste qui peuvent l'être sont vérifiés par
-`python -m fresque lint` : longueur des beats et des phrases, pièges de
-synthèse vocale, formules proscrites, budget de mots, espacement des
-relances. **Lancer le lint plutôt que de les vérifier à l'œil** — il ne
-passe rien.
-
-Le reste ne se vérifie pas mécaniquement et reste ton travail : le hook pose
-un fait plutôt qu'une question, chaque acte se termine sur une question
-ouverte, le pivot est présent et audible, aucune phrase ne demande de
-reprendre son souffle en cours de route.
-
-Terminer `02-script.md` par une section `## Contrôle` avec ces points-là.
-L'utilisateur doit pouvoir vérifier le travail sans relire le script en
-entier. Pas de tableau des relances : elles sont déclarées dans les beats,
-et le lint en vérifie l'espacement.
+- [ ] Aucun interdit du template n'a été enfreint.

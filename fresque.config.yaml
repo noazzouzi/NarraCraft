@@ -32,6 +32,13 @@ controle:
   mots_par_beat: [25, 60]
   mots_par_phrase_max: 25
 
+  # Le silence est un outil, et il s'écrit. Une phrase courte isolée après
+  # un paragraphe dense frappe plus fort que n'importe quel adjectif — mais
+  # seulement si elle existe. Sans cette règle, un script entier peut tenir
+  # sur des phrases de vingt mots et sonner plat du début à la fin.
+  phrase_courte_mots: 8
+  phrase_courte_tous_les_beats: 5
+
   # Part minimale de la durée estimée passée sans voix, vérifiée par
   # `fresque lint`. Zéro désactive la règle, ce qui est le défaut : c'est
   # une exigence de genre, et un template la relève s'il en veut.
@@ -75,6 +82,21 @@ structure:
   relance_retention_s: 90
   # Durée cible du hook d'ouverture, avant le premier respire.
   hook_s: 20
+
+  # Les boucles ouvertes. C'est la seule mécanique qui fait attendre un
+  # spectateur plusieurs minutes : une question posée à un beat, répondue
+  # bien plus loin. Elles sont déclarées dans le tableau de contrôle du
+  # script, parce qu'aucune machine ne peut les reconnaître dans le texte.
+  boucles:
+    # En dessous de ce nombre de beats, il n'y a pas d'enchaînement à
+    # vérifier : un montage d'essai de deux minutes n'a pas de boucles.
+    a_partir_de_beats: 8
+    # Une boucle plus courte que ça n'est pas une boucle, c'est une phrase.
+    min_s: 90
+    # Au-delà, le spectateur perd le fil de ce qu'on lui a promis.
+    max_simultanees: 3
+    # Fin du film : on a le droit de n'avoir plus rien en suspens.
+    fin_sans_boucle_s: 30
 
   # Le premier plan décide si le deuxième est vu. Mesuré sur le premier
   # documentaire complet de ce pipeline : il ouvrait sur une façade de

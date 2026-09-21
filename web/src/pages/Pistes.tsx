@@ -45,7 +45,7 @@ export default function Pistes({
         <span className="leger" style={{ marginLeft: 10, fontWeight: 400 }}>
           {catalogue.retenue
             ? `piste ${catalogue.retenue} retenue`
-            : "choisis-en une — le brief part dessus"}
+            : "choisis-en une — la recherche part dessus"}
         </span>
       </h3>
 
@@ -90,7 +90,7 @@ function Carte({
           <p className="sous">{piste.resume}</p>
         </div>
         <button onClick={surChoix} disabled={vivant}>
-          {retenue ? "Refaire le brief" : "Choisir"}
+          {retenue ? "Relancer la recherche" : "Choisir"}
         </button>
       </header>
 

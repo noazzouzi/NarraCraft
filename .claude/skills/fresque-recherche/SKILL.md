@@ -12,7 +12,6 @@ Rassembler tout ce sur quoi le script s'appuiera. Aucun fait ne s'invente plus t
 ## ENTRÉE
 
 - `projects/<slug>/pistes.md` — la piste retenue : angle, pivot, preuves.
-- `projects/<slug>/00-brief.md` s'il existe.
 - Le web : WebSearch et WebFetch. Rien d'autre.
 
 ## SORTIE

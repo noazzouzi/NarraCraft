@@ -490,6 +490,126 @@ def _rules_hit(violations) -> set[str]:
     return {v.rule for v in violations}
 
 
+# --- Ce qui fait rester un spectateur ---------------------------------------
+#
+# Les boucles ouvertes et l'enchaînement `mais`/`donc` sont les deux seules
+# mécaniques de rétention que le script porte. Aucune ne se lit dans le
+# texte — un fait dont la cause manque et un fait ordinaire sont les mêmes
+# mots. L'auteur les déclare dans le tableau de contrôle, et c'est ce
+# tableau que ces tests vérifient.
+
+PHRASE_LONGUE = ("Le contrat prévoyait un versement hebdomadaire calculé sur "
+                 "les recettes brutes de chaque établissement franchisé. ")
+
+
+def _corps(nombre: int, courte: bool = True) -> str:
+    """Un script de `nombre` beats, chacun dans la fourchette de mots."""
+    morceaux = []
+    for index in range(1, nombre + 1):
+        texte = PHRASE_LONGUE * 2
+        if courte:
+            texte += "Personne ne bouge. "
+        texte += PHRASE_LONGUE
+        morceaux.append(_beat(f"B{index:03d}", texte.strip()))
+    return "".join(morceaux)
+
+
+def _controle(lignes: list[str]) -> str:
+    entete = "\n## Contrôle\n\n| beat | lien | boucle | relance |\n|---|---|---|---|\n"
+    return entete + "\n".join(lignes) + "\n"
+
+
+def _table_saine(nombre: int) -> list[str]:
+    """Un tableau valide : tout enchaîné, une boucle qui tient tout le film."""
+    lignes = [f"| B001 | — | ouvre L1 — pourquoi | hook |"]
+    for index in range(2, nombre):
+        lignes.append(f"| B{index:03d} | donc | | |")
+    lignes.append(f"| B{nombre:03d} | donc | ferme L1 | résolution |")
+    return lignes
+
+
+def test_the_control_table_lands_in_the_beats_and_the_loops(tmp_path):
+    """Le tableau est en fin de fichier pour que la narration reste nue au
+    checkpoint. Il faut donc que le code sache le ranger."""
+    script = _script_from(_corps(10) + _controle(_table_saine(10)), tmp_path)
+
+    assert script.beats[0].lien == ""
+    assert script.beats[1].lien == "donc"
+    assert script.beats[0].relance == "hook"
+    assert [b.nom for b in script.boucles] == ["L1"]
+    assert script.boucles[0].ouvre == "B001"
+    assert script.boucles[0].ferme == "B010"
+    assert script.boucles[0].question == "pourquoi"
+
+
+def test_a_beat_that_can_only_say_and_is_refused(tmp_path):
+    """« et » n'est pas un lien : c'est l'aveu qu'on énumère."""
+    table = _table_saine(10)
+    table[3] = "| B004 | et | | |"
+    with pytest.raises(script_parser.ScriptError, match="donc"):
+        _script_from(_corps(10) + _controle(table), tmp_path)
+
+
+def test_a_beat_without_a_link_is_blocking(tmp_path):
+    table = _table_saine(10)
+    table[3] = "| B004 | | | |"
+    violations = lint_mod.check(_script_from(_corps(10) + _controle(table), tmp_path))
+    faute = [v for v in violations if v.rule == "enchaînement"]
+    assert faute and faute[0].beat == "B004" and faute[0].blocking
+
+
+def test_a_script_with_no_control_table_says_it_once(tmp_path):
+    """Quarante lignes « aucun lien déclaré » ne sont pas un diagnostic."""
+    violations = lint_mod.check(_script_from(_corps(10), tmp_path))
+    faute = [v for v in violations if v.rule == "enchaînement"]
+    assert len(faute) == 1 and faute[0].beat == "—"
+    assert "boucle" in _rules_hit(violations)
+
+
+def test_a_loop_that_never_closes_is_blocking(tmp_path):
+    """Une promesse non tenue se paie en commentaires."""
+    table = _table_saine(10)
+    table[-1] = "| B010 | donc | | |"
+    violations = lint_mod.check(_script_from(_corps(10) + _controle(table), tmp_path))
+    faute = [v for v in violations if v.rule == "boucle"]
+    assert faute and "jamais fermée" in faute[0].message and faute[0].blocking
+
+
+def test_a_loop_shorter_than_a_minute_and_a_half_is_not_a_loop(tmp_path):
+    """En dessous, ce n'est pas une attente, c'est une phrase."""
+    table = _table_saine(12)
+    table[1] = "| B002 | donc | ouvre L2 — qui a signé | |"
+    table[2] = "| B003 | donc | ferme L2 | |"
+    violations = lint_mod.check(_script_from(_corps(12) + _controle(table), tmp_path))
+    assert "boucle-courte" in _rules_hit(violations)
+
+
+def test_closing_the_last_loop_too_early_is_where_viewers_leave(tmp_path):
+    """Plus rien en suspens et du film devant : c'est le décrochage."""
+    table = _table_saine(12)
+    table[-1] = "| B012 | donc | | |"
+    table[5] = "| B006 | donc | ferme L1 | |"
+    violations = lint_mod.check(_script_from(_corps(12) + _controle(table), tmp_path))
+    assert "boucle-vide" in _rules_hit(violations)
+
+
+def test_a_two_minute_test_montage_is_not_asked_for_loops(tmp_path):
+    """Un montage d'essai n'a pas de structure narrative à vérifier. Faire
+    échouer son lint apprendrait surtout à passer outre."""
+    violations = lint_mod.check(_script_from(_corps(4), tmp_path))
+    assert "boucle" not in _rules_hit(violations)
+    assert "enchaînement" not in _rules_hit(violations)
+
+
+def test_a_stretch_without_a_single_short_sentence_is_flagged(tmp_path):
+    """Un script entier en phrases de vingt mots respecte toutes les autres
+    règles et sonne plat du début à la fin."""
+    plat = lint_mod.check(_script_from(_corps(10, courte=False), tmp_path))
+    aere = lint_mod.check(_script_from(_corps(10, courte=True), tmp_path))
+    assert "souffle" in _rules_hit(plat)
+    assert "souffle" not in _rules_hit(aere)
+
+
 def test_retention_counts_from_the_last_declared_relance(tmp_path):
     """Une relance ne se reconnaît pas au texte : elle se déclare."""
     long = _beat("B001", "mot " * 160) + _beat("B002", "mot " * 160)
@@ -1895,7 +2015,7 @@ def test_an_integer_option_does_not_reach_argparse_as_a_float():
     la commande : choisir une piste échouait sans rien dire d'utile."""
     from fresque import serveur
 
-    argv = serveur._argv("brief", "sarkozy-essai-2min", {"piste": "2"})
+    argv = serveur._argv("recherche", "sarkozy-essai-2min", {"piste": "2"})
     assert argv[-2:] == ["--piste", "2"]
 
 
