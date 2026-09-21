@@ -79,6 +79,9 @@ GROUPS = [
     Group("Voix — Microsoft Edge", [
         Host("speech.platform.bing.com", "synthèse", "voice"),
     ], fichiers_ailleurs="audio renvoyé dans le flux, aucun hôte de fichiers"),
+    Group("Voix — ElevenLabs", [
+        Host("api.elevenlabs.io", "catalogue et synthèse", "voice"),
+    ], fichiers_ailleurs="audio renvoyé dans la réponse"),
 ]
 
 
@@ -138,6 +141,20 @@ def check_local() -> list[tuple[str, bool, str]]:
             checks.append(("paquet edge-tts", True, "importable"))
         except ImportError:
             checks.append(("paquet edge-tts", False, "pip install edge-tts soundfile"))
+    elif fournisseur == "elevenlabs":
+        import os
+
+        # Le nom de la variable, jamais sa valeur.
+        checks.append((
+            "ELEVENLABS_API_KEY",
+            bool(os.environ.get("ELEVENLABS_API_KEY", "").strip()),
+            "requise par le moteur elevenlabs",
+        ))
+        voix = str(config.get("voix", "elevenlabs", "voice", default=""))
+        checks.append((
+            "voix ElevenLabs choisie", bool(voix),
+            voix or "aucune — la choisir dans la bibliothèque",
+        ))
 
     for key, needed_for in (
         ("GEMINI_API_KEY", "génération d'images"),

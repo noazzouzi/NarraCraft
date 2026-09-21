@@ -11,13 +11,21 @@ aucun des moteurs n'expose de timing par mot, et sur une trentaine de mots
 la répartition pondérée suffit aux sous-titres. `alignment.json` dit lequel
 est lequel dans son champ `source`.
 
-DEUX MOTEURS
-============
+TROIS MOTEURS
+=============
 `voix.provider` choisit :
 
-- `kokoro` — local, gratuit, sans réseau. Une seule voix française.
+- `kokoro` — local, gratuit, sans réseau. 54 voix, dont une seule
+  française, féminine.
 - `edge` — les voix neuronales de Microsoft Edge, gratuites et sans clé,
-  mais par le réseau. Sept voix masculines francophones.
+  mais par le réseau. 322 voix, dont 13 francophones et 7 masculines.
+- `elevenlabs` — payant, avec une clé dans `ELEVENLABS_API_KEY`. Ses voix
+  multilingues parlent la langue du texte plutôt que la leur.
+
+Les trois décrivent leur catalogue de façon incompatible — deux lettres de
+préfixe chez Kokoro, du JSON Microsoft chez Edge, des étiquettes libres
+chez ElevenLabs. `Voix` et `catalogue()` les normalisent, pour que la
+bibliothèque se filtre par langue et par sexe sans trois interfaces.
 
 Ce qu'ils ne font pas pareil, et qui compte : le silence qu'ils laissent
 autour d'une phrase. Mesuré sur trois phrases courtes —
@@ -40,6 +48,7 @@ from __future__ import annotations
 
 import re
 import wave
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -80,6 +89,62 @@ def _engine():
     return Kokoro(str(model), str(voices))
 
 
+# --- Le catalogue ------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Voix:
+    """Une voix, décrite de la même façon chez les trois fournisseurs.
+
+    Les trois catalogues n'ont rien en commun : Kokoro encode la langue et
+    le sexe dans deux lettres de préfixe, Edge rend du JSON Microsoft,
+    ElevenLabs des étiquettes libres. Les normaliser ici est le seul moyen
+    d'avoir une bibliothèque filtrable sans écrire trois interfaces.
+    """
+    id: str
+    nom: str
+    langue: str          # locale, « fr-FR » — vide si le moteur l'ignore
+    genre: str           # « homme », « femme » ou « inconnu »
+    detail: str = ""
+
+    @property
+    def code_langue(self) -> str:
+        """« fr » pour « fr-FR » — ce sur quoi le filtre porte."""
+        return self.langue.split("-")[0].lower()
+
+
+def _genre(brut: str) -> str:
+    valeur = (brut or "").strip().lower()
+    if valeur in ("male", "m", "homme"):
+        return "homme"
+    if valeur in ("female", "f", "femme"):
+        return "femme"
+    return "inconnu"
+
+
+def catalogue(provider: str | None = None) -> list[Voix]:
+    """Les voix d'un fournisseur. Trié par langue puis par nom."""
+    nom = provider or str(config.get("voix", "provider", default="kokoro"))
+    classe = MOTEURS.get(nom)
+    if classe is None:
+        raise VoiceError(
+            f"`{nom}` n'est pas un fournisseur de voix. "
+            f"Choisir parmi : {', '.join(sorted(MOTEURS))}."
+        )
+    voix = classe.catalogue()
+    return sorted(voix, key=lambda v: (v.code_langue, v.genre, v.nom))
+
+
+def filtrer(voix: list[Voix], langue: str = "", genre: str = "") -> list[Voix]:
+    """Les deux filtres de la bibliothèque : langue et sexe."""
+    code = langue.split("-")[0].lower() if langue else ""
+    attendu = _genre(genre) if genre else ""
+    return [
+        v for v in voix
+        if (not code or v.code_langue == code)
+        and (not attendu or v.genre == attendu)
+    ]
+
+
 # --- Les moteurs -------------------------------------------------------------
 
 class Moteur:
@@ -92,6 +157,12 @@ class Moteur:
 
     nom: str = ""
     pause_naturelle_s: float = 0.0
+
+    @classmethod
+    def catalogue(cls) -> list["Voix"]:  # pragma: no cover - interface
+        """Les voix disponibles. Sans instancier le moteur : lister ne doit
+        pas charger trois cents mégaoctets de modèle ni ouvrir de session."""
+        raise NotImplementedError
 
     def dire(self, phrase: str):  # pragma: no cover - interface
         raise NotImplementedError
@@ -106,9 +177,41 @@ class MoteurKokoro(Moteur):
     #: plus qu'après une virgule.
     pause_naturelle_s = 0.10
 
-    def __init__(self) -> None:
+    #: Kokoro encode langue et sexe dans les deux premières lettres du nom
+    #: d'une voix : `ff_siwis` est française et féminine. C'est la seule
+    #: description qu'il en donne — il n'y a pas de catalogue ailleurs.
+    LANGUES = {
+        "a": "en-US", "b": "en-GB", "e": "es-ES", "f": "fr-FR", "h": "hi-IN",
+        "i": "it-IT", "j": "ja-JP", "p": "pt-BR", "z": "zh-CN",
+    }
+
+    @classmethod
+    def catalogue(cls) -> list[Voix]:
+        import numpy as np
+
+        _, voices = _paths()
+        # Le fichier de voix est un npz : ses clés sont les noms. Les lire
+        # coûte onze millisecondes, contre plusieurs secondes pour charger
+        # le modèle ONNX de trois cent vingt-cinq mégaoctets.
+        with np.load(voices) as archive:
+            noms = sorted(archive.files)
+
+        sorties = []
+        for identifiant in noms:
+            prefixe = identifiant[:2] if "_" in identifiant else ""
+            langue = cls.LANGUES.get(prefixe[:1], "")
+            genre = _genre({"f": "femme", "m": "homme"}.get(prefixe[1:2], ""))
+            joli = identifiant.split("_", 1)[-1].capitalize()
+            sorties.append(Voix(
+                id=identifiant, nom=joli, langue=langue, genre=genre,
+                detail="locale, sans réseau",
+            ))
+        return sorties
+
+    def __init__(self, voix: str = "") -> None:
         self.kokoro = _engine()
-        self.voice = str(config.get("voix", "kokoro", "voice", default="ff_siwis"))
+        self.voice = voix or str(
+            config.get("voix", "kokoro", "voice", default="ff_siwis"))
         self.lang = str(config.get("voix", "kokoro", "lang", default="fr-fr"))
         self.speed = float(config.get("voix", "kokoro", "speed", default=0.82))
 
@@ -160,8 +263,39 @@ class MoteurEdge(Moteur):
     nom = "edge"
     pause_naturelle_s = 0.0
 
-    def __init__(self) -> None:
-        self.voice = str(config.get("voix", "edge", "voice", default="fr-FR-HenriNeural"))
+    @classmethod
+    def catalogue(cls) -> list[Voix]:
+        import asyncio
+
+        try:
+            import edge_tts
+        except ImportError as error:  # pragma: no cover - environment dependent
+            raise VoiceError(
+                "edge-tts n'est pas installé : pip install edge-tts soundfile"
+            ) from error
+        try:
+            toutes = asyncio.run(edge_tts.list_voices())
+        except Exception as error:  # noqa: BLE001 - réseau, forme variable
+            raise VoiceError(
+                f"catalogue Edge indisponible — {str(error)[:120]}"
+            ) from error
+
+        return [
+            Voix(
+                id=v["ShortName"],
+                nom=v["ShortName"].split("-")[-1].removesuffix("Neural"),
+                langue=v.get("Locale", ""),
+                genre=_genre(v.get("Gender", "")),
+                detail=", ".join(
+                    (v.get("VoiceTag") or {}).get("VoicePersonalities") or []
+                ),
+            )
+            for v in toutes
+        ]
+
+    def __init__(self, voix: str = "") -> None:
+        self.voice = voix or str(
+            config.get("voix", "edge", "voice", default="fr-FR-HenriNeural"))
         self.rate = str(config.get("voix", "edge", "rate", default="+0%"))
         self.volume = str(config.get("voix", "edge", "volume", default="+0%"))
         self.pitch = str(config.get("voix", "edge", "pitch", default="+0Hz"))
@@ -214,19 +348,151 @@ class MoteurEdge(Moteur):
         }
 
 
-MOTEURS: dict[str, type[Moteur]] = {"kokoro": MoteurKokoro, "edge": MoteurEdge}
+class MoteurElevenLabs(Moteur):
+    """Les voix d'ElevenLabs. Payantes, par le réseau, avec une clé.
+
+    La clé vit dans `ELEVENLABS_API_KEY`, jamais dans le dépôt et jamais
+    dans une commande. Sans elle, le moteur le dit et s'arrête — il ne
+    tente pas un appel qui reviendrait en 401.
+
+    Le silence est rogné comme chez Edge : tout moteur en ligne emballe ses
+    phrases, et le rythme d'un documentaire se pose ici, pas chez le
+    fournisseur.
+    """
+
+    nom = "elevenlabs"
+    pause_naturelle_s = 0.0
+
+    API = "https://api.elevenlabs.io/v1"
+
+    @staticmethod
+    def cle() -> str:
+        import os
+
+        cle = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+        if not cle:
+            raise VoiceError(
+                "ELEVENLABS_API_KEY n'est pas définie. La poser dans "
+                "l'environnement — jamais dans le dépôt, jamais dans une "
+                "ligne de commande."
+            )
+        return cle
+
+    @classmethod
+    def catalogue(cls) -> list[Voix]:
+        import requests
+
+        reponse = requests.get(
+            f"{cls.API}/voices", headers={"xi-api-key": cls.cle()}, timeout=30,
+        )
+        if reponse.status_code == 401:
+            raise VoiceError("ELEVENLABS_API_KEY refusée par ElevenLabs.")
+        reponse.raise_for_status()
+
+        sorties = []
+        for brut in reponse.json().get("voices", []):
+            etiquettes = brut.get("labels") or {}
+            sorties.append(Voix(
+                id=brut.get("voice_id", ""),
+                nom=brut.get("name", ""),
+                # ElevenLabs ne rend pas de locale : ses voix multilingues
+                # parlent la langue du texte. On déclare celle du projet.
+                langue=str(etiquettes.get("language", "")
+                           or config.get("production", "langue", default="fr")),
+                genre=_genre(etiquettes.get("gender", "")),
+                detail=", ".join(
+                    str(etiquettes[c]) for c in ("accent", "age", "use_case")
+                    if etiquettes.get(c)
+                ),
+            ))
+        return sorties
+
+    def __init__(self, voix: str = "") -> None:
+        self.voice = voix or str(
+            config.get("voix", "elevenlabs", "voice", default=""))
+        self.model = str(config.get(
+            "voix", "elevenlabs", "model", default="eleven_multilingual_v2"))
+        self.stabilite = float(config.get(
+            "voix", "elevenlabs", "stabilite", default=0.5))
+        self.similarite = float(config.get(
+            "voix", "elevenlabs", "similarite", default=0.75))
+        if not self.voice:
+            raise VoiceError(
+                "`voix.elevenlabs.voice` est vide — choisir une voix dans la "
+                "bibliothèque avant de synthétiser."
+            )
+        self._cle = self.cle()
+        try:
+            import soundfile  # noqa: F401
+        except ImportError as error:  # pragma: no cover - environment dependent
+            raise VoiceError("soundfile n'est pas installé") from error
+
+    def dire(self, phrase: str):
+        import io
+
+        import requests
+        import soundfile as sf
+
+        reponse = requests.post(
+            f"{self.API}/text-to-speech/{self.voice}",
+            headers={"xi-api-key": self._cle, "accept": "audio/mpeg"},
+            json={
+                "text": phrase,
+                "model_id": self.model,
+                "voice_settings": {
+                    "stability": self.stabilite,
+                    "similarity_boost": self.similarite,
+                },
+            },
+            timeout=120,
+        )
+        if reponse.status_code == 401:
+            raise VoiceError("ELEVENLABS_API_KEY refusée par ElevenLabs.")
+        if reponse.status_code == 429:
+            raise VoiceError(
+                "quota ElevenLabs atteint — la synthèse s'arrête ici plutôt "
+                "que de réessayer pendant une heure."
+            )
+        reponse.raise_for_status()
+        if not reponse.content:
+            raise VoiceError(f"ElevenLabs n'a rien rendu pour « {phrase[:40]}… »")
+
+        samples, rate = sf.read(
+            io.BytesIO(reponse.content), dtype="float32", always_2d=False)
+        return _rogner(samples, rate), rate
+
+    def fiche(self) -> dict[str, Any]:
+        return {
+            "provider": "elevenlabs",
+            "voice": self.voice,
+            "model": self.model,
+            "stabilite": self.stabilite,
+            "similarite": self.similarite,
+        }
 
 
-def moteur() -> Moteur:
-    """Le moteur que `voix.provider` désigne."""
-    nom = str(config.get("voix", "provider", default="kokoro"))
+MOTEURS: dict[str, type[Moteur]] = {
+    "kokoro": MoteurKokoro,
+    "edge": MoteurEdge,
+    "elevenlabs": MoteurElevenLabs,
+}
+
+
+def moteur(provider: str | None = None, voix: str = "") -> Moteur:
+    """Le moteur que `voix.provider` désigne, ou celui qu'on lui impose.
+
+    Les deux arguments servent à écouter une voix avant de la choisir :
+    l'audition ne doit rien écrire dans `projet.yaml`, sinon écouter et
+    décider seraient le même geste.
+    """
+    nom = provider or str(config.get("voix", "provider", default="kokoro"))
     classe = MOTEURS.get(nom)
     if classe is None:
         raise VoiceError(
             f"`voix.provider: {nom}` n'existe pas. "
             f"Choisir parmi : {', '.join(sorted(MOTEURS))}."
         )
-    return classe()
+    return classe(voix)
 
 
 def _write_wav(path: Path, samples, rate: int) -> None:

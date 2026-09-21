@@ -19,6 +19,11 @@ def _fail(message: str) -> int:
     return 1
 
 
+#: Les fournisseurs de voix, nommés ici pour qu'argparse les propose sans
+#: importer `voice` — qui tire numpy et le modèle Kokoro au passage.
+_FOURNISSEURS = ("kokoro", "edge", "elevenlabs")
+
+
 # --- Les étapes confiées à Claude --------------------------------------------
 #
 # Elles ne font rien elles-mêmes : elles vérifient ce qui doit exister,
@@ -961,45 +966,108 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def cmd_voix(args: argparse.Namespace) -> int:
-    """Les voix que le moteur réglé sait rendre, et un essai facultatif.
+    """La bibliothèque d'un fournisseur, filtrable par langue et par sexe.
 
-    Choisir une voix sans l'entendre ne veut rien dire : `--essai` écrit un
-    fichier avec la voix réellement configurée, au débit réellement réglé.
+    Les trois moteurs décrivent leur catalogue de façon incompatible.
+    `voice.catalogue` les normalise, donc cette commande — et l'interface
+    qui l'appelle — n'en connaît qu'un seul format.
     """
-    from . import config, voice
+    from . import voice
 
-    fournisseur = str(config.get("voix", "provider", default="kokoro"))
-    print(f"Moteur : {fournisseur}")
+    fournisseur = args.provider or str(
+        config.get("voix", "provider", default="kokoro"))
+    try:
+        toutes = voice.catalogue(fournisseur)
+    except voice.VoiceError as erreur:
+        return _fail(str(erreur))
 
-    if fournisseur == "edge":
-        import asyncio
+    retenues = voice.filtrer(toutes, args.langue or "", args.genre or "")
+    if not retenues:
+        filtres = " ".join(f for f in (args.langue, args.genre) if f)
+        return _fail(f"aucune voix chez {fournisseur} pour « {filtres} » "
+                     f"({len(toutes)} voix au catalogue)")
 
-        import edge_tts
+    actuelle = str(config.get("voix", fournisseur, "voice", default=""))
+    print(f"{fournisseur} · {len(retenues)} voix sur {len(toutes)}")
+    for v in retenues:
+        marque = "→" if v.id == actuelle else " "
+        print(f" {marque} {v.id:34} {v.langue:7} {v.genre:7} {v.detail[:38]}")
+    return 0
 
-        toutes = asyncio.run(edge_tts.list_voices())
-        retenues = [v for v in toutes if v["Locale"].startswith(args.langue)]
-        if not retenues:
-            return _fail(f"aucune voix pour « {args.langue} ».")
-        actuelle = str(config.get("voix", "edge", "voice", default=""))
-        for v in sorted(retenues, key=lambda x: (x["Gender"], x["ShortName"])):
-            marque = "→" if v["ShortName"] == actuelle else " "
-            genre = "homme" if v["Gender"] == "Male" else "femme"
-            print(f" {marque} {v['ShortName']:32} {genre}")
-        print(f"\n{len(retenues)} voix. La régler dans `voix.edge.voice`.")
-    else:
-        print("  ff_siwis  femme — l'unique voix française de Kokoro v1.0")
 
-    if args.essai:
-        machine = voice.moteur()
-        samples, rate = machine.dire(args.essai)
-        sortie = config.repo_root() / f"essai-voix-{fournisseur}.wav"
-        voice._write_wav(sortie, samples, rate)
-        duree = len(samples) / rate
-        mots = len(args.essai.split())
-        print(
-            f"\n✓ {sortie.name} · {duree:.2f} s · "
-            f"{mots / duree * 60:.0f} mots/min"
+def cmd_voix_essai(args: argparse.Namespace) -> int:
+    """Écouter une voix avant de la choisir.
+
+    N'écrit rien dans `projet.yaml` : écouter et décider sont deux gestes.
+    La phrase d'essai est le hook du script quand il existe — c'est sur lui
+    qu'une voix se juge, pas sur une phrase neutre.
+    """
+    from . import voice
+
+    project = Project.open(args.slug)
+    fournisseur = args.provider or str(
+        config.get("voix", "provider", default="kokoro"))
+
+    texte = args.texte
+    if not texte and project.script.is_file():
+        texte = script_parser.parse(project.script).beats[0].text
+    texte = texte or ("Le vingt-cinq septembre, le tribunal a prononcé une "
+                      "peine de cinq ans. Personne ne s'y attendait.")
+
+    try:
+        machine = voice.moteur(fournisseur, args.voix or "")
+        samples, rate = voice._say_beat(
+            machine, texte,
+            float(config.get("narration", "pause_phrase_s", default=0.45)),
         )
+    except voice.VoiceError as erreur:
+        return _fail(str(erreur))
+
+    nom = (args.voix or machine.voice or fournisseur).replace("/", "-")
+    sortie = project.audio_dir / f"essai-voix-{nom}.wav"
+    sortie.parent.mkdir(parents=True, exist_ok=True)
+    voice._write_wav(sortie, samples, rate)
+
+    duree = len(samples) / rate
+    mots = len(texte.split())
+    print(f"✓ {sortie.relative_to(project.root)}")
+    print(f"{fournisseur} · {machine.voice} · {duree:.1f} s · "
+          f"{mots / duree * 60:.0f} mots/min")
+    return 0
+
+
+def cmd_voix_choix(args: argparse.Namespace) -> int:
+    """Retenir une voix pour ce projet.
+
+    Le choix s'écrit dans les `reglages` du projet, pas dans la config du
+    dépôt : deux documentaires côte à côte n'ont aucune raison de parler
+    avec la même voix, et la config du dépôt est suivie par git.
+    """
+    from . import voice
+
+    project = Project.open(args.slug)
+    try:
+        toutes = voice.catalogue(args.provider)
+    except voice.VoiceError as erreur:
+        return _fail(str(erreur))
+
+    retenue = next((v for v in toutes if v.id == args.voix), None)
+    if retenue is None:
+        return _fail(f"« {args.voix} » n'est pas une voix de {args.provider} "
+                     f"({len(toutes)} au catalogue)")
+
+    reglages = project.reglages
+    voix = dict(reglages.get("voix") or {})
+    voix["provider"] = args.provider
+    bloc = dict(voix.get(args.provider) or {})
+    bloc["voice"] = retenue.id
+    voix[args.provider] = bloc
+    reglages["voix"] = voix
+    project.set_valeurs(reglages=reglages)
+
+    print(f"✓ {args.provider} · {retenue.id}")
+    print(f"  {retenue.nom} · {retenue.langue} · {retenue.genre}")
+    print(f"  écrit dans projects/{project.slug}/projet.yaml")
     return 0
 
 
@@ -1146,18 +1214,40 @@ def main(argv: list[str] | None = None) -> int:
     )
     doctor_cmd.set_defaults(handler=cmd_doctor)
 
+    # La bibliothèque : sans slug, elle décrit l'installation, pas un projet.
     voix_cmd = sub.add_parser(
-        "voix", help="Lister les voix disponibles chez le moteur choisi"
+        "voix", help="La bibliothèque de voix d'un fournisseur"
     )
     voix_cmd.set_defaults(handler=cmd_voix)
     voix_cmd.add_argument(
-        "--langue", default="fr",
-        help="préfixe de locale, par ex. fr ou fr-FR (défaut : fr)",
+        "--provider", default=None, choices=sorted(_FOURNISSEURS),
+        help="kokoro, edge ou elevenlabs (défaut : celui de la config)",
     )
     voix_cmd.add_argument(
-        "--essai", metavar="TEXTE", default=None,
-        help="synthétiser cette phrase avec la voix réglée, dans un fichier",
+        "--langue", default="fr",
+        help="préfixe de locale, par ex. fr ou fr-FR (défaut : fr) — "
+             "vide pour toutes",
     )
+    voix_cmd.add_argument(
+        "--genre", default=None, choices=("homme", "femme"),
+        help="filtrer par sexe de la voix",
+    )
+
+    essai_voix_cmd = add(
+        "voix-essai", "Écouter une voix avant de la choisir", cmd_voix_essai)
+    essai_voix_cmd.add_argument(
+        "--provider", default=None, choices=sorted(_FOURNISSEURS))
+    essai_voix_cmd.add_argument(
+        "--voix", default=None, help="identifiant de la voix à essayer")
+    essai_voix_cmd.add_argument(
+        "--texte", default=None,
+        help="phrase d'essai (défaut : le hook du script)")
+
+    choix_voix_cmd = add(
+        "voix-choix", "Retenir une voix pour ce projet", cmd_voix_choix)
+    choix_voix_cmd.add_argument(
+        "--provider", required=True, choices=sorted(_FOURNISSEURS))
+    choix_voix_cmd.add_argument("--voix", required=True)
 
     template_cmd = sub.add_parser(
         "template", help="Voir ce qu'un template contient, et d'où vient chaque valeur"

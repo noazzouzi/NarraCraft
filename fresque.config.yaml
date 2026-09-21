@@ -114,12 +114,18 @@ structure:
     phrase_mots_max: 20
 
 voix:
-  # Deux moteurs implémentés, interchangeables. L'alignement est découplé
+  # Trois moteurs implémentés, interchangeables. L'alignement est découplé
   # (voir plus bas), donc changer de provider n'impacte rien en aval.
-  #   edge   — voix neuronales de Microsoft Edge. Gratuites, sans clé, mais
-  #            par le réseau. Sept voix masculines francophones.
-  #   kokoro — local, gratuit, sans réseau. Une seule voix française, et
-  #            elle est féminine : il n'y a pas d'alternative dans ce modèle.
+  #   edge       — voix neuronales de Microsoft Edge. Gratuites, sans clé,
+  #                mais par le réseau. 322 voix, 13 francophones, 7 hommes.
+  #   kokoro     — local, gratuit, sans réseau. 54 voix, dont une seule
+  #                française, et elle est féminine.
+  #   elevenlabs — payant, clé dans ELEVENLABS_API_KEY. Ses voix
+  #                multilingues parlent la langue du texte, pas la leur.
+  #
+  # `python -m fresque voix --provider X --langue fr --genre homme` liste la
+  # bibliothèque d'un moteur. Un projet choisit la sienne dans ses
+  # `reglages`, ce que fait le bouton de l'interface.
   provider: edge
 
   # Un fichier audio par beat du script. Permet de régénérer un seul beat
@@ -156,8 +162,22 @@ voix:
     volume: "+0%"
     pitch: "+0Hz"
 
-  # ElevenLabs n'est pas implémenté. Le jour où il le sera, il aura son bloc
-  # ici et son moteur dans `voice.MOTEURS` — pas de réglage avant le code.
+  elevenlabs:
+    # Vide par défaut : ce moteur est payant, il n'a pas de voix qu'on
+    # puisse choisir à la place de l'utilisateur. La bibliothèque de
+    # l'interface écrit l'identifiant ici, dans les `reglages` du projet.
+    voice: ""
+    # `eleven_multilingual_v2` parle la langue du texte. Un modèle anglais
+    # lirait le français avec un accent, ce qui se remarque en une phrase.
+    model: eleven_multilingual_v2
+    # Stabilité basse = plus d'expressivité et plus de variation d'une
+    # phrase à l'autre. Sur un documentaire découpé en quatre cents
+    # phrases synthétisées séparément, la variation s'entend comme une
+    # panne : on reste au milieu.
+    stabilite: 0.5
+    similarite: 0.75
+    # La clé vit dans ELEVENLABS_API_KEY, jamais ici. Ce fichier est suivi
+    # par git.
 
 alignement:
   # Découplé du TTS, volontairement. On réaligne le texte QU'ON CONNAÎT DÉJÀ

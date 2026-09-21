@@ -114,6 +114,27 @@ export type Visuel = {
 
 export type Galerie = { plans: Visuel[]; manquants: number };
 
+// La bibliothèque de voix. Les trois fournisseurs décrivent leur catalogue
+// de façon incompatible ; le serveur les normalise, l'interface n'en
+// connaît qu'une forme.
+export type VoixItem = {
+  id: string;
+  nom: string;
+  langue: string;
+  genre: "homme" | "femme" | "inconnu" | string;
+  detail: string;
+};
+
+export type Bibliotheque = {
+  provider: string;
+  total: number;
+  langues: string[];
+  voix: VoixItem[];
+};
+
+export type Fournisseur = { nom: string; titre: string; note: string };
+export type ChoixVoix = { provider: string; voix: string };
+
 export type EtatJournal = {
   texte: string;
   offset: number;
@@ -131,6 +152,16 @@ async function lire<T>(route: string): Promise<T> {
   return reponse.json() as Promise<T>;
 }
 
+async function poster<T>(route: string, corps: unknown): Promise<T> {
+  const reponse = await fetch(route, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corps),
+  });
+  if (!reponse.ok) throw new Error(await reponse.text());
+  return reponse.json() as Promise<T>;
+}
+
 export const api = {
   projets: () => lire<Projet[]>("/api/projets"),
   projet: (slug: string) => lire<ProjetDetail>(`/api/projets/${slug}`),
@@ -139,6 +170,25 @@ export const api = {
   pistes: (slug: string) => lire<Catalogue>(`/api/projets/${slug}/pistes`),
   hook: (slug: string) => lire<Hook>(`/api/projets/${slug}/hook`),
   visuels: (slug: string) => lire<Galerie>(`/api/projets/${slug}/visuels`),
+  fournisseurs: () => lire<Fournisseur[]>("/api/fournisseurs"),
+  choixVoix: (slug: string) => lire<ChoixVoix>(`/api/projets/${slug}/voix`),
+
+  bibliotheque: (provider: string, langue: string, genre: string) =>
+    lire<Bibliotheque>(
+      `/api/voix?provider=${provider}` +
+        `&langue=${encodeURIComponent(langue)}&genre=${encodeURIComponent(genre)}`,
+    ),
+
+  // Écouter une voix ne la retient pas : écouter et décider sont deux
+  // gestes, et deux routes.
+  async essayerVoix(slug: string, provider: string, voix: string) {
+    return poster<{ fichier: string; mesure: string }>(
+      `/api/projets/${slug}/voix/essai`, { provider, voix });
+  },
+
+  async choisirVoix(slug: string, provider: string, voix: string) {
+    return poster<ChoixVoix>(`/api/projets/${slug}/voix`, { provider, voix });
+  },
 
   // Refuser un visuel et en chercher un autre. Le refus est gardé, donc
   // deux clics ne rendent jamais la même image.

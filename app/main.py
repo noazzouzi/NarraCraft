@@ -263,6 +263,90 @@ def remplacer(slug: str, plan: str, corps: Refus | None = None) -> dict[str, Any
         raise HTTPException(400, str(erreur))
 
 
+@app.get("/api/voix")
+def bibliotheque(provider: str = "edge", langue: str = "",
+                 genre: str = "") -> dict[str, Any]:
+    """La bibliothèque d'un fournisseur, filtrable par langue et par sexe.
+
+    Les trois catalogues sont incompatibles — deux lettres de préfixe chez
+    Kokoro, du JSON Microsoft chez Edge, des étiquettes libres chez
+    ElevenLabs. `voice.catalogue` les normalise, donc cette route n'en
+    connaît qu'un seul format.
+    """
+    from fresque import voice as voice_mod
+
+    try:
+        toutes = voice_mod.catalogue(provider)
+    except voice_mod.VoiceError as erreur:
+        # Clé absente, réseau coupé, modèle non téléchargé : ce sont des
+        # états normaux d'installation, pas des pannes du serveur.
+        raise HTTPException(422, str(erreur))
+
+    retenues = voice_mod.filtrer(toutes, langue, genre)
+    return {
+        "provider": provider,
+        "total": len(toutes),
+        "langues": sorted({v.langue for v in toutes if v.langue}),
+        "voix": [
+            {"id": v.id, "nom": v.nom, "langue": v.langue,
+             "genre": v.genre, "detail": v.detail}
+            for v in retenues
+        ],
+    }
+
+
+@app.get("/api/fournisseurs")
+def fournisseurs() -> list[dict[str, Any]]:
+    """Les trois moteurs, et ce qu'ils coûtent. Liste close."""
+    return [
+        {"nom": "edge", "titre": "Microsoft Edge",
+         "note": "gratuit, sans clé, par le réseau"},
+        {"nom": "kokoro", "titre": "Kokoro",
+         "note": "local, gratuit, sans réseau"},
+        {"nom": "elevenlabs", "titre": "ElevenLabs",
+         "note": "payant, clé requise"},
+    ]
+
+
+@app.get("/api/projets/{slug}/voix")
+def voix_du_projet(slug: str) -> dict[str, Any]:
+    """La voix retenue pour ce projet, telle que le moteur la verra."""
+    reglages = _projet_yaml(_dossier(slug)).get("reglages") or {}
+    voix = reglages.get("voix") or {}
+    provider = voix.get("provider") or ""
+    bloc = voix.get(provider) or {}
+    return {"provider": provider, "voix": bloc.get("voice", "")}
+
+
+class ChoixVoix(BaseModel):
+    provider: str
+    voix: str
+
+
+@app.post("/api/projets/{slug}/voix/essai")
+def essayer_la_voix(slug: str, corps: ChoixVoix) -> dict[str, Any]:
+    """Écouter une voix sans la retenir.
+
+    L'essai dit le hook du script quand il existe : c'est sur lui qu'une
+    voix se juge, pas sur une phrase neutre.
+    """
+    _dossier(slug)
+    try:
+        return serveur.essayer_voix(slug, corps.provider, corps.voix)
+    except ValueError as erreur:
+        raise HTTPException(400, str(erreur))
+
+
+@app.post("/api/projets/{slug}/voix")
+def choisir_la_voix(slug: str, corps: ChoixVoix) -> dict[str, Any]:
+    """Retenir une voix. Elle s'écrit dans `projet.yaml`, pas ailleurs."""
+    _dossier(slug)
+    try:
+        return serveur.choisir_voix(slug, corps.provider, corps.voix)
+    except ValueError as erreur:
+        raise HTTPException(400, str(erreur))
+
+
 @app.get("/api/templates")
 def templates() -> list[dict[str, Any]]:
     import yaml

@@ -2581,13 +2581,87 @@ def test_trimming_a_silent_take_returns_it_whole():
 def test_an_unknown_voice_provider_says_which_ones_exist():
     from fresque import config, voice as voice_mod
 
-    config.use_project_overrides({"voix": {"provider": "elevenlabs"}})
+    config.use_project_overrides({"voix": {"provider": "festival"}})
     try:
         with pytest.raises(voice_mod.VoiceError) as erreur:
             voice_mod.moteur()
-        assert "edge" in str(erreur.value) and "kokoro" in str(erreur.value)
+        message = str(erreur.value)
+        for connu in ("edge", "kokoro", "elevenlabs"):
+            assert connu in message
     finally:
         config.use_project_overrides(None)
+
+
+# --- La bibliothèque de voix -------------------------------------------------
+#
+# Les trois fournisseurs décrivent leur catalogue de façon incompatible :
+# deux lettres de préfixe chez Kokoro, du JSON Microsoft chez Edge, des
+# étiquettes libres chez ElevenLabs. Ce qui est vérifié ici, c'est qu'ils
+# en sortent tous sous la même forme — sans quoi l'interface aurait trois
+# bibliothèques au lieu d'une.
+
+def test_kokoro_reads_its_catalogue_without_loading_the_model(monkeypatch):
+    """Lister les voix ne doit pas charger trois cent vingt-cinq
+    mégaoctets d'ONNX : le fichier de voix est un npz, ses clés sont les
+    noms, et les lire coûte onze millisecondes."""
+    from fresque import voice as voice_mod
+
+    def jamais():
+        raise AssertionError("le modèle ONNX ne doit pas être chargé")
+
+    monkeypatch.setattr(voice_mod, "_engine", jamais)
+    catalogue = voice_mod.MoteurKokoro.catalogue()
+    assert len(catalogue) > 40
+
+
+def test_a_kokoro_voice_name_carries_its_language_and_gender():
+    """`ff_siwis` est française et féminine. C'est la seule description que
+    Kokoro donne de ses voix — il n'y a pas de catalogue ailleurs."""
+    from fresque import voice as voice_mod
+
+    par_id = {v.id: v for v in voice_mod.MoteurKokoro.catalogue()}
+    siwis = par_id["ff_siwis"]
+    assert (siwis.langue, siwis.genre, siwis.code_langue) == ("fr-FR", "femme", "fr")
+    assert par_id["am_adam"].langue == "en-US"
+    assert par_id["am_adam"].genre == "homme"
+
+
+def test_the_library_filters_on_language_and_gender():
+    from fresque.voice import Voix, filtrer
+
+    catalogue = [
+        Voix(id="a", nom="A", langue="fr-FR", genre="homme"),
+        Voix(id="b", nom="B", langue="fr-CA", genre="femme"),
+        Voix(id="c", nom="C", langue="en-US", genre="homme"),
+    ]
+    # « fr » retient les francophones, pas seulement la France : une voix
+    # québécoise reste une voix française.
+    assert [v.id for v in filtrer(catalogue, langue="fr")] == ["a", "b"]
+    assert [v.id for v in filtrer(catalogue, genre="homme")] == ["a", "c"]
+    assert [v.id for v in filtrer(catalogue, "fr", "homme")] == ["a"]
+    assert len(filtrer(catalogue)) == 3
+
+
+def test_elevenlabs_names_the_variable_that_holds_the_key_never_its_value(
+        monkeypatch):
+    """Une clé absente est un état normal d'installation, pas une panne.
+    Le message dit où la poser — et ne peut pas divulguer ce qu'elle vaut,
+    puisqu'il n'y en a pas."""
+    from fresque import voice as voice_mod
+
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    with pytest.raises(voice_mod.VoiceError) as erreur:
+        voice_mod.MoteurElevenLabs.catalogue()
+    assert "ELEVENLABS_API_KEY" in str(erreur.value)
+
+
+def test_a_voice_name_from_the_browser_is_matched_before_it_reaches_an_argv():
+    from fresque import serveur
+
+    with pytest.raises(ValueError):
+        serveur.choisir_voix("sarkozy-essai-2min", "edge", "fr-FR; rm -rf /")
+    with pytest.raises(ValueError):
+        serveur.essayer_voix("sarkozy-essai-2min", "festival", "x")
 
 
 # --- Alignement forcé --------------------------------------------------------

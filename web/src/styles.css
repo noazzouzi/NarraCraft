@@ -298,3 +298,35 @@ h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; margin: 0; }
 .visuel .corps p { margin: 0; }
 .visuel .corps .leger { font-size: 11.5px; overflow-wrap: anywhere; }
 .visuel .corps button { margin-top: auto; min-height: 34px; font-size: 13px; }
+
+/* La bibliothèque de voix. Écouter et retenir sont deux gestes. */
+.voix { padding: 30px 40px; display: flex; flex-direction: column; gap: 18px; }
+.voix .reglages { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
+.voix .filtres { display: flex; gap: 8px; flex-wrap: wrap; }
+.voix .filtres button {
+  min-height: 36px; padding: 0 14px; font-size: 13.5px;
+}
+.voix .filtres button.choisi { border-color: var(--accent); color: var(--accent); }
+.voix .filtres select {
+  font-family: inherit; font-size: 13.5px; color: var(--doux);
+  background: var(--panneau); border: 1px solid var(--bord);
+  border-radius: 8px; height: 36px; padding: 0 10px;
+}
+.voix .ecoute {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 16px; border-radius: 10px;
+  border: 1px solid var(--bord); background: var(--panneau);
+}
+.voix .ecoute audio { height: 36px; flex-grow: 1; }
+
+.catalogue { display: flex; flex-direction: column; gap: 8px; }
+.voix-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 15px; border-radius: 10px;
+  border: 1px solid var(--bord); background: var(--panneau);
+}
+.voix-item.retenue { border-color: var(--ok); }
+.voix-item .quoi { flex-grow: 1; min-width: 0; }
+.voix-item .nom { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.voix-item .sous { font-size: 11.5px; color: var(--doux); margin-top: 2px; overflow-wrap: anywhere; }
+.voix-item button { min-height: 34px; font-size: 13px; }

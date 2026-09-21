@@ -114,6 +114,11 @@ export default function Projet() {
                 ))}
               </div>
             )}
+            {projet.fichiers.find((f) => f.fichier === "02-script.md")?.existe && (
+              <Link to={`/projets/${slug}/voix`} className="leger">
+                Choisir la voix →
+              </Link>
+            )}
             {projet.fichiers.find((f) => f.fichier === "03-shots.json")?.existe && (
               <Link to={`/projets/${slug}/visuels`} className="leger">
                 Voir les {Object.values(projet.composition).reduce((a, b) => a + b, 0)} éléments →

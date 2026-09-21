@@ -238,6 +238,50 @@ def dire_beat(slug: str, beat: str | None = None) -> dict[str, Any]:
 
 
 _ID_PLAN = re.compile(r"^S\d{3}$")
+#: Les identifiants de voix des trois fournisseurs : `ff_siwis`,
+#: `fr-FR-HenriNeural`, ou les vingt caractères d'ElevenLabs.
+_ID_VOIX = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+_FOURNISSEURS = ("kokoro", "edge", "elevenlabs")
+
+
+def _voix_valide(provider: str, voix: str) -> None:
+    if provider not in _FOURNISSEURS:
+        raise ValueError(f"fournisseur {provider!r} — attendu "
+                         f"{', '.join(_FOURNISSEURS)}")
+    if not _ID_VOIX.match(voix):
+        raise ValueError(f"voix {voix!r} n'est pas un identifiant valide")
+
+
+def essayer_voix(slug: str, provider: str, voix: str) -> dict[str, Any]:
+    """Synthétise une phrase avec une voix, sans la retenir."""
+    _voix_valide(provider, voix)
+    fait = subprocess.run(
+        [sys.executable, "-m", "fresque", "voix-essai", slug,
+         "--provider", provider, "--voix", voix],
+        cwd=_racine(), env=_environnement(), capture_output=True, text=True,
+    )
+    if fait.returncode != 0:
+        raise ValueError((fait.stderr or fait.stdout).strip().lstrip("✗ ")
+                         or "essai refusé")
+    lignes = [l.strip() for l in fait.stdout.splitlines() if l.strip()]
+    return {
+        "fichier": next((l[2:] for l in lignes if l.startswith("✓ ")), ""),
+        "mesure": next((l for l in lignes if not l.startswith("✓")), ""),
+    }
+
+
+def choisir_voix(slug: str, provider: str, voix: str) -> dict[str, Any]:
+    """Écrit la voix retenue dans `projet.yaml`."""
+    _voix_valide(provider, voix)
+    fait = subprocess.run(
+        [sys.executable, "-m", "fresque", "voix-choix", slug,
+         "--provider", provider, "--voix", voix],
+        cwd=_racine(), env=_environnement(), capture_output=True, text=True,
+    )
+    if fait.returncode != 0:
+        raise ValueError((fait.stderr or fait.stdout).strip().lstrip("✗ ")
+                         or "choix refusé")
+    return {"provider": provider, "voix": voix}
 
 
 def remplacer(slug: str, plan: str, raison: str = "") -> dict[str, Any]:
