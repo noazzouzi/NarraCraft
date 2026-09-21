@@ -17,6 +17,20 @@ dans un état invisible.
 
 ## L'atelier
 
+Une application web : FastAPI lit les fichiers et lance les commandes,
+React les affiche.
+
+```bash
+pip install -r app/requirements.txt
+npm install --prefix web && npm run build --prefix web
+python -m uvicorn app.main:app --port 4321   # http://127.0.0.1:4321
+```
+
+Pour travailler sur l'interface, deux processus : `uvicorn` sur 4321 et
+`npm run dev --prefix web` sur 5173, qui relaie `/api` vers le premier.
+
+L'ancienne page rendue en Python reste disponible et fait la même chose :
+
 ```bash
 python -m fresque serve          # http://127.0.0.1:4321
 ```
