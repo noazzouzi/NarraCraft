@@ -1,126 +1,128 @@
 ---
 name: fresque-recherche
-description: Mène la recherche documentaire d'un projet Fresque à partir de son brief — faits sourcés, chronologie, détails sensoriels, pistes d'archives visuelles libres. Produit `01-research.md`. À utiliser après `fresque-brief`, ou quand l'utilisateur demande la recherche, les sources ou la documentation d'un projet Fresque.
+description: Mène la recherche documentaire d'un projet Fresque sur cinq axes parallèles — chronologie, mécanique, chiffres, contradiction, archives. Écrit un plan, un journal de sources append-only, puis la synthèse `01-research.md`. Reprend où elle s'était arrêtée après un crash. À utiliser après le choix d'une piste, ou quand l'utilisateur demande la recherche ou les sources d'un projet.
 ---
 
-# Recherche documentaire
+# Recherche
 
-Produire `projects/<slug>/01-research.md` à partir de `00-brief.md`.
+## RÔLE
 
-Lire le brief en entier avant de chercher quoi que ce soit. La recherche
-sert **l'angle**, pas le sujet. Un fait vrai et intéressant qui ne sert pas
-l'angle retenu n'entre pas dans le fichier — il encombre le script.
+Rassembler tout ce sur quoi le script s'appuiera. Aucun fait ne s'invente plus tard.
 
-## Ce que ce fichier doit contenir, et pourquoi
+## ENTRÉE
 
-Un script de documentaire échoue presque toujours au même endroit : il
-énonce des faits corrects mais abstraits. Ce qui rend une narration
-crédible, ce sont les **détails concrets et vérifiables** — l'heure exacte,
-le nom de la rue, la température ce jour-là, ce qu'un témoin a dit
-textuellement. Ces détails ne s'inventent pas au moment d'écrire. Ils se
-collectent maintenant, ou ils n'existeront jamais.
+- `projects/<slug>/pistes.md` — la piste retenue : angle, pivot, preuves.
+- `projects/<slug>/00-brief.md` s'il existe.
+- Le web : WebSearch et WebFetch. Rien d'autre.
 
-C'est pourquoi la section « Détails sensoriels » n'est pas un bonus : c'est
-la section qui détermine si le documentaire sonnera vrai.
+## SORTIE
 
-## Procédure
+Trois fichiers, dans cet ordre :
 
-**1.** Lire `00-brief.md`, en particulier l'angle, le pivot et la structure.
+| Fichier | Quoi | Quand |
+|---|---|---|
+| `01-plan.md` | les cinq axes et leurs questions | écrit **avant** de chercher |
+| `01-sources.jsonl` | une ligne par source lue, append-only | pendant |
+| `01-research.md` | la synthèse | à la fin |
 
-**2.** Chercher, acte par acte. Viser 6 à 12 requêtes web par acte. Pour
-chaque acte, on cherche : les faits établis, la chronologie fine, les
-personnes nommées, les chiffres, les citations textuelles, et ce qui est
-contesté.
+Le script ne lit que `01-research.md`. Les deux autres existent pour survivre à un crash.
 
-**3.** Vérifier les faits porteurs.** Tout fait sur lequel repose le pivot,
-ou qui sera énoncé comme certain, doit être confirmé par **deux sources
-indépendantes**. Une source qui en cite une autre ne compte pas pour deux.
+Une ligne de `01-sources.jsonl` :
 
-**4.** Repérer les archives visuelles. Pour chaque acte, lister les pistes
-concrètes : quelle catégorie Wikimedia Commons, quelle collection
-Archive.org, quelle recherche Gallica. Ne pas télécharger — juste repérer et
-noter les URL. C'est ce qui permettra plus tard de ne générer que ce qui
-manque vraiment, et donc de diviser le coût par deux.
+```json
+{"axe":"chiffres","url":"...","titre":"...","date":"2024-03-11","type":"primaire","extrait":"...","sert":"le taux de redevance"}
+```
 
-**5.** Écrire `01-research.md`.
+## PROCÉDURE
 
-**6.** Signaler à l'utilisateur, en deux ou trois lignes : ce qui est solide,
-ce qui est fragile, et si quelque chose oblige à revoir l'angle du brief.
+**1. Écrire `01-plan.md`.** Cinq axes, trois à six questions chacun. Une question est précise et a une réponse : « quel pourcentage du chiffre d'affaires », pas « quelle était la situation financière ».
+
+| Axe | Ce qu'il rapporte |
+|---|---|
+| Chronologie | dates, heures, ordre exact des faits |
+| Mécanique | comment ça marchait concrètement — contrats, règles, procédures |
+| Chiffres | montants, volumes, taux, et leur ordre de grandeur parlant |
+| Contradiction | ce qui est contesté, les deux versions, qui dit quoi |
+| Archives | images libres de droits repérées, jamais téléchargées |
+
+**2. Lancer les cinq axes en parallèle**, un agent par axe, Sonnet 5. Chaque agent lit `01-plan.md`, cherche, et écrit ses lignes dans `01-sources.jsonl`. Un axe qui échoue ne fait pas échouer l'étape : on le note et on continue.
+
+**3. Trier les sources** — Opus 5, jamais Haiku. Écarter les sources qui se recopient, garder la primaire.
+
+**4. Écrire `01-research.md`** — Opus 5.
+
+**5. Dire à l'utilisateur** en trois lignes : ce qui est solide, ce qui est fragile, et si la recherche oblige à changer d'angle.
+
+## REPRISE
+
+Par défaut, on reprend. Au démarrage : lire `01-sources.jsonl`, compter les sources par axe, ne relancer que les axes incomplets. `--recommencer` efface et repart de zéro.
+
+## SOURCES
+
+Une source primaire est le document lui-même, pas l'article qui en parle.
+
+- Dépôts d'entreprise, jugements, rapports parlementaires, transcriptions d'audience, archives d'État.
+- **Franchise Disclosure Document** pour toute franchise américaine : public, il contient le taux de redevance exact — souvent le chiffre central du pivot. Sans ce réflexe, la recherche s'arrête à la presse.
+- Chercher dans la langue du sujet. Un événement russe, japonais ou allemand a ses meilleures sources — et ses meilleures archives — dans sa langue.
+- Wikipédia est un point de départ. Suivre ses notes de bas de page et citer la source primaire.
+
+## RÈGLES
+
+- Aucun fait sans URL. Sans exception.
+- Tout fait qui porte le pivot est confirmé par deux sources indépendantes. Une source qui en cite une autre ne compte pas pour deux.
+- Ne jamais faire dire à une source ce qu'elle ne dit pas. En cas de doute, citer textuellement.
+- Chaque chiffre a son ordre de grandeur concret. Un chiffre nu ne laisse aucune trace à l'oral.
+- Viser 10 à 20 détails sensoriels sourcés — heure, météo, bruit, couleur, geste, objet. C'est ce qui rend la narration incarnée, et ça ne s'invente pas plus tard.
+- Les archives se repèrent, ne se téléchargent pas : Wikimedia Commons, Archive.org, Gallica. Noter la catégorie exacte, l'URL et la licence.
+- Signaler tout de suite si la recherche contredit la piste. Corriger l'angle maintenant coûte moins cher qu'après le script.
+
+## REFUS
+
+- Un fait sans source ne va pas dans « Faits ». Il va dans « Contesté » ou il disparaît.
+- Un trou documentaire s'écrit dans « Ce qu'on n'a pas trouvé ». Il ne se comble jamais par déduction.
+- Le pivot ne tient sur aucune source solide → s'arrêter et le dire, avant d'écrire la synthèse.
 
 ## Format de `01-research.md`
 
 ```markdown
 # Recherche — <titre>
 
-> Sources consultées : <n> · Faits vérifiés à deux sources : <n>
-> Dernière mise à jour : <AAAA-MM-JJ>
+> Sources : <n> · Primaires : <n> · Faits à deux sources : <n>
+> <AAAA-MM-JJ>
 
 ## Chronologie
 | Quand | Quoi | Source |
 |---|---|---|
-| 1986-04-26 01:23:04 | <fait précis> | [nom](url) |
+
+## Mécanique
+<Comment ça marchait, concrètement. Contrats, règles, procédures.> [source](url)
 
 ## Personnes
-### <Nom> — <rôle en 4 mots>
-<Ce qu'il faut savoir, et seulement ce qui sert l'angle.> [source](url)
-
-## Faits par acte
-### Acte I
-- <Fait, formulé précisément.> [source](url) [source2](url)
-- ...
+### <Nom> — <rôle en quatre mots>
+<Seulement ce qui sert l'angle.> [source](url)
 
 ## Chiffres
 | Valeur | Ce que c'est | Ordre de grandeur parlant | Source |
 |---|---|---|---|
-| 3 200 t | masse du couvercle | un Airbus A320 à vide | [src](url) |
-
-<Un chiffre sans comparaison concrète ne veut rien dire à l'oral. Toujours
-remplir la colonne « ordre de grandeur ».>
 
 ## Citations
 > « <texte exact> »
 > — <qui>, <quand>, [source](url)
 
 ## Détails sensoriels
-<Ce qui permet d'écrire une narration incarnée. Heure, météo, bruit, odeur,
-couleur, geste, objet. Chaque ligne sourcée. Viser 10 à 20 entrées.>
 - <détail> [source](url)
 
 ## Contesté ou incertain
 | Affirmation | Position A | Position B | Comment le script doit traiter |
 |---|---|---|---|
 
-<Règle : ce qui est incertain est énoncé comme incertain dans le script.
-Cette colonne est une instruction, pas une note.>
+<La dernière colonne est une instruction pour le script, pas une note.>
 
-## Pistes d'archives visuelles
-### Acte I
-- **Wikimedia Commons** — catégorie `<nom exact>` — <ce qu'on y trouve> — <url>
+## Archives repérées
+- **Wikimedia Commons** — catégorie `<nom exact>` — <licence> — <url>
 - **Archive.org** — collection `<id>` — <url>
 - **Gallica** — recherche `<termes>` — <url>
-<Noter la licence quand elle est visible. Domaine public / CC-BY / etc.>
 
 ## Ce qu'on n'a pas trouvé
-<Trous documentaires. Le script devra les contourner ou les assumer
-explicitement. Ne jamais les combler par de la déduction présentée comme
-un fait.>
+- <trou documentaire>
 ```
-
-## Règles de fond
-
-**Aucun fait sans URL.** Sans exception. Si une affirmation ne peut pas être
-sourcée, elle va dans « Contesté ou incertain » ou elle disparaît.
-
-**Ne jamais faire dire à une source ce qu'elle ne dit pas.** En cas de doute
-sur une formulation, citer textuellement plutôt que paraphraser.
-
-**Wikipédia est un point de départ, pas une source.** Suivre ses notes de
-bas de page jusqu'à la source primaire et citer celle-ci.
-
-**Chercher aussi en langue d'origine du sujet.** Un événement russe, japonais
-ou allemand a ses meilleures sources dans sa langue — et surtout ses
-meilleures archives visuelles, qui sont souvent invisibles depuis une
-recherche en français.
-
-**Signaler tout de suite si la recherche contredit le brief.** Il est infiniment
-moins coûteux de corriger l'angle maintenant que d'avoir écrit le script.
