@@ -50,6 +50,9 @@ export type Commande = {
   produit: string;
   depense: boolean;
   longue: boolean;
+  // Celle qui accomplit vraiment l'étape, quand plusieurs écrivent
+  // le même fichier. `align` estime, `voice` synthétise.
+  principale: boolean;
   options: Option[];
 };
 
@@ -135,6 +138,20 @@ export type Bibliotheque = {
 export type Fournisseur = { nom: string; titre: string; note: string };
 export type ChoixVoix = { provider: string; voix: string };
 
+// La piste voix. `estime` distingue une vraie synthèse d'un alignement
+// estimé : les deux écrivent le même fichier, et les confondre fait croire
+// qu'un film a du son quand il n'en a pas.
+export type PisteAudio = {
+  fichier: string | null;
+  octets: number | null;
+  beats: number | null;
+  mots: number | null;
+  duree_s: number | null;
+  source: string;
+  estime: boolean;
+  voix: Record<string, string | number>;
+};
+
 export type EtatJournal = {
   texte: string;
   offset: number;
@@ -171,6 +188,7 @@ export const api = {
   hook: (slug: string) => lire<Hook>(`/api/projets/${slug}/hook`),
   visuels: (slug: string) => lire<Galerie>(`/api/projets/${slug}/visuels`),
   fournisseurs: () => lire<Fournisseur[]>("/api/fournisseurs"),
+  audio: (slug: string) => lire<PisteAudio>(`/api/projets/${slug}/audio`),
   choixVoix: (slug: string) => lire<ChoixVoix>(`/api/projets/${slug}/voix`),
 
   bibliotheque: (provider: string, langue: string, genre: string) =>

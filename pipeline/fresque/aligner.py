@@ -147,7 +147,7 @@ def _moteur():
             "  pip install torch torchaudio "
             "--index-url https://download.pytorch.org/whl/cpu\n"
             "Ils sont optionnels : sans eux le pipeline tourne en "
-            "`source: kokoro`, avec des positions de mot estimées."
+            "`source: mesure`, avec des positions de mot estimées."
         ) from erreur
     return torch, torchaudio, MMS_FA
 
@@ -322,7 +322,9 @@ def _affichage(texte: str, mot: str, index: int, tous: list[str]) -> str:
 
 def bases_depuis(alignement: dict[str, Any]) -> dict[str, float]:
     """Les instants de début de beat d'un alignement déjà mesuré."""
-    if alignement.get("source") not in ("kokoro", SOURCE):
+    # « kokoro » est l'ancien nom de « mesure » : les projets
+    # montés avant le renommage gardent leur fichier tel quel.
+    if alignement.get("source") not in ("mesure", "kokoro", SOURCE):
         raise AlignError(
             f"alignment.json est en `source: {alignement.get('source')}` — "
             "ses bornes de beat sont estimées, pas mesurées. Lancer "

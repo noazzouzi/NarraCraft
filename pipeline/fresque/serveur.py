@@ -91,6 +91,12 @@ class Commande:
     depense: bool = False          # appelle une API payante
     longue: bool = False           # plusieurs minutes, bouton d'arrêt utile
     options: tuple[Option, ...] = ()
+    #: Celle qui accomplit vraiment l'étape, quand plusieurs écrivent le
+    #: même fichier. `align` et `voice` produisent tous deux
+    #: `alignment.json`, mais `align` n'écrit que des durées estimées : la
+    #: ligne « voix » de la chaîne proposait donc l'estimation, et cliquer
+    #: dessus remplissait l'étape sans qu'aucun son existe.
+    principale: bool = False
 
 
 #: Liste close. Une commande absente d'ici n'est pas lançable depuis le
@@ -128,8 +134,8 @@ COMMANDES: dict[str, Commande] = {
     ),
     "shots": Commande("Valider le plan visuel", exige="03-shots.json"),
     "voice": Commande(
-        "Synthétiser la voix", exige="02-script.md",
-        produit="04-audio/alignment.json", longue=True,
+        "Générer l'audio", exige="02-script.md",
+        produit="04-audio/alignment.json", longue=True, principale=True,
     ),
     "fetch": Commande(
         "Sourcer les archives libres", exige="03-shots.json",

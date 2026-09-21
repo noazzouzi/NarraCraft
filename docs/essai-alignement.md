@@ -16,14 +16,21 @@ estimation.
 | `source` | Bornes de beat | Position des mots | Écrit par | Coût |
 |---|---|---|---|---|
 | `estimate` | estimées | estimées | `fresque align` | nul, sans audio |
-| `kokoro` | **mesurées sur l'audio** | estimées par syllabes | `fresque voice` | nul, local |
+| `mesure` | **mesurées sur l'audio** | estimées par syllabes | `fresque voice` | selon le moteur |
 | `forced` | mesurées | **mesurées** | `fresque aligner` | nul, local |
 
-`kokoro` mesure la longueur réelle de la forme d'onde produite
+`mesure` prend la longueur réelle de la forme d'onde produite
 (`duration = len(samples) / rate`) — ce n'est **pas** un timestamp rapporté
 par le moteur. C'est la distinction qui fait tenir la règle de `CLAUDE.md` :
 les coupes du montage tombent déjà au bon endroit dès `voice`, parce qu'elles
 ne dépendent que des bornes de beat.
+
+Ce champ décrit **d'où viennent les nombres, pas quel moteur a parlé** :
+les trois moteurs rendent des bornes mesurées. Qui a parlé est dans
+`voix.provider`. La valeur s'appelait `kokoro` du temps où il n'y avait
+qu'un moteur, si bien qu'un fichier produit avec Edge annonçait Kokoro ;
+les projets montés avant le renommage gardent l'ancienne valeur, que le
+code accepte toujours.
 
 Ce qui restait faux, c'est la position d'un mot *à l'intérieur* d'un beat —
 donc les sous-titres, et tout surlignage mot à mot.

@@ -55,6 +55,7 @@ def commandes() -> dict[str, Any]:
             "produit": c.produit,
             "depense": c.depense,
             "longue": c.longue,
+            "principale": c.principale,
             "options": [asdict(o) for o in c.options],
         }
         for nom, c in serveur.COMMANDES.items()
@@ -292,6 +293,41 @@ def bibliotheque(provider: str = "edge", langue: str = "",
              "genre": v.genre, "detail": v.detail}
             for v in retenues
         ],
+    }
+
+
+@app.get("/api/projets/{slug}/audio")
+def audio(slug: str) -> dict[str, Any]:
+    """La piste voix : ce qu'on entend, et ce qu'elle mesure.
+
+    Tout vient d'`alignment.json`, qui porte les durées **mesurées** sur
+    l'audio réel. Le champ `source` dit s'il s'agit d'une vraie voix ou
+    d'une estimation : les deux étapes écrivent le même fichier, et
+    confondre les deux fait croire qu'un film a du son quand il n'en a pas.
+    """
+    dossier = _dossier(slug)
+    piste = dossier / "04-audio" / "voix.wav"
+    fiche = dossier / "04-audio" / "alignment.json"
+
+    donnees: dict[str, Any] = {}
+    if fiche.is_file():
+        try:
+            donnees = json.loads(fiche.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            donnees = {}
+
+    estime = donnees.get("source") == "estimate"
+    return {
+        "fichier": "04-audio/voix.wav" if piste.is_file() else None,
+        "octets": piste.stat().st_size if piste.is_file() else None,
+        "beats": donnees.get("nb_beats"),
+        "mots": donnees.get("nb_mots"),
+        "duree_s": donnees.get("duree_totale_s"),
+        "source": donnees.get("source", ""),
+        "estime": estime,
+        # La fiche du moteur n'a pas les mêmes champs d'un moteur à
+        # l'autre : on la rend telle quelle.
+        "voix": donnees.get("voix") or {},
     }
 
 

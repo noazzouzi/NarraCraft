@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, type Commande, type ProjetDetail } from "../api";
 import Pistes from "./Pistes";
 import Hook from "./Hook";
+import Audio from "./Audio";
 
 const CHECKPOINTS: Record<string, string> = {
   "02-script.md": "CHECKPOINT 1",
@@ -81,14 +82,18 @@ export default function Projet() {
   if (erreur) return <div className="erreur" style={{ margin: 40 }}>{erreur}</div>;
   if (!projet) return <p className="vide" style={{ padding: 40 }}>Lecture des fichiers…</p>;
 
-  // Deux commandes peuvent écrire le même fichier : `voice` produit
-  // l'alignement, `aligner` le remplace par une mesure. C'est la PREMIÈRE
-  // qui tient la ligne de l'étape — celle qui fait exister le fichier — et
-  // la seconde se retrouve dans le panneau « Lancer ». Le dernier qui gagne
-  // afficherait « Aligner les mots » sur la ligne « voix ».
+  // Trois commandes écrivent `alignment.json` : `align` l'estime sans
+  // audio, `voice` le mesure sur du son réel, `aligner` y replace les mots.
+  // La ligne « voix » de la chaîne doit porter celle qui accomplit l'étape,
+  // pas la première déclarée — sinon le bouton propose l'estimation, et
+  // cliquer dessus remplit l'étape sans qu'aucun son existe.
   const parProduit = new Map<string, Commande>();
   for (const c of Object.values(commandes)) {
-    if (c.produit && !parProduit.has(c.produit)) parProduit.set(c.produit, c);
+    if (!c.produit) continue;
+    const tenante = parProduit.get(c.produit);
+    if (!tenante || (c.principale && !tenante.principale)) {
+      parProduit.set(c.produit, c);
+    }
   }
   const surLaChaine = new Set([...parProduit.values()].map((c) => c.nom));
   const pistesEcrites = projet.fichiers.find((f) => f.fichier === "pistes.md" && f.existe);
@@ -153,6 +158,15 @@ export default function Projet() {
         {/* Le script change : on relit le hook plutôt que de garder
             affiché celui d'une version précédente. */}
         {scriptEcrit && <Hook key={scriptEcrit.octets ?? 0} slug={slug} />}
+
+        {scriptEcrit && (
+          <Audio
+            slug={slug}
+            journal={texte}
+            vivant={vivant}
+            surLancement={(id) => { setSuivi(id); recharger(); }}
+          />
+        )}
 
         <h3 style={{ marginBottom: 14 }}>La chaîne</h3>
         {projet.fichiers.map((f, i) => {

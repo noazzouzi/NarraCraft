@@ -2724,7 +2724,7 @@ def test_forced_alignment_refuses_an_estimate_it_cannot_trust():
     with pytest.raises(AlignError, match="estimées"):
         bases_depuis({"source": "estimate", "beats": []})
 
-    mesure = {"source": "kokoro",
+    mesure = {"source": "mesure",
               "beats": [{"id": "B001", "debut_s": 0.0},
                         {"id": "B002", "debut_s": 4.25}]}
     assert bases_depuis(mesure) == {"B001": 0.0, "B002": 4.25}
@@ -3712,6 +3712,36 @@ def test_the_workshop_can_run_every_step_the_pipeline_has():
     assert "Kokoro" not in serveur_mod.COMMANDES["voice"].libelle
 
 
+def test_the_source_field_names_the_method_not_the_engine():
+    """`source` valait « kokoro », du temps où il n'y avait qu'un moteur.
+    Un film synthétisé avec Edge annonçait donc Kokoro dans son propre
+    fichier d'alignement — et le nom du moteur était déjà ailleurs, dans
+    `voix.provider`. Ce champ dit d'où viennent les nombres."""
+    from fresque import aligner as aligner_mod
+
+    bases = {"beats": [{"id": "B001", "debut_s": 0.0}]}
+    for mesure in ("mesure", "kokoro", aligner_mod.SOURCE):
+        aligner_mod.bases_depuis({**bases, "source": mesure})
+
+    with pytest.raises(aligner_mod.AlignError):
+        aligner_mod.bases_depuis({**bases, "source": "estimate"})
+
+
+def test_the_step_that_completes_a_file_holds_its_line():
+    """Trois commandes écrivent `alignment.json`. La ligne « voix » de la
+    chaîne doit porter celle qui la remplit vraiment : `align` n'écrit que
+    des durées estimées, et cliquer dessus remplissait l'étape sans
+    qu'aucun son existe."""
+    from fresque import serveur
+
+    memes = [c for c in serveur.COMMANDES.values()
+             if c.produit == "04-audio/alignment.json"]
+    principales = [c for c in memes if c.principale]
+
+    assert len(memes) > 1, "le cas ne se pose que si plusieurs écrivent le fichier"
+    assert [c.libelle for c in principales] == ["Générer l'audio"]
+
+
 def test_an_estimated_alignment_is_not_a_voice(tmp_path):
     """`align` et `voice` écrivent le même fichier. La jauge de l'atelier
     testait sa seule présence, donc elle affichait la voix comme faite après
@@ -3726,7 +3756,7 @@ def test_an_estimated_alignment_is_not_a_voice(tmp_path):
     cible.write_text(json.dumps({"source": "estimate"}), encoding="utf-8")
     assert serveur_mod._etape_faite(dossier, "04-audio/alignment.json") is False
 
-    for vraie in ("kokoro", "edge", "forced"):
+    for vraie in ("mesure", "kokoro", "forced"):
         cible.write_text(json.dumps({"source": vraie}), encoding="utf-8")
         assert serveur_mod._etape_faite(dossier, "04-audio/alignment.json") is True
 

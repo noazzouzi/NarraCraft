@@ -635,10 +635,13 @@ def synthesize(
     _write_wav(audio_dir / "voix.wav", track, SAMPLE_RATE)
 
     return {
-        # `source` dit d'où viennent les nombres, pas quel moteur a parlé :
-        # les deux moteurs donnent des bornes de beat mesurées, donc la même
-        # qualité temporelle. `voix.provider` dit qui a parlé.
-        "source": "kokoro",
+        # `source` dit d'où viennent les nombres, pas quel moteur a parlé.
+        # Il valait « kokoro », du temps où il n'y avait qu'un moteur : un
+        # fichier produit avec Edge annonçait donc Kokoro. Les trois
+        # moteurs donnent des bornes de beat mesurées, donc la même qualité
+        # temporelle, et c'est cela que ce champ décrit. Qui a parlé est
+        # dans `voix.provider`, et nulle part ailleurs.
+        "source": "mesure",
         "avertissement": (
             "Durées de beat mesurées sur l'audio réel. Position des mots à "
             "l'intérieur d'un beat répartie par syllabes : les coupes du "
