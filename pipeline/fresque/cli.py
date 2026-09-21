@@ -106,6 +106,43 @@ def cmd_plans(args: argparse.Namespace) -> int:
     return _claude("plans", args)
 
 
+def cmd_controle(args: argparse.Namespace) -> int:
+    """Faire regarder les visuels, un par un.
+
+    Le code vérifie la licence, la résolution, le ratio et les doublons.
+    Il ne peut pas vérifier que l'image montre le bon sujet : mesuré sur un
+    film réel, `paper receipt roll` a rendu des rouleaux de papier toilette
+    victoriens, sous bonne licence et en bonne résolution. Tout ce que le
+    code sait vérifier était vert.
+    """
+    from . import controle as controle_mod
+
+    project = Project.open(args.slug)
+    if not project.shots.is_file():
+        return _fail("03-shots.json manquant — rien à contrôler")
+    if not project.assets.is_file():
+        return _fail("aucun visuel sourcé — lancer `fetch` d'abord")
+
+    chemin = project.visuals_dir / controle_mod.FICHIER
+    if args.recommencer:
+        chemin.unlink(missing_ok=True)
+        print("· verdicts précédents effacés")
+
+    code = _claude("controle", args)
+    if code != 0:
+        return code
+
+    try:
+        compte = controle_mod.bilan(project.visuals_dir)
+    except controle_mod.ControleError as erreur:
+        return _fail(str(erreur))
+    print(f"  {compte['garde']} gardés · {compte['refaire']} à refaire · "
+          f"{compte['doute']} en doute")
+    if compte["refaire"]:
+        print(f"  réparer : python -m fresque refaire {args.slug} --refuses")
+    return 0
+
+
 def cmd_pistes(args: argparse.Namespace) -> int:
     """Relit `pistes.md` et le contrôle — le même contrôle que l'interface."""
     from . import pistes as pistes_mod
@@ -231,16 +268,58 @@ def cmd_hook(args: argparse.Namespace) -> int:
 
 
 def cmd_refaire(args: argparse.Namespace) -> int:
-    """Remplacer le visuel d'un plan, et d'un seul.
+    """Remplacer le visuel d'un plan, ou de tous ceux que le contrôle a
+    refusés.
 
     C'est le bouton « Remplacer » de la galerie. Le refus est écrit dans
     `05-visuals/rejets.jsonl` avant la nouvelle recherche : sans ce
     registre, le second clic relance la même requête et retombe sur le même
     candidat — on aurait un bouton qui ne fait rien.
+
+    `--refuses` enchaîne la même opération sur tous les plans que
+    `fresque controle` a marqués `refaire`. C'est la réparation d'un film
+    entier en une commande.
     """
-    from . import fetch as fetch_mod
+    from . import controle as controle_mod
 
     project = Project.open(args.slug)
+
+    if args.refuses:
+        try:
+            vises = controle_mod.refuses(project.visuals_dir)
+        except controle_mod.ControleError as erreur:
+            return _fail(str(erreur))
+        if not vises:
+            print("· aucun plan refusé par le contrôle")
+            return 0
+        print(f"· {len(vises)} plan(s) refusés : {', '.join(vises)}")
+        echecs = 0
+        for identifiant in vises:
+            args.plan = identifiant
+            if _refaire_un(args, project) != 0:
+                echecs += 1
+        # Un verdict qui porte sur une image disparue est une fausse
+        # alerte : on l'oublie pour ceux qui ont bien été remplacés.
+        controle_mod.oublier(
+            project.visuals_dir,
+            [s for s in vises if s not in _NON_REMPLACES])
+        _NON_REMPLACES.clear()
+        print(f"✓ {len(vises) - echecs}/{len(vises)} remplacés")
+        return 1 if echecs == len(vises) else 0
+
+    if not args.plan:
+        return _fail("nommer un plan (ex. S012), ou passer --refuses")
+    return _refaire_un(args, project)
+
+
+#: Les plans qu'une passe `--refuses` n'a pas su remplacer. Leur verdict
+#: reste, sinon la galerie dirait qu'ils sont réparés.
+_NON_REMPLACES: set[str] = set()
+
+
+def _refaire_un(args: argparse.Namespace, project: Project) -> int:
+    from . import fetch as fetch_mod
+
     script = script_parser.parse(project.script)
     plan = shots_mod.load(project.shots, [b.id for b in script.beats])
 
@@ -283,6 +362,7 @@ def cmd_refaire(args: argparse.Namespace) -> int:
                 shot, project.visuals_dir, report=lambda ligne: print(ligne))
         except images_mod.ImageError as erreur:
             fetch_mod.write_assets(assets, project.assets)
+            _NON_REMPLACES.add(vise)
             return _fail(str(erreur))
     else:
         nouveaux, manquants = fetch_mod.fetch_archives(
@@ -292,6 +372,7 @@ def cmd_refaire(args: argparse.Namespace) -> int:
         )
         if manquants:
             fetch_mod.write_assets(assets, project.assets)
+            _NON_REMPLACES.add(vise)
             return _fail(f"{vise} : plus aucun candidat pour « "
                          f"{shot.requete} » — changer la requête dans "
                          "03-shots.json")
@@ -1380,6 +1461,14 @@ def main(argv: list[str] | None = None) -> int:
     explorer_cmd = add(
         "explorer", "Proposer quatre pistes à partir du sujet", cmd_explorer)
     add("pistes", "Relire et contrôler pistes.md", cmd_pistes)
+    controle_cmd = add(
+        "controle", "Vérifier que chaque visuel montre le bon sujet",
+        cmd_controle)
+    controle_cmd.add_argument(
+        "--recommencer", action="store_true",
+        help="oublier les verdicts précédents et tout rejuger",
+    )
+    controle_cmd.add_argument("--modele", default=None)
     recherche_cmd = add(
         "recherche", "Mener la recherche sur la piste retenue", cmd_recherche)
     recherche_cmd.add_argument(
@@ -1395,8 +1484,13 @@ def main(argv: list[str] | None = None) -> int:
     align_cmd = add("align", "Estimer les timings depuis le script", cmd_align)
     align_cmd.add_argument("--target", type=float, help="durée cible en minutes")
     add("lint", "Vérifier le script contre les règles d'écriture", cmd_lint)
-    refaire_cmd = add("refaire", "Remplacer le visuel d'un seul plan", cmd_refaire)
-    refaire_cmd.add_argument("plan", help="identifiant du plan, ex. S012")
+    refaire_cmd = add("refaire", "Remplacer le visuel d'un plan", cmd_refaire)
+    refaire_cmd.add_argument(
+        "plan", nargs="?", default=None, help="identifiant du plan, ex. S012")
+    refaire_cmd.add_argument(
+        "--refuses", action="store_true",
+        help="remplacer tous les plans que `controle` a marqués `refaire`",
+    )
     refaire_cmd.add_argument(
         "--raison", default=None, help="pourquoi ce visuel est refusé")
     hook_cmd = add("hook", "Entendre un beat sans synthétiser le film", cmd_hook)

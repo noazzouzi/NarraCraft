@@ -20,7 +20,7 @@ import requests
 
 from . import config
 from .shots import SOURCEES, Shot
-from .sources import openverse, wikimedia
+from .sources import openverse, pexels, wikimedia
 from .sources.base import Candidate
 
 Reporter = Callable[[str], None]
@@ -29,7 +29,13 @@ Reporter = Callable[[str], None]
 #: Openverse second, and only as a fallback — it indexes renditions rather
 #: than originals and tops out around 1024px (see its module docstring), so a
 #: shot it covers is a shot we would otherwise have had to pay to generate.
-CASCADE = ("wikimedia_commons", "openverse")
+#
+#: Pexels ferme la marche : ce n'est pas de l'archive mais du stock
+#: contemporain, et il ne doit servir que là où les deux premiers n'ont
+#: rien. Mesuré sur un film réel : trois plans sont restés sans visuel
+#: faute de photographie moderne — un comptoir de restaurant, une salle
+#: vide, un client qui paie. Ce fonds les couvre.
+CASCADE = ("wikimedia_commons", "openverse", "pexels")
 
 #: Below this, a source image upscaled into a 1080p frame is visibly soft,
 #: and the Ken Burns zoom makes it worse.
@@ -108,6 +114,20 @@ def _search_wikimedia(query: str, session) -> tuple[list[Candidate], str, int]:
     )
 
 
+def _search_pexels(query: str, session) -> tuple[list[Candidate], str, int]:
+    """Sans clé, ce fonds n'existe pas — ce n'est pas une panne.
+
+    `PEXELS_API_KEY` est gratuite mais pas universelle : une installation
+    qui ne l'a pas doit voir la cascade continuer, pas s'arrêter.
+    """
+    try:
+        found = pexels.search_photos(
+            query, limit=PROFONDEUR, min_width=WIDTH_FALLBACK, session=session)
+    except pexels.PexelsError:
+        return [], query, WIDTH_FALLBACK
+    return found, query, WIDTH_FALLBACK
+
+
 def _search_openverse(query: str, session) -> tuple[list[Candidate], str, int]:
     found = openverse.search(
         query, limit=PROFONDEUR, min_width=WIDTH_FALLBACK, session=session,
@@ -119,6 +139,7 @@ def _search_openverse(query: str, session) -> tuple[list[Candidate], str, int]:
 PROVIDERS = {
     "wikimedia_commons": (_search_wikimedia, wikimedia.download),
     "openverse": (_search_openverse, openverse.download),
+    "pexels": (_search_pexels, pexels.download_photo),
 }
 
 

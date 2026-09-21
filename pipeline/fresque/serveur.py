@@ -63,6 +63,11 @@ ETAPES: tuple[tuple[str, str], ...] = (
     ("plan visuel", "03-shots.json"),
     ("voix", "04-audio/alignment.json"),
     ("visuels", "05-visuals/assets.json"),
+    # Un film dont les visuels n'ont pas été regardés n'est pas fini. Le
+    # code vérifie la licence, la résolution et les doublons ; seul un
+    # regard attrape une image qui montre autre chose que ce qu'on a
+    # demandé — et c'est ce qui s'est vu sur le premier film complet.
+    ("contrôle", "05-visuals/controle.jsonl"),
     ("montage", "06-timeline.json"),
     ("vidéo", "07-out/video.mp4"),
 )
@@ -151,6 +156,14 @@ COMMANDES: dict[str, Commande] = {
     ),
     "rushes": Commande(
         "Sourcer le métrage d'archive", exige="03-shots.json", longue=True,
+    ),
+    # La seule étape qui regarde les images. Le code vérifie la licence,
+    # la résolution et les doublons ; il ne peut pas vérifier que l'image
+    # montre le bon sujet.
+    "controle": Commande(
+        "Vérifier que les visuels sont les bons",
+        exige="05-visuals/assets.json",
+        produit="05-visuals/controle.jsonl", longue=True,
     ),
     "placeholders": Commande(
         "Visuels de substitution", exige="03-shots.json",
@@ -424,6 +437,23 @@ def remplacer(slug: str, plan: str, raison: str = "") -> dict[str, Any]:
     fait = subprocess.run(
         argv, cwd=_racine(), env=_environnement(),
         capture_output=True, text=True,
+    )
+    if fait.returncode != 0:
+        raise ValueError((fait.stderr or fait.stdout).strip().lstrip("✗ ")
+                         or "remplacement refusé")
+    return {"sortie": fait.stdout.strip()}
+
+
+def remplacer_les_refuses(slug: str) -> dict[str, Any]:
+    """Re-sourcer d'un coup tout ce que le contrôle a refusé.
+
+    Attendu, pas journalisé, comme les autres remplacements : chacun prend
+    quelques secondes, et une dizaine tient dans l'attente d'un bouton. Au
+    delà, c'est le journal qu'il faudra.
+    """
+    fait = subprocess.run(
+        [sys.executable, "-m", "fresque", "refaire", slug, "--refuses"],
+        cwd=_racine(), env=_environnement(), capture_output=True, text=True,
     )
     if fait.returncode != 0:
         raise ValueError((fait.stderr or fait.stdout).strip().lstrip("✗ ")

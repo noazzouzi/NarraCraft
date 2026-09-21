@@ -201,6 +201,98 @@ def test_the_thumbnail_avoids_a_frame_with_a_subtitle_across_it():
     assert cli._instant_vignette(couvert, 30) == 1.0
 
 
+# --- Le contrôle visuel ------------------------------------------------------
+#
+# Le code vérifie la licence, la résolution, le ratio et les doublons. Il
+# ne peut pas vérifier que l'image montre le bon sujet. Mesuré sur un film
+# réel : la requête `paper receipt roll` a rendu « Excelsior perforated
+# toilet rolls » — bonne licence, bonne résolution, aucun doublon. Tout ce
+# que le code sait vérifier était vert, et l'image est entrée au montage.
+
+def test_the_last_verdict_on_a_shot_wins(tmp_path):
+    """Le fichier s'ajoute. Une deuxième passe, après remplacement, doit
+    l'emporter sur la première — sinon la galerie signale encore une image
+    qui n'existe plus."""
+    from fresque import controle as controle_mod
+
+    controle_mod.noter(tmp_path, "S014", "refaire", "des rouleaux de papier")
+    controle_mod.noter(tmp_path, "S000", "garde")
+    controle_mod.noter(tmp_path, "S014", "garde")
+
+    verdicts = controle_mod.lire(tmp_path)
+    assert verdicts["S014"]["verdict"] == "garde"
+    assert controle_mod.refuses(tmp_path) == []
+    assert controle_mod.bilan(tmp_path) == {"garde": 2, "refaire": 0, "doute": 0}
+
+
+def test_a_verdict_the_code_cannot_act_on_is_refused(tmp_path):
+    """Un quatrième mot n'est pas une nuance, c'est une faute de frappe du
+    modèle. Le traiter comme un « garde » par défaut laisserait passer
+    exactement ce que l'étape existe pour attraper."""
+    from fresque import controle as controle_mod
+
+    (tmp_path / controle_mod.FICHIER).write_text(
+        '{"shot":"S001","verdict":"peut-etre"}\n', encoding="utf-8")
+    with pytest.raises(controle_mod.ControleError, match="peut-etre"):
+        controle_mod.lire(tmp_path)
+
+
+def test_a_replaced_shot_loses_its_verdict(tmp_path):
+    """Un verdict qui porte sur une image disparue est une fausse alerte."""
+    from fresque import controle as controle_mod
+
+    for shot in ("S001", "S002", "S003"):
+        controle_mod.noter(tmp_path, shot, "refaire", "hors sujet")
+    controle_mod.oublier(tmp_path, ["S001", "S003"])
+
+    assert list(controle_mod.lire(tmp_path)) == ["S002"]
+
+
+def test_only_shots_with_an_image_are_controlled():
+    """Un panneau graphique est construit au rendu : il n'y a rien à
+    regarder, et lui réclamer un verdict ferait un contrôle incomplet à
+    chaque film."""
+    from fresque import controle as controle_mod
+
+    shots = [
+        Shot(index=0, beat="B001", type="archive", requete="x"),
+        Shot(index=1, beat="B001", type="motion",
+             motion={"kind": "chiffre", "valeur": "12", "libelle": "%"}),
+        Shot(index=2, beat="B002", type="archive", requete="y"),
+    ]
+    assets = {"S000": {"fichier": "a.jpg"}, "S001": {"fichier": None}}
+
+    assert controle_mod.a_controler(shots, assets) == ["S000"]
+
+
+# --- Élargir les fonds -------------------------------------------------------
+
+def test_a_named_non_creative_commons_licence_can_be_accepted():
+    """Pexels et Pixabay autorisent l'usage commercial et la modification —
+    la seule question que pose ce filtre — mais aucun test par mot-clé ne
+    les reconnaîtrait. Elles sont nommées une à une, jamais devinées."""
+    from fresque.sources.base import is_free_licence
+
+    assert is_free_licence("Pexels License")
+    assert is_free_licence("Pixabay License")
+    # Élargir ne relâche rien : ce qui interdit le commerce ou la
+    # modification reste refusé.
+    assert not is_free_licence("CC BY-NC 4.0")
+    assert not is_free_licence("CC BY-ND 4.0")
+    assert not is_free_licence("All rights reserved")
+    assert not is_free_licence("Getty Images License")
+
+
+def test_a_missing_key_removes_a_source_without_breaking_the_cascade(monkeypatch):
+    """`PEXELS_API_KEY` est gratuite mais pas universelle. Une installation
+    qui ne l'a pas doit voir la cascade continuer, pas s'arrêter."""
+    from fresque import fetch as fetch_mod
+
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    trouves, requete, largeur = fetch_mod._search_pexels("un sujet", None)
+    assert trouves == [] and requete == "un sujet" and largeur > 0
+
+
 def test_filling_a_gap_never_erases_what_is_already_sourced(tmp_path):
     """`placeholders` réécrivait le manifeste entier : lancée après `fetch`
     pour boucher quatorze plans, elle détruisait les soixante-six autres,

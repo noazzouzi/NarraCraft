@@ -46,7 +46,8 @@ from typing import Any
 
 import requests
 
-from .base import Throttle, expects_json, is_retryable, retry_delay
+from .base import (Candidate, Throttle, expects_json, is_retryable,
+                   retry_delay)
 from .loc import Clip, Resultat
 
 BASE = "https://api.pexels.com"
@@ -260,4 +261,75 @@ def download(clip: Clip, destination, timeout: float = 300.0,
                         f"{max_octets / 1e6:.0f} Mo — le serveur n'avait pas "
                         "annoncé la taille."
                     )
+                sortie.write(morceau)
+
+
+# --- Images fixes ------------------------------------------------------------
+#
+# Pexels n'était branché que sur la vidéo. Son fonds d'images est pourtant
+# le plus utile là où les archives libres s'épuisent : le contemporain.
+# Mesuré sur un film réel, trois plans sont restés sans visuel faute de
+# photographie moderne dans Wikimedia — un comptoir de restaurant, une
+# salle vide, un client qui paie. Ce fonds les couvre.
+#
+# Ce n'est pas de l'archive et ça ne doit jamais en tenir lieu : `NATURE`
+# le dit, et le plan visuel le sait (« une banque d'images contemporaine
+# sert le présent, jamais le passé »).
+
+def search_photos(query: str, limit: int = 5, min_width: int = 1920,
+                  session: requests.Session | None = None,
+                  timeout: float = 45.0) -> list[Candidate]:
+    """Cherche des photographies paysage assez grandes pour du 1080p.
+
+    Pas de filtre de pertinence sur le titre, pour la raison mesurée plus
+    haut sur la vidéo : les descriptions de Pexels sont écrites par des
+    contributeurs et ne reprennent pas les mots de la recherche. Le
+    classement de Pexels est sémantique, il vaut mieux que le nôtre.
+    """
+    http = session or requests.Session()
+    response = _get(http, "/v1/search", {
+        "query": query, "per_page": min(max(limit * 3, 15), 80),
+        "orientation": "landscape",
+    }, timeout)
+
+    trouves: list[Candidate] = []
+    for photo in response.json().get("photos", []) or []:
+        sources = photo.get("src") or {}
+        # `original` est la pleine résolution ; les autres sont des
+        # rendus. On prend l'original et on mesure le fichier obtenu
+        # plus tard, comme pour tous les fonds.
+        url = sources.get("original") or sources.get("large2x")
+        largeur = int(photo.get("width") or 0)
+        if not url or largeur < min_width:
+            continue
+        trouves.append(Candidate(
+            provider="pexels",
+            title=(photo.get("alt") or "").strip() or query,
+            page_url=photo.get("url", ""),
+            file_url=url,
+            licence=LICENCE,
+            licence_url=LICENCE_URL,
+            author=(photo.get("photographer") or "").strip(),
+            width=largeur,
+            height=int(photo.get("height") or 0),
+            mime="image/jpeg",
+            extra={"nature": NATURE},
+        ))
+        if len(trouves) >= limit:
+            break
+    return trouves
+
+
+def download_photo(candidate: Candidate, destination,
+                   session: requests.Session | None = None,
+                   timeout: float = 60.0) -> None:
+    from pathlib import Path
+
+    http = session or requests.Session()
+    chemin = Path(destination)
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    with http.get(candidate.file_url, stream=True, timeout=timeout) as flux:
+        flux.raise_for_status()
+        with chemin.open("wb") as sortie:
+            for morceau in flux.iter_content(chunk_size=1 << 20):
                 sortie.write(morceau)

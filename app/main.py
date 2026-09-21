@@ -211,11 +211,21 @@ def visuels(slug: str) -> dict[str, Any]:
     if not shots.is_file():
         raise HTTPException(404, "pas encore de plan visuel")
 
+    from fresque import controle as controle_mod
+
     plan = json.loads(shots.read_text(encoding="utf-8")).get("shots", [])
     assets: dict[str, Any] = {}
     fiche = dossier / "05-visuals" / "assets.json"
     if fiche.is_file():
         assets = json.loads(fiche.read_text(encoding="utf-8")).get("assets", {})
+
+    # Ce que le contrôle a vu. Un fichier mal formé ne doit pas empêcher
+    # la galerie de s'afficher : on le signale, on ne bloque pas.
+    try:
+        verdicts = controle_mod.lire(dossier / "05-visuals")
+        verdict_erreur = ""
+    except controle_mod.ControleError as erreur:
+        verdicts, verdict_erreur = {}, str(erreur)
 
     sorties = []
     for index, brut in enumerate(plan):
@@ -239,15 +249,36 @@ def visuels(slug: str) -> dict[str, Any]:
             # Une requête élargie a pu ramener autre chose que ce qu'on
             # demandait : c'est le premier endroit où regarder.
             "relachee": bool(acquis.get("requete_relachee")) if acquis else False,
+            # Ce que le contrôle a vu. Vide tant qu'il n'a pas tourné.
+            "verdict": verdicts.get(identifiant, {}).get("verdict", ""),
+            "raison": verdicts.get(identifiant, {}).get("raison", ""),
         })
 
     manquants = sum(1 for s in sorties
                     if s["type"] != "motion" and not s["fichier"])
-    return {"plans": sorties, "manquants": manquants}
+    compte = {nom: sum(1 for s in sorties if s["verdict"] == nom)
+              for nom in controle_mod.VERDICTS}
+    return {"plans": sorties, "manquants": manquants,
+            "controle": compte, "controle_erreur": verdict_erreur}
 
 
 class Refus(BaseModel):
     raison: str = ""
+
+
+@app.post("/api/projets/{slug}/visuels/refuses")
+def remplacer_les_refuses(slug: str) -> dict[str, Any]:
+    """Re-sourcer tous les plans que le contrôle a refusés.
+
+    Une passe, pas un clic par plan : sur un film de quatre-vingts plans,
+    un contrôle en refuse couramment une dizaine, et les reprendre un par
+    un n'est pas une interface, c'est une corvée.
+    """
+    _dossier(slug)
+    try:
+        return serveur.remplacer_les_refuses(slug)
+    except ValueError as erreur:
+        raise HTTPException(400, str(erreur))
 
 
 @app.post("/api/projets/{slug}/visuels/{plan}/remplacer")

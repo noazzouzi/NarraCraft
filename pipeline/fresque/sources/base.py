@@ -11,6 +11,13 @@ from dataclasses import dataclass, field
 FREE_LICENCES = (
     "public domain", "pd-", "cc0", "cc-zero", "no restrictions",
     "cc by", "cc-by", "cc by-sa", "cc-by-sa", "attribution",
+    # Nommées une à une, et jamais devinées. Ces deux-là ne sont pas des
+    # Creative Commons — aucun test par mot-clé ne les reconnaîtrait — mais
+    # leurs conditions autorisent l'usage commercial et la modification,
+    # ce qui est la seule question que pose cette fonction. Les ajouter
+    # élargit le fonds sans rien relâcher : une licence absente de cette
+    # liste reste refusée.
+    "pexels license", "pixabay license",
 )
 
 REFUSED = ("fair use", "non-free", "no license", "copyright", "all rights")

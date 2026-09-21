@@ -113,9 +113,17 @@ export type Visuel = {
   url: string;
   largeur: number | null;
   relachee: boolean;
+  // Ce que le contrôle a vu. Vide tant qu'il n'a pas tourné.
+  verdict: "" | "garde" | "refaire" | "doute" | string;
+  raison: string;
 };
 
-export type Galerie = { plans: Visuel[]; manquants: number };
+export type Galerie = {
+  plans: Visuel[];
+  manquants: number;
+  controle: { garde: number; refaire: number; doute: number };
+  controle_erreur: string;
+};
 
 // La bibliothèque de voix. Les trois fournisseurs décrivent leur catalogue
 // de façon incompatible ; le serveur les normalise, l'interface n'en
@@ -234,6 +242,13 @@ export const api = {
 
   async choisirVoix(slug: string, provider: string, voix: string) {
     return poster<ChoixVoix>(`/api/projets/${slug}/voix`, { provider, voix });
+  },
+
+  // Re-sourcer d'un coup tout ce que le contrôle a refusé. Sur un film de
+  // quatre-vingts plans, les reprendre un par un n'est pas une interface.
+  async remplacerLesRefuses(slug: string) {
+    return poster<{ sortie: string }>(
+      `/api/projets/${slug}/visuels/refuses`, {});
   },
 
   // Refuser un visuel et en chercher un autre. Le refus est gardé, donc

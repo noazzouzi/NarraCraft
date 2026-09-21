@@ -78,6 +78,14 @@ ETAPES: dict[str, Etape] = {
         "fresque-plan-visuel", "03-shots.json",
         ("Read", "Write", "Edit", "Bash", "Glob"), tours_max=80,
     ),
+    # La seule étape qui REGARDE. Le code vérifie la licence, la
+    # résolution et les doublons ; il ne peut pas vérifier que l'image
+    # montre le bon sujet. `Read` sert ici à ouvrir des images, pas du
+    # texte, et c'est tout l'outillage dont l'étape a besoin.
+    "controle": Etape(
+        "fresque-controle", "05-visuals/controle.jsonl",
+        ("Read", "Write", "Edit", "Bash", "Glob"), tours_max=120,
+    ),
 }
 
 

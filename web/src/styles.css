@@ -409,3 +409,18 @@ h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; margin: 0; }
   background: var(--panneau); border: 1px solid var(--bord);
   border-radius: 8px; height: 34px; padding: 0 10px;
 }
+
+/* Le contrôle visuel. Un verdict se voit sur la vignette, pas dans un
+   rapport qu'il faudrait ouvrir à côté. */
+.visuel.refaire { border-color: #6e4034; }
+.visuel.doute { border-color: #5c4a22; }
+.visuel .cadre .refus {
+  position: absolute; right: 8px; bottom: 8px;
+  padding: 2px 8px; border-radius: 5px;
+  background: rgba(16, 16, 19, 0.82); color: #ec8f6f;
+  font-family: var(--mono); font-size: 10.5px;
+}
+.visuel .raison { font-size: 12px; color: #ec8f6f; font-style: italic; }
+.refus { color: #ec8f6f; }
+.galerie .chapeau .ok { color: var(--ok); font-weight: 500; }
+.galerie .chapeau .alerte { color: var(--attention); font-weight: 500; }

@@ -10,6 +10,7 @@ export default function Visuels() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [filtre, setFiltre] = useState("tous");
   const [occupe, setOccupe] = useState<string | null>(null);
+  const [groupe, setGroupe] = useState(false);
 
   const recharger = useCallback(() => {
     api.visuels(slug).then(setGalerie).catch((e) => setErreur(String(e)));
@@ -35,6 +36,19 @@ export default function Visuels() {
     }
   }
 
+  async function reparerTout() {
+    setGroupe(true);
+    setErreur(null);
+    try {
+      await api.remplacerLesRefuses(slug);
+      recharger();
+    } catch (e) {
+      setErreur(String(e));
+    } finally {
+      setGroupe(false);
+    }
+  }
+
   if (erreur) return <div className="erreur" style={{ margin: 40 }}>{erreur}</div>;
   if (!galerie) return <p className="vide" style={{ padding: 40 }}>Lecture des fichiers…</p>;
 
@@ -43,7 +57,7 @@ export default function Visuels() {
     comptes.set(plan.type, (comptes.get(plan.type) ?? 0) + 1);
   }
   const visibles = galerie.plans.filter(
-    (p) => filtre === "tous" || p.type === filtre,
+    (p) => filtre === "tous" || p.type === filtre || p.verdict === filtre,
   );
 
   return (
@@ -55,7 +69,33 @@ export default function Visuels() {
           <p className="chapeau">
             {galerie.plans.length} plans
             {galerie.manquants > 0 && ` · ${galerie.manquants} sans visuel`}
+            {galerie.controle.refaire + galerie.controle.doute +
+              galerie.controle.garde > 0 && (
+              <>
+                {" · contrôlés : "}
+                <b className="ok">{galerie.controle.garde} gardés</b>
+                {galerie.controle.doute > 0 &&
+                  <> · <b className="alerte">{galerie.controle.doute} en doute</b></>}
+                {galerie.controle.refaire > 0 &&
+                  <> · <b className="refus">{galerie.controle.refaire} à refaire</b></>}
+              </>
+            )}
           </p>
+          {galerie.controle.refaire > 0 && (
+            <button
+              className="principal"
+              style={{ marginTop: 10 }}
+              onClick={reparerTout}
+              disabled={groupe || occupe !== null}
+            >
+              {groupe
+                ? "Remplacement…"
+                : `Remplacer les ${galerie.controle.refaire} refusés`}
+            </button>
+          )}
+          {galerie.controle_erreur && (
+            <div className="erreur">{galerie.controle_erreur}</div>
+          )}
         </div>
         <div className="filtres">
           <button
@@ -64,6 +104,14 @@ export default function Visuels() {
           >
             tous <span className="leger">{galerie.plans.length}</span>
           </button>
+          {galerie.controle.refaire > 0 && (
+            <button
+              className={filtre === "refaire" ? "choisi" : undefined}
+              onClick={() => setFiltre("refaire")}
+            >
+              à refaire <span className="leger">{galerie.controle.refaire}</span>
+            </button>
+          )}
           {[...comptes.entries()].sort().map(([type, compte]) => (
             <button
               key={type}
@@ -108,7 +156,13 @@ function Carte({
   const construit = plan.type === "motion";
 
   return (
-    <article className={plan.fichier || construit ? "visuel" : "visuel manquant"}>
+    <article
+      className={
+        "visuel" +
+        (plan.fichier || construit ? "" : " manquant") +
+        (plan.verdict ? ` ${plan.verdict}` : "")
+      }
+    >
       <div className="cadre">
         {plan.fichier ? (
           plan.type === "video" ? (
@@ -120,7 +174,11 @@ function Carte({
           <div className="rien">{construit ? plan.panneau : "pas de visuel"}</div>
         )}
         <span className="type">{construit ? plan.panneau || "motion" : plan.type}</span>
-        {plan.relachee && <span className="alerte" title="requête élargie">élargie</span>}
+        {plan.verdict === "refaire" && <span className="refus">à refaire</span>}
+        {plan.verdict === "doute" && <span className="alerte">en doute</span>}
+        {!plan.verdict && plan.relachee && (
+          <span className="alerte" title="requête élargie">élargie</span>
+        )}
       </div>
 
       <div className="corps">
@@ -129,6 +187,7 @@ function Carte({
           <span className="leger mono">{plan.beat}</span>
         </div>
         <p className="intention">{plan.intention}</p>
+        {plan.raison && <p className="raison">« {plan.raison} »</p>}
         {plan.titre && (
           <p className="leger">
             {plan.url ? (
