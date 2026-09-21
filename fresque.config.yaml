@@ -614,6 +614,39 @@ montage:
   # identique d'une machine à l'autre. C'est un bloc que chaque template
   # redéfinit — c'est ce qui fait qu'un documentaire criminel et un
   # documentaire historique ne sonnent pas pareil.
+  # Le carton de fin. Ce n'est pas de la finition : sur le premier film
+  # complet, 258 visuels sur 329 étaient sous une licence qui exige
+  # l'attribution, et aucun n'était crédité. Le tableau `credits` était
+  # construit depuis toujours, et aucun composant ne le lisait.
+  #
+  # Un carton ne peut pas porter deux cent cinquante noms lisibles. Il
+  # porte les licences, les fonds et autant d'auteurs qu'il en tient ; la
+  # liste entière va dans `07-out/credits.md`, pour la description de la
+  # vidéo. C'est ce que « attribution raisonnable au support » veut dire
+  # pour un film.
+  generique:
+    actif: true
+    # Fixe, pas défilant. Douze secondes laissent le temps de lire sans
+    # faire fuir : un défilement de trente secondes n'est regardé par
+    # personne et ne crédite donc pas mieux.
+    duree_s: 12
+    # Le budget se compte en signes, pas en noms : trois noms longs
+    # prennent plus de place que dix courts, et c'est la place qui manque.
+    # Il se répartit au prorata entre les licences, sinon la plus fournie
+    # mange le carton et les suivantes n'ont plus personne.
+    signes_max: 1200
+    titre: Sources et licences
+    mention: Liste complète des auteurs dans la description.
+
+  # La livraison. Un documentaire rendu à -24 LUFS sonne faible à côté de
+  # tout le reste sur la plateforme, et YouTube ne le remonte pas : il ne
+  # fait que baisser ce qui dépasse. La cible est donc celle de la
+  # plateforme, pas celle du moteur de rendu.
+  livraison:
+    lufs: -14          # cible YouTube, Spotify et la plupart des plateformes
+    crete_dbtp: -1     # marge pour les encodeurs, qui font remonter la crête
+    plage_lu: 11       # dynamique conservée, en unités de loudness
+
   musique:
     actif: true
 

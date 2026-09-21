@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, interpolate, staticFile } from "remotion";
 import { Accroche } from "./Accroche";
+import { Generique } from "./Generique";
 import { Plan } from "./Plan";
 import { SousTitre } from "./SousTitre";
 import type { Timeline } from "./types";
@@ -39,7 +40,9 @@ const MusiqueDeFond: React.FC<{
  *  move and every subtitle window was decided by the Python pipeline from the
  *  real word timings. See CLAUDE.md. */
 export const Documentaire: React.FC<Timeline> = (timeline) => {
-  const { clips, sons, musique, sous_titres, style, audio, duree_frames } = timeline;
+  const { clips, sons, musique, sous_titres, style, audio, duree_frames } =
+    timeline;
+  const generique = timeline.generique;
   const { palette, typographie, traitement, motion, transitions } = style;
 
   return (
@@ -106,6 +109,24 @@ export const Documentaire: React.FC<Timeline> = (timeline) => {
           ) : null}
         </Sequence>
       ))}
+
+      {/* Le carton de fin. Il prolonge le film au-delà du dernier plan :
+          `timeline.py` a déjà ajouté sa durée à `duree_frames`, sinon le
+          rendu s'arrêterait avant lui. Les sous-titres sont montés après
+          pour qu'aucune ligne ne traîne par-dessus. */}
+      {generique ? (
+        <Sequence
+          from={generique.debut_frame}
+          durationInFrames={generique.duree_frames}
+          name="Générique"
+        >
+          <Generique
+            generique={generique}
+            style={style.motion}
+            typographie={typographie}
+          />
+        </Sequence>
+      ) : null}
 
       {sous_titres.map((line, index) => (
         <Sequence

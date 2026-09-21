@@ -317,6 +317,117 @@ def _motion_calee(shot: Shot, beat: dict[str, Any], debut_frame: int, fps: int,
             "surligne_frame": max(round(instant * fps) - debut_frame, 0)}
 
 
+#: Les licences qui n'obligent à rien. Tout le reste exige une attribution,
+#: et une chaîne monétisée ne peut pas s'en dispenser.
+_SANS_OBLIGATION = ("cc0", "public domain", "domaine public", "pdm")
+
+
+def _sans_obligation(licence: str) -> bool:
+    nue = (licence or "").strip().lower()
+    return any(nue.startswith(l) for l in _SANS_OBLIGATION)
+
+
+#: Le nom d'affichage des fonds. L'identifiant technique voyage dans les
+#: fichiers ; il n'a rien à faire à l'écran.
+_FONDS = {
+    "wikimedia_commons": "Wikimedia Commons",
+    "openverse": "Openverse",
+    "pexels": "Pexels",
+    "pixabay": "Pixabay",
+    "loc": "Library of Congress",
+    "smithsonian": "Smithsonian",
+    "archive_org": "Archive.org",
+}
+
+#: Au-delà, ce n'est plus un nom. Le champ « auteur » de Wikimedia Commons
+#: est libre : un contributeur y avait écrit quatre-vingt-dix mots de
+#: conditions d'utilisation, qui prenaient cinq lignes du carton à eux
+#: seuls. On coupe à la première phrase, puis net.
+_NOM_MAX = 42
+
+
+def _nom(brut: str) -> str:
+    """Un champ « auteur » ramené à quelque chose qui ressemble à un nom."""
+    nu = " ".join((brut or "").split())
+    for coupure in (". ", " (", " - ", " — "):
+        if coupure in nu:
+            nu = nu.split(coupure, 1)[0]
+    nu = nu.rstrip(" .,;")
+    return nu[:_NOM_MAX - 1] + "…" if len(nu) > _NOM_MAX else nu
+
+
+def generique(credits: list[dict[str, Any]], fps: int) -> dict[str, Any] | None:
+    """Le carton de fin, groupé par licence.
+
+    `timeline.py` construisait déjà ce tableau `credits`, et personne ne le
+    lisait : aucun composant ne l'affichait. Sur le premier film complet,
+    258 images sur 329 étaient sous une licence qui exige l'attribution, et
+    aucune n'était créditée. Ce n'est pas un défaut de finition.
+
+    Un carton ne peut pas porter 258 noms lisibles. Il porte donc les
+    licences, les fonds, et autant d'auteurs qu'il en tient ; la liste
+    entière part dans `07-out/credits.md`, pour la description de la vidéo.
+    C'est l'usage du médium, et c'est ce que « attribution raisonnable au
+    support » veut dire pour un film.
+    """
+    if not credits or not config.get("montage", "generique", "actif", default=True):
+        return None
+
+    budget = int(config.get("montage", "generique", "signes_max", default=1200))
+    duree_s = float(config.get("montage", "generique", "duree_s", default=12))
+
+    groupes: dict[str, dict[str, Any]] = {}
+    libres = 0
+    for entree in credits:
+        licence = (entree.get("licence") or "").strip() or "licence inconnue"
+        if _sans_obligation(licence):
+            libres += 1
+            continue
+        groupe = groupes.setdefault(licence, {"licence": licence, "nombre": 0,
+                                              "auteurs": [], "fonds": []})
+        groupe["nombre"] += 1
+        auteur = _nom(entree.get("auteur") or "")
+        if auteur and auteur not in groupe["auteurs"]:
+            groupe["auteurs"].append(auteur)
+        fonds = (entree.get("source") or "").strip()
+        joli = _FONDS.get(fonds, fonds)
+        if joli and joli not in groupe["fonds"]:
+            groupe["fonds"].append(joli)
+
+    # Les licences les plus représentées d'abord : c'est l'ordre dans lequel
+    # un lecteur cherche, et celui qui survit à une troncature.
+    ordonnes = sorted(groupes.values(), key=lambda g: -g["nombre"])
+
+    # Le budget se compte en SIGNES, pas en noms : trois noms longs prennent
+    # plus de place que dix courts, et c'est la place qui manque. Il se
+    # répartit au prorata, sinon la licence la plus fournie mange le carton
+    # et les suivantes n'ont plus personne.
+    total = sum(len(" · ".join(g["auteurs"])) for g in ordonnes) or 1
+    for groupe in ordonnes:
+        ecrit = len(" · ".join(groupe["auteurs"]))
+        part = max(_NOM_MAX, round(budget * ecrit / total))
+        montres: list[str] = []
+        pris = 0
+        for nom in groupe["auteurs"]:
+            if pris + len(nom) > part and montres:
+                break
+            montres.append(nom)
+            pris += len(nom) + 3
+        groupe["reste"] = len(groupe["auteurs"]) - len(montres)
+        groupe["auteurs"] = montres
+
+    return {
+        "duree_frames": round(duree_s * fps),
+        "titre": str(config.get("montage", "generique", "titre",
+                                default="Sources et licences")),
+        "groupes": ordonnes,
+        "libres": libres,
+        "mention": str(config.get(
+            "montage", "generique", "mention",
+            default="Liste complète des auteurs dans la description.")),
+    }
+
+
 def _recoller(lignes: list[dict[str, Any]], seuil_frames: int) -> list[dict[str, Any]]:
     """Tient une ligne jusqu'à la suivante quand le trou est un artefact.
 
@@ -486,7 +597,7 @@ def build(
                 "gain": gain,
             })
 
-    return {
+    montage = {
         "version": 1,
         "fps": fps,
         "width": int(width),
@@ -570,6 +681,11 @@ def build(
                 "credit": asset.get("credit"),
                 "url": asset.get("url"),
                 "licence": asset.get("licence"),
+                # Le carton groupe par licence et nomme les auteurs : il lui
+                # faut les deux champs séparément, pas seulement la chaîne
+                # de crédit toute faite.
+                "auteur": asset.get("auteur"),
+                "source": asset.get("source"),
             }
             for asset in assets.values()
             if asset.get("credit")
@@ -582,6 +698,17 @@ def build(
             }
         ] if musique and config.get("montage", "musique", "credit") else []),
     }
+
+    # Le carton de fin prolonge le film. Sa durée entre dans `duree_frames`,
+    # sinon le rendu s'arrête avant lui — et la musique se tairait à
+    # l'ancienne fin, au milieu des crédits.
+    carton = generique(montage["credits"], fps)
+    if carton:
+        carton["debut_frame"] = duration_frames
+        montage["generique"] = carton
+        montage["duree_frames"] = duration_frames + carton["duree_frames"]
+        montage["duree_s"] = round(montage["duree_frames"] / fps, 3)
+    return montage
 
 
 def write(timeline: dict[str, Any], path: Path) -> None:

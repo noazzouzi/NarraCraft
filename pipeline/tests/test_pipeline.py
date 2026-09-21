@@ -119,6 +119,73 @@ def _shot(beat: str, index: int, movement: str = "zoom_in", weight: float = 1.0)
                 mouvement=movement, poids=weight)
 
 
+# --- Le carton de fin --------------------------------------------------------
+#
+# `timeline.py` construisait un tableau `credits` depuis toujours, et aucun
+# composant ne le lisait. Sur le premier film complet, 258 visuels sur 329
+# étaient sous une licence qui exige l'attribution, et aucun n'était
+# crédité. Ce n'est pas un défaut de finition : la chaîne est monétisée.
+
+def _credit(licence: str, auteur: str = "Un Auteur") -> dict:
+    return {"asset": "x.jpg", "credit": f"{auteur} ({licence})", "url": "u",
+            "licence": licence, "auteur": auteur, "source": "wikimedia_commons"}
+
+
+def test_the_end_card_groups_by_licence_and_counts_the_free_ones():
+    credits = ([_credit("CC BY-SA 3.0", f"Auteur {i}") for i in range(5)]
+               + [_credit("CC BY 2.0", "Autre")]
+               + [_credit("CC0", "Personne"), _credit("Public domain", "")])
+
+    carton = timeline_mod.generique(credits, 30)
+
+    assert [g["licence"] for g in carton["groupes"]] == ["CC BY-SA 3.0", "CC BY 2.0"]
+    assert carton["groupes"][0]["nombre"] == 5
+    assert carton["libres"] == 2, "CC0 et domaine public n'obligent à rien"
+    assert carton["groupes"][0]["fonds"] == ["Wikimedia Commons"], \
+        "l'identifiant technique du fonds n'a rien à faire à l'écran"
+
+
+def test_a_licence_notice_pasted_into_an_author_field_is_cut():
+    """Le champ « auteur » de Wikimedia Commons est libre. Un contributeur y
+    avait écrit quatre-vingt-dix mots de conditions d'utilisation, qui
+    prenaient cinq lignes du carton à eux seuls."""
+    tartine = ("This Photo was taken by Wolfgang Moroder. Feel free to use my "
+               "photos, but please mention me as the author and send me a "
+               "message. This image is not in the public domain.")
+    carton = timeline_mod.generique([_credit("CC BY-SA 3.0", tartine)], 30)
+
+    nom = carton["groupes"][0]["auteurs"][0]
+    assert len(nom) <= 42 and "public domain" not in nom
+
+
+def test_the_end_card_extends_the_film_rather_than_covering_it(script):
+    """Sa durée entre dans `duree_frames` : sinon le rendu s'arrête avant
+    lui, et la musique se tait au milieu des crédits."""
+    alignment = align.estimate(script)
+    shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]
+    assets = {s.id: {"fichier": f"{s.id}.jpg", "credit": "A (CC BY 4.0)",
+                     "licence": "CC BY 4.0", "auteur": "A",
+                     "source": "wikimedia_commons"} for s in shots}
+
+    timeline = timeline_mod.build(alignment, shots, assets)
+    carton = timeline["generique"]
+    dernier = timeline["clips"][-1]
+
+    assert carton["debut_frame"] == dernier["debut_frame"] + dernier["duree_frames"]
+    assert timeline["duree_frames"] == carton["debut_frame"] + carton["duree_frames"]
+    assert timeline_mod.check(timeline) == []
+
+
+def test_a_film_owing_nothing_gets_no_end_card(script):
+    """Domaine public d'un bout à l'autre : rien à créditer, pas de carton."""
+    alignment = align.estimate(script)
+    shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]
+    assets = {s.id: {"fichier": f"{s.id}.jpg"} for s in shots}
+
+    timeline = timeline_mod.build(alignment, shots, assets)
+    assert timeline.get("generique") is None
+
+
 def test_timeline_is_contiguous_and_matches_alignment(script):
     alignment = align.estimate(script)
     shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]

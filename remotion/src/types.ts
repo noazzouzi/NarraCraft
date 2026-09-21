@@ -219,5 +219,32 @@ export type Timeline = {
     fondu_sortie_frames: number;
   } | null;
   sous_titres: SousTitre[];
-  credits: { asset: string; credit: string; url: string; licence: string }[];
+  credits: {
+    asset: string;
+    credit: string;
+    url: string;
+    licence: string;
+    auteur?: string;
+    source?: string;
+  }[];
+  /** Le carton de fin. Absent quand le film n'utilise rien qui exige une
+   *  attribution, ou quand le template l'a désactivé. */
+  generique?: Generique | null;
+};
+
+/** Le carton de fin, groupé par licence. Tout est décidé par
+ *  `timeline.generique` : le composant met en page et ne compte rien. */
+export type Generique = {
+  debut_frame: number;
+  duree_frames: number;
+  titre: string;
+  groupes: {
+    licence: string;
+    nombre: number;
+    auteurs: string[];
+    fonds: string[];
+    reste: number;
+  }[];
+  libres: number;
+  mention: string;
 };

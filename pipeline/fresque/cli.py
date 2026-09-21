@@ -761,9 +761,148 @@ def cmd_render(args: argparse.Namespace) -> int:
     result = subprocess.run(command, cwd=remotion)
     if result.returncode != 0:
         return _fail(f"le rendu a échoué (code {result.returncode}).")
+    # Un rendu partiel n'est pas un film : ni crédits complets ni niveau de
+    # diffusion à calculer sur deux images.
+    if not args.frames:
+        _ecrire_credits(project)
+        if not args.sans_normalisation:
+            _normaliser(output)
+
     size_mb = output.stat().st_size / 1_048_576
     print(f"✓ {output.name} · {size_mb:.1f} Mo")
     return 0
+
+
+def _ecrire_credits(project: Project) -> None:
+    """La liste complète des auteurs, pour la description de la vidéo.
+
+    Le carton de fin promet cette liste. Sans le fichier, la promesse est
+    fausse — et l'attribution d'une CC-BY tient à ce que le crédit suive
+    jusque-là.
+    """
+    from . import timeline as timeline_mod
+
+    donnees = json.loads(project.timeline.read_text(encoding="utf-8"))
+    credits = donnees.get("credits") or []
+    if not credits:
+        return
+
+    lignes = [f"# Sources — {project.titre}", ""]
+    groupes: dict[str, list[dict]] = {}
+    for entree in credits:
+        groupes.setdefault(entree.get("licence") or "licence inconnue", []).append(entree)
+
+    for licence in sorted(groupes, key=lambda l: -len(groupes[l])):
+        entrees = groupes[licence]
+        lignes.append(f"## {licence} — {len(entrees)} visuels")
+        lignes.append("")
+        vus = set()
+        for entree in sorted(entrees, key=lambda e: (e.get("auteur") or "").lower()):
+            cle = (entree.get("auteur"), entree.get("url"))
+            if cle in vus:
+                continue
+            vus.add(cle)
+            auteur = (entree.get("auteur") or "auteur non indiqué").strip()
+            url = entree.get("url") or ""
+            lignes.append(f"- {auteur}{f' — {url}' if url else ''}")
+        lignes.append("")
+
+    obligatoires = sum(
+        len(e) for l, e in groupes.items() if not timeline_mod._sans_obligation(l))
+    lignes.append(f"> {len(credits)} visuels au total, dont {obligatoires} "
+                  "sous une licence qui exige l'attribution.")
+
+    chemin = project.out_dir / "credits.md"
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_text("\n".join(lignes) + "\n", encoding="utf-8")
+    print(f"  crédits : {chemin.name} · {len(credits)} visuels")
+
+
+def _normaliser(video: Path) -> None:
+    """Porte le film au niveau de diffusion, en deux passes.
+
+    Un documentaire livré à −24 LUFS sonne faible à côté de tout le reste
+    sur la plateforme, et YouTube ne le remonte pas : il ne fait que
+    baisser ce qui dépasse. La cible est donc celle de la plateforme, pas
+    celle du moteur de rendu.
+
+    Deux passes parce qu'une seule est un limiteur temps réel qui écrase la
+    dynamique. La première mesure, la seconde applique le gain mesuré.
+    """
+    import subprocess
+
+    ffmpeg = _ffmpeg()
+    if ffmpeg is None:
+        print("  ⚠ ffmpeg introuvable — niveau non normalisé")
+        return
+
+    cible = float(config.get("montage", "livraison", "lufs", default=-14))
+    crete = float(config.get("montage", "livraison", "crete_dbtp", default=-1))
+    plage = float(config.get("montage", "livraison", "plage_lu", default=11))
+    filtre = f"loudnorm=I={cible}:TP={crete}:LRA={plage}"
+
+    # `-vn -sn -dn` : la mesure ne regarde que le son. Sans ça, ffmpeg
+    # cherche un encodeur vidéo pour la sortie nulle, et le binaire livré
+    # par Remotion n'a pas `wrapped_avframe` — l'erreur parle alors d'un
+    # encodeur introuvable, ce qui n'a rien à voir avec le niveau.
+    mesure = subprocess.run(
+        [ffmpeg, "-hide_banner", "-nostats", "-i", str(video),
+         "-vn", "-sn", "-dn",
+         "-af", f"{filtre}:print_format=json", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    releve = _dernier_json(mesure.stderr)
+    if releve is None:
+        print("  ⚠ mesure de niveau illisible — fichier laissé tel quel")
+        return
+
+    print(f"  niveau mesuré : {releve.get('input_i')} LUFS → cible {cible:g}")
+    applique = (
+        f"{filtre}"
+        f":measured_I={releve['input_i']}:measured_TP={releve['input_tp']}"
+        f":measured_LRA={releve['input_lra']}:measured_thresh={releve['input_thresh']}"
+        f":offset={releve.get('target_offset', 0)}:linear=true"
+    )
+    sortie = video.with_suffix(".normalise.mp4")
+    fait = subprocess.run(
+        [ffmpeg, "-y", "-hide_banner", "-nostats", "-i", str(video),
+         "-af", applique, "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+         str(sortie)],
+        capture_output=True, text=True,
+    )
+    if fait.returncode != 0 or not sortie.is_file():
+        print("  ⚠ normalisation échouée — fichier laissé tel quel")
+        sortie.unlink(missing_ok=True)
+        return
+    sortie.replace(video)
+    print(f"  normalisé à {cible:g} LUFS, crête {crete:g} dBTP")
+
+
+def _ffmpeg() -> str | None:
+    """Le ffmpeg de Remotion, ou celui du système.
+
+    Remotion en embarque un : aucune raison d'exiger une installation
+    séparée pour une étape qui suit immédiatement son rendu.
+    """
+    import shutil
+
+    remotion = config.repo_root() / "remotion" / "node_modules" / "@remotion"
+    for dossier in sorted(remotion.glob("compositor-*")):
+        binaire = dossier / "ffmpeg"
+        if binaire.is_file():
+            return str(binaire)
+    return shutil.which("ffmpeg")
+
+
+def _dernier_json(texte: str) -> dict | None:
+    """Le relevé de `loudnorm`, qui l'imprime en dernier sur stderr."""
+    debut = texte.rfind("{")
+    if debut < 0:
+        return None
+    try:
+        return json.loads(texte[debut:texte.rfind("}") + 1])
+    except json.JSONDecodeError:
+        return None
 
 
 def _stage_public_dir(project: Project) -> Path:
@@ -1175,6 +1314,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     render_cmd.add_argument(
         "--crf", type=int, default=None, help="qualité d'encodage (défaut : config)"
+    )
+    render_cmd.add_argument(
+        "--sans-normalisation", action="store_true",
+        help="ne pas porter le son au niveau de diffusion",
     )
     aligner_cmd = add(
         "aligner", "Mesurer la position de chaque mot dans l'audio", cmd_aligner)
