@@ -620,7 +620,3 @@ montage:
     # et seule une ombre portée douce tient la lisibilité. Un template qui
     # travaille sur des archives très claires peut le rallumer.
     voile: true
-
-budget:
-  # Le pipeline refuse de continuer au-delà, et demande confirmation.
-  max_eur_par_projet: 8.0

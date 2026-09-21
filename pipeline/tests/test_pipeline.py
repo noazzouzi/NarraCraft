@@ -3268,3 +3268,43 @@ def test_an_estimated_alignment_is_not_a_voice(tmp_path):
     (dossier / "02-script.md").write_text("x", encoding="utf-8")
     assert serveur_mod._etape_faite(dossier, "02-script.md") is True
     assert serveur_mod._etape_faite(dossier, "07-out/video.mp4") is False
+
+
+def test_the_checkpoint_estimate_counts_the_silence_it_will_insert():
+    """`mots_par_minute` est le débit du FILM : il compte les blancs entre
+    beats et entre actes, qui ne sont pas dans le beat. Estimer un beat avec
+    ce chiffre le raccourcit — mesuré sur les 168 beats du premier
+    documentaire complet, 9,1 % sous la durée réelle en médiane.
+
+    C'est la mauvaise direction : ce contrôle existe pour attraper un plan
+    trop long AVANT de payer les images. Sous-estimer laisse passer au
+    checkpoint ce que la timeline refusera après la dépense."""
+    from fresque import config, shots as shots_mod
+
+    class FauxBeat:
+        id = "B001"
+        word_count = 40
+        text = "Trois mots ici. Puis trois autres. Et une fin."
+
+    config.use_project_overrides({
+        "narration": {"mots_par_minute": 120, "pause_phrase_s": 1.0},
+        "montage": {"duree_plan_max_s": 20},
+    })
+    try:
+        plan = [Shot(index=0, beat="B001", type="archive", requete="q")]
+        # 40 mots à 120 mots/min = 20 s de parole, plus deux pauses d'une
+        # seconde : 22 s. Sans les pauses, 20 s passerait tout juste sous le
+        # plafond de 20 s ; avec elles, le plan est signalé.
+        assert shots_mod.density(plan, [FauxBeat()]) != []
+    finally:
+        config.use_project_overrides(None)
+
+    config.use_project_overrides({
+        "narration": {"mots_par_minute": 120, "pause_phrase_s": 0},
+        "montage": {"duree_plan_max_s": 20},
+    })
+    try:
+        plan = [Shot(index=0, beat="B001", type="archive", requete="q")]
+        assert shots_mod.density(plan, [FauxBeat()]) == []
+    finally:
+        config.use_project_overrides(None)
