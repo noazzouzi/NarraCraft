@@ -108,6 +108,20 @@ def _composition(dossier: Path) -> dict[str, int]:
     return compte
 
 
+@app.get("/api/projets/{slug}/timeline")
+def timeline(slug: str) -> Any:
+    """`06-timeline.json`, tel quel.
+
+    C'est ce que le moteur de rendu consomme, et c'est aussi ce que le
+    lecteur du navigateur consomme : une seule source, donc un aperçu qui
+    ne peut pas diverger du film.
+    """
+    chemin = _dossier(slug) / "06-timeline.json"
+    if not chemin.is_file():
+        raise HTTPException(404, "pas encore de montage")
+    return json.loads(chemin.read_text(encoding="utf-8"))
+
+
 @app.get("/api/templates")
 def templates() -> list[dict[str, Any]]:
     import yaml

@@ -94,13 +94,27 @@ export default function Projet() {
               {projet.template ? ` · ${projet.template}` : ""}
             </p>
           </div>
-          {projet.mesures.length > 0 && (
-            <div className="mesures">
-              {projet.mesures.map(([nom, valeur]) => (
-                <span key={nom}><b>{valeur}</b> {nom}</span>
-              ))}
-            </div>
-          )}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 12 }}>
+            {projet.mesures.length > 0 && (
+              <div className="mesures">
+                {projet.mesures.map(([nom, valeur]) => (
+                  <span key={nom}><b>{valeur}</b> {nom}</span>
+                ))}
+              </div>
+            )}
+            {projet.fichiers.find((f) => f.fichier === "06-timeline.json")?.existe && (
+              <Link
+                to={`/projets/${slug}/apercu`}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 9, height: 44,
+                  padding: "0 18px", borderRadius: 9, background: "var(--accent)",
+                  color: "#17110e", fontWeight: 600, fontSize: 14.5,
+                }}
+              >
+                ▶ Voir le montage
+              </Link>
+            )}
+          </div>
         </header>
 
         <h3 style={{ marginBottom: 14 }}>La chaîne</h3>
