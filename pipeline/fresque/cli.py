@@ -767,6 +767,9 @@ def cmd_render(args: argparse.Namespace) -> int:
         _ecrire_credits(project)
         if not args.sans_normalisation:
             _normaliser(output)
+        # Après la normalisation : la vignette s'extrait du fichier livré,
+        # pas d'une version intermédiaire.
+        _ecrire_livraison(project, output)
 
     size_mb = output.stat().st_size / 1_048_576
     print(f"✓ {output.name} · {size_mb:.1f} Mo")
@@ -816,6 +819,111 @@ def _ecrire_credits(project: Project) -> None:
     chemin.parent.mkdir(parents=True, exist_ok=True)
     chemin.write_text("\n".join(lignes) + "\n", encoding="utf-8")
     print(f"  crédits : {chemin.name} · {len(credits)} visuels")
+
+
+def _horodatage(secondes: float, separateur: str = ",") -> str:
+    heures, reste = divmod(max(secondes, 0), 3600)
+    minutes, secs = divmod(reste, 60)
+    entier = int(secs)
+    milli = round((secs - entier) * 1000)
+    return f"{int(heures):02d}:{int(minutes):02d}:{entier:02d}{separateur}{milli:03d}"
+
+
+def _ecrire_livraison(project: Project, video: Path) -> None:
+    """Ce qui accompagne le fichier vidéo.
+
+    Le rendu produisait un mp4 et s'arrêtait là. Tout ce qui suit se dérive
+    de fichiers déjà écrits — aucun jugement, aucune API, aucune décision
+    nouvelle. Ne pas les produire, c'est laisser à la main un travail que
+    le pipeline a déjà fait.
+    """
+    donnees = json.loads(project.timeline.read_text(encoding="utf-8"))
+    fps = int(donnees.get("fps") or 30)
+
+    lignes = donnees.get("sous_titres") or []
+    if lignes:
+        srt = []
+        for numero, ligne in enumerate(lignes, start=1):
+            debut = ligne["debut_frame"] / fps
+            fin = (ligne["debut_frame"] + ligne["duree_frames"]) / fps
+            srt.append(f"{numero}\n{_horodatage(debut)} --> {_horodatage(fin)}\n"
+                       f"{ligne['texte']}\n")
+        (project.out_dir / "video.srt").write_text(
+            "\n".join(srt), encoding="utf-8")
+        print(f"  sous-titres : video.srt · {len(lignes)} lignes")
+
+    # Les chapitres, à partir des actes. Le premier commence à zéro : c'est
+    # la condition pour que la plateforme les reconnaisse.
+    titres: dict[str, str] = {}
+    if project.script.is_file():
+        try:
+            for beat in script_parser.parse(project.script).beats:
+                titres.setdefault(beat.act, beat.act_title)
+        except script_parser.ScriptError:
+            titres = {}
+
+    chapitres: list[str] = []
+    vu: set[str] = set()
+    for clip in donnees.get("clips", []):
+        acte = clip.get("acte") or ""
+        if acte in vu:
+            continue
+        vu.add(acte)
+        debut = 0 if not chapitres else clip["debut_frame"] / fps
+        nom = titres.get(acte) or f"Acte {acte}" if acte else "Ouverture"
+        chapitres.append(f"{_horodatage(debut, '.')[3:8]} {nom}")
+    carton = donnees.get("generique")
+    if carton:
+        chapitres.append(
+            f"{_horodatage(carton['debut_frame'] / fps, '.')[3:8]} Sources")
+
+    # Trois chapitres au minimum, sinon la plateforme les ignore — et un
+    # fichier qu'elle ignore vaut mieux absent qu'incompris.
+    if len(chapitres) >= 3:
+        (project.out_dir / "chapitres.txt").write_text(
+            "\n".join(chapitres) + "\n", encoding="utf-8")
+        print(f"  chapitres : chapitres.txt · {len(chapitres)}")
+
+    _vignette(video, project.out_dir / "vignette.png",
+              _instant_vignette(donnees, fps))
+
+
+def _instant_vignette(donnees: dict, fps: int) -> float:
+    """Quand prendre la vignette.
+
+    Le premier plan porte déjà l'accroche incrustée et montre le sujet :
+    `fresque shots` refuse le fichier autrement. C'est donc exactement une
+    vignette — sauf qu'un sous-titre s'y incruste aussi, et une vignette
+    avec un sous-titre en travers ne ressemble à rien.
+
+    On cherche donc, dans les plans à accroche, une image que ne couvre
+    aucune ligne de sous-titre. À défaut, une seconde : mieux vaut une
+    vignette avec un sous-titre qu'aucune vignette.
+    """
+    lignes = [(l["debut_frame"], l["debut_frame"] + l["duree_frames"])
+              for l in donnees.get("sous_titres") or []]
+    accroches = [c for c in donnees.get("clips", []) if c.get("accroche")]
+    for clip in accroches[:3]:
+        debut, fin = clip["debut_frame"], clip["debut_frame"] + clip["duree_frames"]
+        for frame in range(debut, fin, max(1, fps // 5)):
+            if not any(a <= frame < b for a, b in lignes):
+                return frame / fps
+    return 1.0
+
+
+def _vignette(video: Path, sortie: Path, instant: float) -> None:
+    import subprocess
+
+    ffmpeg = _ffmpeg()
+    if ffmpeg is None or not video.is_file():
+        return
+    fait = subprocess.run(
+        [ffmpeg, "-y", "-hide_banner", "-nostats", "-ss", f"{instant:.3f}",
+         "-i", str(video), "-frames:v", "1", "-q:v", "2", str(sortie)],
+        capture_output=True, text=True,
+    )
+    if fait.returncode == 0 and sortie.is_file():
+        print(f"  vignette : {sortie.name} · à {instant:.1f} s")
 
 
 def _normaliser(video: Path) -> None:

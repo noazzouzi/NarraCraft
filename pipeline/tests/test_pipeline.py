@@ -119,6 +119,88 @@ def _shot(beat: str, index: int, movement: str = "zoom_in", weight: float = 1.0)
                 mouvement=movement, poids=weight)
 
 
+# --- Où tombent les coupes ---------------------------------------------------
+#
+# Une coupe posée au prorata des poids tombe où le calcul la met, parfois
+# au milieu d'un mot. C'est le défaut le plus reconnaissable d'un montage
+# automatique. On a la position de chaque mot : il suffit de chercher.
+
+def _mot(texte: str, debut: float, fin: float) -> dict:
+    return {"t": texte, "tx": texte, "debut_s": debut, "fin_s": fin}
+
+
+def test_a_cut_goes_to_the_widest_silence_not_the_nearest():
+    """Un blanc de trois cents millisecondes est un meilleur point de coupe
+    qu'un blanc de trente, même un peu plus loin."""
+    mots = [
+        _mot("un", 0.0, 0.5),
+        _mot("deux", 0.53, 1.0),     # blanc de 0,03 s, tout près de 1,05
+        _mot("trois", 1.30, 1.8),    # blanc de 0,30 s, un peu plus loin
+        _mot("quatre", 1.83, 2.3),
+    ]
+    instant, largeur = timeline_mod._caler_sur_silence(1.05, mots, 0.4)
+
+    assert largeur == pytest.approx(0.30)
+    assert instant == pytest.approx(1.15), "le milieu du blanc large"
+
+
+def test_a_cut_with_no_silence_in_reach_stays_where_it_was():
+    mots = [_mot("un", 0.0, 1.0), _mot("deux", 1.0, 2.0)]
+    instant, largeur = timeline_mod._caler_sur_silence(1.5, mots, 0.1)
+    assert (instant, largeur) == (1.5, 0.0)
+
+
+def test_only_interior_cuts_count_as_missed():
+    """Le dernier plan d'un beat n'a pas de coupe à caler : la sienne est la
+    borne du beat suivant, déjà mesurée. Les compter comme des échecs
+    faisait dire au contrôle que la moitié des coupes rataient — alors que
+    la moitié n'en avait pas."""
+    from fresque import timeline as t
+
+    faux = {
+        "fps": 30, "clips": [
+            {"id": "S000", "debut_frame": 0, "duree_frames": 30, "type": "archive",
+             "image": "a.jpg", "coupe_blanc_s": 0.2},
+            {"id": "S001", "debut_frame": 30, "duree_frames": 30, "type": "archive",
+             "image": "b.jpg", "coupe_blanc_s": None},
+        ],
+    }
+    assert not [p for p in t.check(faux) if "silence" in p]
+
+
+# --- La livraison ------------------------------------------------------------
+
+def test_a_subtitle_becomes_a_timed_srt_line():
+    """Le rendu produisait un mp4 et s'arrêtait là. Les sous-titres
+    existaient déjà, à la frame près, dans la timeline."""
+    from fresque import cli
+
+    assert cli._horodatage(0) == "00:00:00,000"
+    assert cli._horodatage(3661.5) == "01:01:01,500"
+    assert cli._horodatage(75.25, ".") == "00:01:15.250"
+
+
+def test_the_thumbnail_avoids_a_frame_with_a_subtitle_across_it():
+    """Le premier plan porte déjà l'accroche et montre le sujet. Mais un
+    sous-titre s'y incruste aussi, et une vignette avec un sous-titre en
+    travers ne ressemble à rien."""
+    from fresque import cli
+
+    donnees = {
+        "clips": [{"debut_frame": 0, "duree_frames": 90, "accroche": "Un fait."}],
+        "sous_titres": [{"debut_frame": 0, "duree_frames": 45}],
+    }
+    assert cli._instant_vignette(donnees, 30) == pytest.approx(48 / 30, abs=0.2)
+
+    # Aucune image libre : mieux vaut une vignette avec un sous-titre
+    # qu'aucune vignette.
+    couvert = {
+        "clips": [{"debut_frame": 0, "duree_frames": 60, "accroche": "x"}],
+        "sous_titres": [{"debut_frame": 0, "duree_frames": 60}],
+    }
+    assert cli._instant_vignette(couvert, 30) == 1.0
+
+
 # --- Le carton de fin --------------------------------------------------------
 #
 # `timeline.py` construisait un tableau `credits` depuis toujours, et aucun

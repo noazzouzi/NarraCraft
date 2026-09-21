@@ -428,6 +428,44 @@ def generique(credits: list[dict[str, Any]], fps: int) -> dict[str, Any] | None:
     }
 
 
+def _caler_sur_silence(instant: float, mots: list[dict[str, Any]],
+                       tolerance_s: float) -> tuple[float, float]:
+    """Rapproche une coupe du blanc le plus large autour d'elle.
+
+    Une coupe posée au prorata des poids tombe où le calcul la met —
+    parfois au milieu d'un mot. C'est le défaut le plus reconnaissable d'un
+    montage automatique : l'œil change d'image pendant que la bouche est
+    encore sur une syllabe.
+
+    On a la position de chaque mot depuis l'alignement. Il suffit donc de
+    chercher, autour de l'instant prévu, le silence le plus large et d'y
+    poser la coupe. Le plus **large**, pas le plus proche : un blanc de
+    trois cents millisecondes est un meilleur point de coupe qu'un blanc de
+    trente, même un peu plus loin.
+
+    Avec `source: forced` ces blancs sont mesurés sur l'audio. Avec des
+    positions estimées ce sont ceux du modèle de ponctuation — donc les
+    virgules et les points, ce qui reste un bon endroit où couper.
+
+    Rend (l'instant retenu, la largeur du blanc). Une largeur nulle dit que
+    rien n'a été trouvé et que la coupe tombe où elle tombait.
+    """
+    if tolerance_s <= 0 or len(mots) < 2:
+        return instant, 0.0
+
+    retenu, largeur = instant, 0.0
+    for avant, apres in zip(mots, mots[1:]):
+        blanc = float(apres["debut_s"]) - float(avant["fin_s"])
+        if blanc <= 0:
+            continue
+        milieu = (float(avant["fin_s"]) + float(apres["debut_s"])) / 2
+        if abs(milieu - instant) > tolerance_s:
+            continue
+        if blanc > largeur:
+            retenu, largeur = milieu, blanc
+    return retenu, largeur
+
+
 def _recoller(lignes: list[dict[str, Any]], seuil_frames: int) -> list[dict[str, Any]]:
     """Tient une ligne jusqu'à la suivante quand le trou est un artefact.
 
@@ -471,6 +509,15 @@ def build(
     sons_on = bool(config.get("montage", "transitions", "sons", default=True)) and sons_dir
     style_transition = str(config.get("montage", "transitions", "style", default="effets"))
 
+    # Les coupes cherchent le silence entre deux mots plutôt que de tomber
+    # où le prorata des poids les met.
+    cale_silence = bool(config.get("montage", "coupes", "cale_sur_silence",
+                                   default=True))
+    tolerance_coupe = float(config.get("montage", "coupes", "tolerance_s",
+                                       default=0.4))
+    plancher_plan_s = float(config.get("montage", "coupes", "plancher_plan_s",
+                                       default=0.5))
+
     beats = alignment["beats"]
     total_s = float(alignment["duree_totale_s"])
     grouped = by_beat(shots)
@@ -497,6 +544,23 @@ def build(
             is_last = position == len(beat_shots) - 1
             end = window_end if is_last else cursor + share
 
+            # La coupe cherche le silence. Jamais la dernière du beat : elle
+            # tombe sur la borne du beat suivant, qui est déjà mesurée.
+            # `None` pour le dernier plan d'un beat : il n'a pas de coupe à
+            # caler, la sienne est la borne du beat suivant, déjà mesurée.
+            # Le compter comme un échec faisait dire au contrôle que la
+            # moitié des coupes rataient, alors que la moitié n'en avait pas.
+            blanc: float | None = None
+            if not is_last and cale_silence:
+                blanc = 0.0
+                vise, blanc = _caler_sur_silence(
+                    end, beat.get("mots") or [], tolerance_coupe)
+                # Une coupe calée ne doit pas avaler le plan d'à côté : on
+                # garde de quoi voir chacun d'eux.
+                mini = cursor + plancher_plan_s
+                maxi = window_end - plancher_plan_s
+                end = min(max(vise, mini), maxi) if mini < maxi else end
+
             start_frame = round(cursor * fps)
             end_frame = max(round(end * fps), start_frame + 1)
             asset = assets.get(shot.id, {})
@@ -514,6 +578,11 @@ def build(
                 "beat": beat["id"],
                 "acte": beat.get("acte", ""),
                 "type": shot.type,
+                # Largeur du blanc dans lequel la coupe de SORTIE est
+                # tombée. Zéro : aucune n'a été trouvée, donc la coupe
+                # tombe potentiellement au milieu d'un mot. `check()` le
+                # dit, plutôt que de le corriger en silence.
+                "coupe_blanc_s": None if blanc is None else round(blanc, 3),
                 "entree": {
                     "type": arrivee,
                     "duree_frames": round(
@@ -753,4 +822,20 @@ def check(timeline: dict[str, Any]) -> list[str]:
                 and clip["type"] != "motion":
             problems.append(f"{clip['id']} : aucun visuel associé.")
         cursor = clip["debut_frame"] + clip["duree_frames"]
+
+    # Une coupe au milieu d'un mot est le défaut le plus reconnaissable
+    # d'un montage automatique. Elle ne se corrige pas ici — la corriger
+    # d'office déplacerait des plans sans le dire — mais elle se compte.
+    if config.get("montage", "coupes", "cale_sur_silence", default=True):
+        interieures = [c for c in clips if c.get("coupe_blanc_s") is not None]
+        aveugles = [c["id"] for c in interieures if c["coupe_blanc_s"] == 0]
+        if aveugles and interieures:
+            part = len(aveugles) / len(interieures)
+            if part > 0.25:
+                problems.append(
+                    f"{len(aveugles)} coupes sur {len(interieures)} ne sont "
+                    f"tombées dans aucun silence ({part:.0%}) — augmenter "
+                    "`montage.coupes.tolerance_s`, ou relancer `fresque "
+                    "aligner` pour avoir les vraies positions de mots."
+                )
     return problems

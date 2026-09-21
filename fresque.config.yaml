@@ -638,6 +638,26 @@ montage:
     titre: Sources et licences
     mention: Liste complète des auteurs dans la description.
 
+  # Où tombent les coupes à l'intérieur d'un beat.
+  #
+  # Réparties au prorata des poids, elles tombent où le calcul les met —
+  # parfois au milieu d'un mot. C'est le défaut le plus reconnaissable
+  # d'un montage automatique : l'image change pendant que la bouche est
+  # encore sur une syllabe.
+  #
+  # On a la position de chaque mot depuis l'alignement. La coupe cherche
+  # donc, autour de son instant prévu, le silence le plus LARGE — pas le
+  # plus proche : un blanc de trois cents millisecondes est un meilleur
+  # point de coupe qu'un blanc de trente, même un peu plus loin.
+  coupes:
+    cale_sur_silence: true
+    # Au-delà, la coupe s'éloigne trop de la place que son poids lui
+    # donnait, et le rythme voulu par le plan visuel se déforme.
+    tolerance_s: 0.4
+    # Ce qu'on garde à chaque plan quoi qu'il arrive : une coupe calée ne
+    # doit pas avaler son voisin.
+    plancher_plan_s: 0.5
+
   # La livraison. Un documentaire rendu à -24 LUFS sonne faible à côté de
   # tout le reste sur la plateforme, et YouTube ne le remonte pas : il ne
   # fait que baisser ce qui dépasse. La cible est donc celle de la
