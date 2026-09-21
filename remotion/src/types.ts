@@ -131,6 +131,12 @@ export type MotionStyle = {
   attenue: string;
   famille: string;
   cascade_s: number;
+  /** Le papier et l'encre des panneaux qui représentent un imprimé — une
+   *  une de journal, un document. Facultatifs : chaque composant garde sa
+   *  valeur en repli, parce qu'un journal et un document n'ont pas le même
+   *  blanc. Un template qui les pose repeint les deux. */
+  papier?: string;
+  encre?: string;
   /** La scène derrière le panneau : ce qui le rattache au film au lieu de
    *  le poser à côté. Entièrement décidée par le template. */
   scene?: {

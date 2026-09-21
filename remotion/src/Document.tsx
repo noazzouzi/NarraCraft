@@ -36,8 +36,8 @@ export const Document: React.FC<{
   const { fps } = useVideoConfig();
 
   const famille = FAMILLES[ecriture ?? "dactylographie"] ?? FAMILLES.dactylographie;
-  const papier = "#efe9dc";
-  const encre = "#1d1c1a";
+  const papier = style.papier ?? "#efe9dc";
+  const encre = style.encre ?? "#1d1c1a";
 
   const pose = interpolate(frame, [0, fps * 0.8], [0, 1], {
     easing: EASE_OUT, extrapolateLeft: "clamp", extrapolateRight: "clamp",

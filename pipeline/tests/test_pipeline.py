@@ -3240,3 +3240,31 @@ def test_the_workshop_can_run_every_step_the_pipeline_has():
     # Le libellé ne nomme aucun moteur : il en existe deux, et le réglage
     # peut changer sans que ce fichier le sache.
     assert "Kokoro" not in serveur_mod.COMMANDES["voice"].libelle
+
+
+def test_an_estimated_alignment_is_not_a_voice(tmp_path):
+    """`align` et `voice` écrivent le même fichier. La jauge de l'atelier
+    testait sa seule présence, donc elle affichait la voix comme faite après
+    une simple estimation — et l'étape suivante partait sur des chiffres
+    devinés au lieu de durées mesurées."""
+    from fresque import serveur as serveur_mod
+
+    dossier = tmp_path
+    (dossier / "04-audio").mkdir()
+    cible = dossier / "04-audio" / "alignment.json"
+
+    cible.write_text(json.dumps({"source": "estimate"}), encoding="utf-8")
+    assert serveur_mod._etape_faite(dossier, "04-audio/alignment.json") is False
+
+    for vraie in ("kokoro", "edge", "forced"):
+        cible.write_text(json.dumps({"source": vraie}), encoding="utf-8")
+        assert serveur_mod._etape_faite(dossier, "04-audio/alignment.json") is True
+
+    # Un fichier illisible ne vaut pas mieux qu'un fichier absent.
+    cible.write_text("{cassé", encoding="utf-8")
+    assert serveur_mod._etape_faite(dossier, "04-audio/alignment.json") is False
+
+    # Tous les autres fichiers : exister suffit.
+    (dossier / "02-script.md").write_text("x", encoding="utf-8")
+    assert serveur_mod._etape_faite(dossier, "02-script.md") is True
+    assert serveur_mod._etape_faite(dossier, "07-out/video.mp4") is False

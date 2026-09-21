@@ -64,8 +64,8 @@ export const Journal: React.FC<{
     { easing: EASE_OUT, extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
 
-  const encre = "#14161a";
-  const papier = "#e8e3d8";
+  const encre = style.encre ?? "#14161a";
+  const papier = style.papier ?? "#e8e3d8";
 
   return (
     <AbsoluteFill

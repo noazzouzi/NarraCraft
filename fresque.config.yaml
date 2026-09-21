@@ -504,6 +504,14 @@ montage:
     texte: "#f2f4f8"
     accent: "#c9a227"
     attenue: "#7c8698"
+    # Les panneaux qui représentent du papier — une une de journal, un
+    # document — le codaient en dur. Un template ne pouvait pas les
+    # repeindre, alors que c'est exactement ce qu'un template est censé
+    # faire. Les valeurs ci-dessous sont celles qui étaient dans le code ;
+    # chaque composant garde la sienne en repli, parce qu'un journal et un
+    # document n'ont pas le même blanc.
+    papier: "#e8e3d8"
+    encre: "#14161a"
     famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
     # Secondes pendant lesquelles chaque élément apparaît, en cascade.
     cascade_s: 0.45

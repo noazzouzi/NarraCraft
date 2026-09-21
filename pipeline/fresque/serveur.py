@@ -352,7 +352,7 @@ def projets() -> list[dict[str, Any]]:
         donnees = {}
         if fiche.is_file():
             donnees = yaml.safe_load(fiche.read_text(encoding="utf-8")) or {}
-        faits = [(nom, (dossier / rel).exists()) for nom, rel in ETAPES]
+        faits = [(nom, _etape_faite(dossier, rel)) for nom, rel in ETAPES]
         sorties.append({
             "slug": dossier.name,
             "titre": _titre(dossier / "00-brief.md") or dossier.name,
@@ -363,6 +363,30 @@ def projets() -> list[dict[str, Any]]:
             "vignette": _vignette(dossier),
         })
     return sorties
+
+
+def _etape_faite(dossier: Path, relatif: str) -> bool:
+    """Le fichier existe-t-il, et dit-il ce que l'étape promet ?
+
+    Pour tous les fichiers sauf un, exister suffit. `alignment.json` fait
+    exception : `align` l'écrit sans audio, avec des durées estimées, et
+    `voice` l'écrit avec des durées mesurées. Les deux produisent le même
+    nom de fichier, donc la jauge affichait la voix comme faite alors
+    qu'aucun son n'existait — et l'étape suivante partait sur des chiffres
+    devinés.
+
+    Le champ `source` tranche : `estimate` n'est pas une voix.
+    """
+    chemin = dossier / relatif
+    if not chemin.exists():
+        return False
+    if relatif != "04-audio/alignment.json":
+        return True
+    try:
+        donnees = json.loads(chemin.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    return donnees.get("source") != "estimate"
 
 
 def _titre(brief: Path) -> str:

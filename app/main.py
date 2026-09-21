@@ -86,7 +86,9 @@ def _fichiers(dossier: Path) -> list[dict[str, Any]]:
         sorties.append({
             "etape": nom,
             "fichier": relatif,
-            "existe": chemin.exists(),
+            # `existe` n'est pas `chemin.exists()` : un `alignment.json`
+            # seulement estimé ne vaut pas une voix. Voir `_etape_faite`.
+            "existe": serveur._etape_faite(dossier, relatif),
             "octets": chemin.stat().st_size if chemin.is_file() else None,
         })
     return sorties
