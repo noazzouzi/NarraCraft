@@ -79,8 +79,16 @@ export default function Projet() {
   if (erreur) return <div className="erreur" style={{ margin: 40 }}>{erreur}</div>;
   if (!projet) return <p className="vide" style={{ padding: 40 }}>Lecture des fichiers…</p>;
 
+  // Deux commandes peuvent écrire le même fichier : `voice` produit
+  // l'alignement, `aligner` le remplace par une mesure. C'est la PREMIÈRE
+  // qui tient la ligne de l'étape — celle qui fait exister le fichier — et
+  // la seconde se retrouve dans le panneau « Lancer ». Le dernier qui gagne
+  // afficherait « Aligner les mots » sur la ligne « voix ».
   const parProduit = new Map<string, Commande>();
-  for (const c of Object.values(commandes)) if (c.produit) parProduit.set(c.produit, c);
+  for (const c of Object.values(commandes)) {
+    if (c.produit && !parProduit.has(c.produit)) parProduit.set(c.produit, c);
+  }
+  const surLaChaine = new Set([...parProduit.values()].map((c) => c.nom));
 
   return (
     <div className="colonnes">
@@ -164,11 +172,18 @@ export default function Projet() {
           <h3>Lancer</h3>
           <div className="actions" style={{ marginTop: 11 }}>
             {Object.values(commandes)
-              .filter((c) => !c.produit)
+              .filter((c) => !surLaChaine.has(c.nom))
               .map((c) => (
-                <button key={c.nom} onClick={() => lancer(c.nom)} disabled={vivant}>
+                <button
+                  key={c.nom}
+                  onClick={() => lancer(c.nom)}
+                  disabled={vivant}
+                  className={c.depense ? "depense" : undefined}
+                >
                   <span>{c.libelle}</span>
-                  <span className="cout">{c.longue ? "long" : "rapide"}</span>
+                  <span className="cout">
+                    {c.depense ? "payant" : c.longue ? "long" : "rapide"}
+                  </span>
                 </button>
               ))}
           </div>

@@ -4,6 +4,7 @@ kokoro-onnx>=0.4
 edge-tts>=7.0            # voix Microsoft Edge, gratuites et sans clé
 soundfile>=0.12
 numpy>=1.26
+pillow>=10               # `export`, `placeholders` et `fetch` l'importent
 
 # Optionnels — le pipeline tourne sans eux.
 #

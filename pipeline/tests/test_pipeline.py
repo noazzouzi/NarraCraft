@@ -11,6 +11,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+#: Le dépôt, retrouvé depuis CE fichier. Deux tests lisent le moteur de
+#: rendu pour vérifier qu'il n'a pas divergé du pipeline ; ils le
+#: cherchaient par chemin relatif au répertoire courant, donc ils
+#: échouaient dès qu'on lançait la suite depuis `pipeline/`.
+RACINE = Path(__file__).resolve().parents[2]
+MOTEUR_TSX = RACINE / "remotion" / "src" / "Motion.tsx"
+
 from fresque import align, script_parser, timeline as timeline_mod  # noqa: E402
 from fresque.shots import Shot, ShotsError, load as load_shots  # noqa: E402
 
@@ -1234,7 +1241,7 @@ def test_every_motion_kind_is_dispatched_by_the_renderer():
     """Le pipeline valide des formes que le moteur doit savoir dessiner :
     si les deux listes divergent, un plan validé produit un panneau vide."""
     from fresque.shots import MOTION_FIELDS
-    source = Path("remotion/src/Motion.tsx").read_text(encoding="utf-8")
+    source = MOTEUR_TSX.read_text(encoding="utf-8")
     for kind in MOTION_FIELDS:
         assert f'case "{kind}":' in source, kind
 
@@ -1644,7 +1651,7 @@ def test_every_motion_kind_reaches_the_renderer():
     qu'au rendu, une heure plus tard, sous la forme d'un panneau vide."""
     from fresque.shots import MOTION_FIELDS
 
-    source = Path("remotion/src/Motion.tsx").read_text(encoding="utf-8")
+    source = MOTEUR_TSX.read_text(encoding="utf-8")
     for kind in MOTION_FIELDS:
         assert f'case "{kind}":' in source, kind
 
@@ -3103,7 +3110,7 @@ EXTENSIONS = (".py", ".md", ".json", ".yaml", ".tsx", ".ts", ".html")
 
 
 def _claude_md() -> str:
-    return Path("CLAUDE.md").read_text(encoding="utf-8")
+    return (RACINE / "CLAUDE.md").read_text(encoding="utf-8")
 
 
 def _codes_inline(texte: str) -> list[str]:
@@ -3133,14 +3140,14 @@ def test_claude_md_ne_cite_que_des_chemins_qui_existent():
         if "<" in token:  # un gabarit, pas un chemin : `templates/<nom>.yaml`
             continue
         if token in FICHIERS_RACINE or token.startswith(RACINES_CITABLES):
-            assert Path(token).exists(), \
+            assert (RACINE / token).exists(), \
                 f"CLAUDE.md cite `{token}`, qui n'existe pas"
 
 
 def test_claude_md_ne_cite_que_des_commandes_qui_existent():
     """Le tableau des commandes est le doublon le plus exposé du fichier :
     il vieillit à chaque ajout au CLI, et personne ne le relit."""
-    source = Path("pipeline/fresque/cli.py").read_text(encoding="utf-8")
+    source = (RACINE / "pipeline" / "fresque" / "cli.py").read_text(encoding="utf-8")
     reelles = set(re.findall(r'\badd\(\s*"([a-z][a-z-]*)"', source))
     reelles |= set(re.findall(r'add_parser\(\s*\n?\s*"([a-z][a-z-]*)"', source))
     assert len(reelles) >= 15, "extraction des commandes cassée, pas le fichier"
@@ -3156,7 +3163,7 @@ def test_claude_md_ne_cite_que_des_reglages_qui_existent():
     que garde-fou — fait croire à une protection qui n'existe pas."""
     import yaml
 
-    config = yaml.safe_load(Path("fresque.config.yaml").read_text(encoding="utf-8"))
+    config = yaml.safe_load((RACINE / "fresque.config.yaml").read_text(encoding="utf-8"))
     for token in _codes_inline(_claude_md()):
         if token.endswith(EXTENSIONS) or "/" in token or "<" in token:
             continue
@@ -3201,3 +3208,35 @@ def test_a_plate_without_a_title_fills_the_frame():
 
     moyenne = sum(aires) / len(aires)
     assert moyenne > 0.42, f"la planche ne remplit que {moyenne:.0%} du cadre"
+
+
+def test_a_running_command_survives_a_server_restart():
+    """Le serveur gardait en mémoire la seule preuve qu'un processus vivait.
+    Redémarré pendant un rendu de trente minutes, il déclarait « interrompu »
+    une commande qui tournait toujours. Le pid est maintenant dans le fichier
+    — un processus long se surveille par son pid."""
+    import os
+
+    from fresque import serveur as serveur_mod
+
+    assert serveur_mod._tourne_encore(os.getpid()) is True
+    assert serveur_mod._tourne_encore(None) is False
+    assert serveur_mod._tourne_encore("4456") is False
+    # Un pid qui n'existe plus. 2^22 est au-dessus du plafond habituel de
+    # Linux, donc aucun processus ne peut le porter.
+    assert serveur_mod._tourne_encore(4_194_304) is False
+
+
+def test_the_workshop_can_run_every_step_the_pipeline_has():
+    """`aligner` manquait : la seule étape que le projet chiffre comme
+    indispensable — 305 ms d'écart médian sans elle — n'était lançable qu'au
+    terminal. Une commande qui écrit un fichier du projet et qu'on ne peut
+    pas lancer depuis l'atelier est une commande qui ne sera pas lancée."""
+    from fresque import serveur as serveur_mod
+
+    for nom in ("voice", "aligner", "fetch", "timeline", "render"):
+        assert nom in serveur_mod.COMMANDES, nom
+
+    # Le libellé ne nomme aucun moteur : il en existe deux, et le réglage
+    # peut changer sans que ce fichier le sache.
+    assert "Kokoro" not in serveur_mod.COMMANDES["voice"].libelle

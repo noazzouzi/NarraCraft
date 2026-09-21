@@ -102,7 +102,7 @@ COMMANDES: dict[str, Commande] = {
     ),
     "shots": Commande("Valider le plan visuel", exige="03-shots.json"),
     "voice": Commande(
-        "Synthétiser la voix (Kokoro)", exige="02-script.md",
+        "Synthétiser la voix", exige="02-script.md",
         produit="04-audio/alignment.json", longue=True,
     ),
     "fetch": Commande(
@@ -123,6 +123,13 @@ COMMANDES: dict[str, Commande] = {
     "placeholders": Commande(
         "Visuels de substitution", exige="03-shots.json",
         produit="05-visuals/assets.json",
+    ),
+    # `align` estime, `aligner` mesure. La seconde était absente de cette
+    # liste, donc impossible à lancer depuis l'atelier : le seul moyen
+    # d'obtenir la position réelle des mots était le terminal.
+    "aligner": Commande(
+        "Aligner les mots sur l'audio", exige="04-audio/alignment.json",
+        produit="04-audio/alignment.json", longue=True,
     ),
     "timeline": Commande(
         "Construire le montage", exige="04-audio/alignment.json",
@@ -214,6 +221,15 @@ def lancer(slug: str, nom: str, options: dict[str, str]) -> str:
     with _VERROU:
         _VIVANTS[identifiant] = processus
 
+    # Le pid est écrit dans le fichier, pas seulement gardé en mémoire.
+    # Sans lui, redémarrer le serveur pendant un rendu de trente minutes
+    # faisait déclarer « interrompu » un processus qui tournait toujours :
+    # la seule preuve qu'il vivait était dans le processus qu'on venait de
+    # tuer. Un processus long se surveille par son pid.
+    donnees = json.loads(fiche.read_text(encoding="utf-8"))
+    donnees["pid"] = processus.pid
+    fiche.write_text(json.dumps(donnees, ensure_ascii=False), encoding="utf-8")
+
     def attendre() -> None:
         code = processus.wait()
         flux.close()
@@ -249,6 +265,28 @@ def arreter(identifiant: str) -> bool:
     return True
 
 
+def _tourne_encore(pid: Any) -> bool:
+    """Ce pid est-il encore un processus vivant ?
+
+    Consulté quand la mémoire ne sait rien — typiquement après un
+    redémarrage du serveur pendant un rendu. Le signal 0 ne fait rien : il
+    ne sert qu'à demander au noyau si le processus existe.
+
+    Faux positif possible : le système a pu réattribuer le pid à autre
+    chose. Il faudrait des heures d'uptime et un compteur rebouclé pour
+    tomber dessus, et le pire cas est d'attendre une commande qui ne
+    reviendra pas — contre, aujourd'hui, déclarer morte une commande qui
+    tourne.
+    """
+    if not isinstance(pid, int):
+        return False
+    try:
+        os.kill(pid, 0)
+    except (OSError, ProcessLookupError):
+        return False
+    return True
+
+
 def journal(slug: str, identifiant: str, depuis: int = 0) -> dict[str, Any]:
     """Lit la suite d'un journal. Le fichier est la vérité, pas la mémoire."""
     if not _ID_JOURNAL.match(identifiant):
@@ -262,10 +300,12 @@ def journal(slug: str, identifiant: str, depuis: int = 0) -> dict[str, Any]:
 
     with _VERROU:
         vivant = identifiant in _VIVANTS
+    if not vivant:
+        vivant = _tourne_encore(donnees.get("pid"))
     code = donnees.get("code")
     # Une fiche restée à `code: null` sans processus vivant signale un
-    # serveur redémarré en cours de route. On le dit plutôt que de laisser
-    # l'interface tourner indéfiniment.
+    # serveur redémarré ET un processus mort. On le dit plutôt que de
+    # laisser l'interface tourner indéfiniment.
     return {
         "texte": octets.decode("utf-8", "replace"),
         "offset": depuis + len(octets),
