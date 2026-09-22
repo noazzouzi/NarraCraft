@@ -48,13 +48,16 @@ existe — elle est seulement trop large pour un documentaire. Kokoro, lui,
 laisse 0,10 s dans les deux cas : chez lui la hiérarchie n'existe pas.
 
 `_say_beat` traite donc les deux cas différemment, et `marque_les_phrases`
-dit lequel s'applique. Resserrer les pauses d'un moteur qui les marque coûte
-un appel au lieu de huit, et garde sa prosodie d'un bout à l'autre du beat.
-Découper le beat pour les trois, ce que faisait ce module, produisait des
-pauses toutes identiques au millième près — le défaut audible de
-`la-faillite-de-subway`, mesuré dans le docstring de `_say_beat`.
+dit lequel s'applique. Un moteur qui marque les phrases reçoit le beat d'un
+bloc et sa sortie est prise telle quelle : un appel au lieu de huit, sa
+prosodie d'un bout à l'autre du beat, et ses pauses à lui. Découper le beat
+pour les trois, ce que faisait ce module, produisait des pauses toutes
+identiques au millième près — le défaut audible de `la-faillite-de-subway`,
+mesuré dans le docstring de `_say_beat`.
 
-`narration.pause_phrase_s` reste la cible dans les deux chemins.
+`narration.pause_phrase_s` ne produit donc plus de silence que chez Kokoro.
+Partout ailleurs il ne sert qu'à estimer, avant la synthèse, la durée que
+le film aura.
 """
 from __future__ import annotations
 
@@ -167,10 +170,10 @@ class Moteur:
     s'additionnent et la pause réelle dépasse celle qui est demandée.
 
     `marque_les_phrases` dit si le moteur fait lui-même la différence entre
-    une virgule et un point quand on lui donne un beat entier. Voir
-    `_say_beat` : de cette réponse dépend le fait qu'on lui livre le beat
-    d'un bloc ou phrase par phrase, et c'est le réglage qui décide si la
-    narration sonne humaine ou mécanique.
+    une virgule et un point quand on lui donne un beat entier. Quand il la
+    fait, on lui livre le beat d'un bloc et on ne retouche pas sa sortie ;
+    sinon on découpe et on pose le silence à sa place. Voir `_say_beat` —
+    c'est le réglage qui décide si la narration sonne humaine ou mécanique.
     """
 
     nom: str = ""
@@ -282,8 +285,8 @@ class MoteurEdge(Moteur):
     nom = "edge"
     pause_naturelle_s = 0.0
     #: Mesuré : sur un beat entier, Edge laisse 0,35 s après une virgule et
-    #: 1,30 s après un point. La hiérarchie existe, elle est juste trop
-    #: large — on la resserre, on ne la refait pas.
+    #: 1,30 s après un point. Il sait donc lire une ponctuation, et sa sortie
+    #: est prise telle quelle.
     marque_les_phrases = True
 
     @classmethod
@@ -569,49 +572,6 @@ def _time_words(beat: Beat, start: float, duration: float) -> list[dict[str, Any
 #: ne doit plus contenir ni l'un ni l'autre (voir `lint.TTS_HAZARDS`).
 _FIN_PHRASE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÀ-Ý])")
 
-#: Au-delà de ce silence, on tient la pause pour une fin de phrase et non
-#: pour une virgule. Relevé sur Edge : 0,35 s après une virgule, 1,30 s
-#: après un point — la frontière est large, n'importe quelle valeur entre
-#: les deux convient.
-_SILENCE_DE_PHRASE_S = 0.55
-
-#: Plancher : en dessous, une pause cesse de s'entendre comme une pause.
-_PAUSE_MINIMALE_S = 0.12
-
-
-def _caler_silences(samples, rate: int, cible: float):
-    """Resserre les silences de fin de phrase sans les égaliser.
-
-    Le moteur sait où sont les points — ses pauses le disent. Il les fait
-    seulement trop longues pour un documentaire. On ramène donc la médiane
-    des pauses longues sur `cible` et on applique le même facteur à toutes :
-    celle qui était la plus longue le reste, la virgule n'est pas touchée.
-
-    Écraser cette hiérarchie est exactement ce qui fait sonner une voix
-    mécanique. Une pause de point et une pause de virgule qui durent le
-    même temps, quatre cents fois de suite, s'entendent comme une machine.
-    """
-    import numpy as np
-
-    x = np.asarray(samples, dtype="float32")
-    longs = _silences(x, rate, _SILENCE_DE_PHRASE_S)
-    if not longs:
-        return x
-
-    durees = [(fin - debut) / rate for debut, fin in longs]
-    facteur = min(cible / float(np.median(durees)), 1.0)
-
-    morceaux: list[Any] = []
-    curseur = 0
-    for (debut, fin), duree in zip(longs, durees):
-        morceaux.append(x[curseur:debut])
-        garde = max(duree * facteur, _PAUSE_MINIMALE_S)
-        morceaux.append(np.zeros(int(garde * rate), dtype="float32"))
-        curseur = fin
-    morceaux.append(x[curseur:])
-    return np.concatenate(morceaux)
-
-
 def _silences(x, rate: int, mini: float) -> list[tuple[int, int]]:
     """Les plages muettes d'au moins `mini` secondes, en échantillons."""
     import numpy as np
@@ -631,20 +591,22 @@ def _silences(x, rate: int, mini: float) -> list[tuple[int, int]]:
 
 
 def _say_beat(machine: Moteur, texte: str, phrase_gap: float):
-    """Synthétise un beat, et pose le rythme que le montage attend.
+    """Synthétise un beat. Deux chemins, selon ce que le moteur sait faire.
 
-    Le silence est la moitié du rythme : la voix de Frontier se tait un
-    tiers du temps (`docs/analyse-frontier.md`). Restait à décider qui le
-    place. Deux chemins, selon ce que le moteur sait faire.
-
-    **Le moteur marque les phrases** (Edge, ElevenLabs). On lui donne le
-    beat entier, d'un seul appel, et on se contente de resserrer les
-    silences qu'il a posés (`_caler_silences`). Il garde alors sa prosodie
-    d'un bout à l'autre du beat, et sa hiérarchie virgule / point.
+    **Le moteur marque les phrases** (Edge, ElevenLabs). Il reçoit le beat
+    entier, d'un seul appel, et sa sortie est prise telle quelle. Il sait
+    lire une ponctuation : 0,35 s après une virgule, 1,30 s après un point,
+    mesuré sur `fr-FR-HenriNeural`. On ne retouche pas ce qu'il a posé.
 
     **Le moteur ne les marque pas** (Kokoro : un dixième de seconde après un
     point, à peine plus qu'après une virgule, et aucun réglage ne
     l'allonge). On découpe à la phrase et on insère le silence nous-mêmes.
+
+    Ce que le pipeline continue d'ôter chez Edge, et seulement cela : le vide
+    dont il emballe **chaque requête**, 1,4 s en moyenne (`_rogner`, appelé
+    par `MoteurEdge.dire`). C'est un artefact de la requête, pas de la
+    lecture — à un appel par beat, le garder poserait 1,4 s de blanc mort à
+    chaque frontière de beat, par-dessus `pause_entre_beats_s`.
 
     Ce choix n'est pas cosmétique. Le découpage systématique — ce que faisait
     ce module pour les trois moteurs — a produit la voix de `la-faillite-de-
@@ -653,15 +615,11 @@ def _say_beat(machine: Moteur, texte: str, phrase_gap: float):
     qu'une pause de virgule. Mesuré sur le film : écart-type des pauses
     0,126 s contre 0,510 s pour le même texte dit d'un bloc. C'est
     précisément ce qu'on entend comme « robotique ».
-
-    Et effet de bord utile, dans les deux cas : `align.estimate` modélisait
-    déjà ces pauses comme du temps réel. Elles le sont.
     """
     import numpy as np
 
     if machine.marque_les_phrases:
-        samples, rate = machine.dire(texte)
-        return _caler_silences(samples, rate, phrase_gap), rate
+        return machine.dire(texte)
 
     phrases = [p.strip() for p in _FIN_PHRASE.split(texte) if p.strip()]
     if len(phrases) <= 1:

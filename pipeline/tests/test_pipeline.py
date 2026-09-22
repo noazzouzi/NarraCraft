@@ -2922,12 +2922,13 @@ def test_a_beat_is_spoken_in_one_call_when_the_engine_marks_its_sentences():
         "un moteur qui marque les phrases reçoit le beat d'un bloc"
 
 
-def test_the_comma_pause_stays_shorter_than_the_full_stop_pause():
+def test_the_engines_own_pauses_are_left_alone():
     """Le défaut audible de Subway, mesuré : quarante-huit pauses de 0,450 s
     au millième près, et un point qui durait autant qu'une virgule.
 
-    Le recalage doit donc resserrer sans égaliser — la pause la plus longue
-    reste la plus longue, et la virgule n'est pas touchée.
+    La correction est de ne rien faire — un moteur qui sait lire une
+    ponctuation pose de meilleures pauses que nous. Sa sortie sort telle
+    quelle, avec sa hiérarchie et sa variation.
     """
     from fresque import voice as voice_mod
 
@@ -2935,10 +2936,9 @@ def test_the_comma_pause_stays_shorter_than_the_full_stop_pause():
         _MoteurBavard(), "Un, deux. Trois. Quatre.", 0.70)
     pauses = [(b - a) / rate for a, b in voice_mod._silences(samples, rate, 0.1)]
 
-    assert len(pauses) == 3, pauses
-    assert pauses[0] == pytest.approx(0.35, abs=0.01), "la virgule est intacte"
-    assert all(p == pytest.approx(0.70, abs=0.03) for p in pauses[1:]), pauses
-    assert pauses[2] > pauses[1], "la plus longue des deux doit le rester"
+    assert pauses == [pytest.approx(d, abs=0.01)
+                      for d, parle in _MoteurBavard.MOTIF if not parle], \
+        "les pauses du moteur doivent sortir intactes"
     assert pauses[1] > pauses[0] * 1.5, \
         "un point doit s'entendre plus long qu'une virgule"
 

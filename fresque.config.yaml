@@ -15,14 +15,16 @@ narration:
   pause_entre_actes_s: 1.2
   pause_entre_beats_s: 0.4
   # Respirations internes à un beat, déduites de la ponctuation.
-  # Durée visée pour le silence entre deux phrases d'un même beat. Un moteur
-  # qui marque déjà les phrases (Edge, ElevenLabs) voit ses pauses resserrées
-  # vers cette valeur ; Kokoro, qui n'en laisse que 0,10 s, se la fait poser.
+  # Silence entre deux phrases d'un même beat. Deux usages, selon le moteur :
+  #   - Kokoro ne laisse que 0,10 s après un point, ce qui n'est pas une
+  #     respiration : le pipeline pose celle-ci à sa place.
+  #   - Edge et ElevenLabs lisent la ponctuation eux-mêmes et leur sortie
+  #     n'est pas retouchée. La valeur ne sert alors qu'à estimer la durée
+  #     du film avant de l'avoir synthétisé.
   #
-  # Mesuré : sur un beat entier, Edge laisse 0,35 s après une virgule. Une
-  # cible à 0,45 s rendait donc le point indiscernable de la virgule, ce qui
-  # est le défaut qu'on entend comme « robotique ». 0,60 s est le plancher
-  # qui garde les deux distincts.
+  # Mesuré sur `fr-FR-HenriNeural` : 0,35 s après une virgule, 1,28 s après
+  # un point. L'estimation reste donc en dessous de la réalité chez Edge —
+  # 0,45 s la mettait sous la pause de virgule, ce qui n'avait aucun sens.
   pause_phrase_s: 0.60      # après . ! ? …
   # Celui-ci n'est qu'un poids d'estimation : il sert à placer les mots
   # dans un beat dont la durée est mesurée, jamais à produire du silence.
