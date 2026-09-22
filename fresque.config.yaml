@@ -18,20 +18,24 @@ narration:
   # le script, et tout ce qui a besoin d'une durée la lit dans
   # `04-audio/alignment.json`.
   #
-  # Respiration insérée entre deux actes, en secondes. Compte dans la durée.
-  pause_entre_actes_s: 1.2
-  pause_entre_beats_s: 0.4
-  # Respirations internes à un beat, déduites de la ponctuation.
-  # Silence entre deux phrases d'un même beat. Deux usages, selon le moteur :
-  #   - Kokoro ne laisse que 0,10 s après un point, ce qui n'est pas une
-  #     respiration : le pipeline pose celle-ci à sa place.
-  #   - Edge et ElevenLabs lisent la ponctuation eux-mêmes. La valeur ne
-  #     les concerne pas : leur sortie n'est pas retouchée. Mesuré sur
-  #     `fr-FR-HenriNeural` : 0,35 s après une virgule, 1,28 s après un point.
-  pause_phrase_s: 0.60      # après . ! ? …
-  # Celui-ci n'est qu'un poids de répartition : il sert à placer les mots
-  # dans un beat dont la durée est mesurée, jamais à produire du silence.
-  pause_virgule_s: 0.18     # après , ; :
+  # Il n'y a plus non plus de respiration posée par le pipeline. Le film
+  # est UNE prise : un seul appel au moteur pour toute la narration, sa
+  # sortie écrite telle quelle. `pause_entre_beats_s` et
+  # `pause_entre_actes_s` inséraient du silence entre deux morceaux — il
+  # n'y a plus de morceaux, et ces réglages ont disparu avec eux.
+  #
+  # Les deux qui restent ne produisent aucun son. Ce sont des poids : ils
+  # servent à répartir les mots à l'intérieur d'un beat dont les bornes
+  # sont données par le moteur, parce qu'une virgule tient moins longtemps
+  # qu'un point. `fresque aligner` remplace cette répartition par une
+  # mesure.
+  #
+  # Ce sont donc des valeurs à relever sur le moteur, pas à choisir. Celles
+  # de `fr-FR-HenriNeural`, mesurées sur un texte entier. Les sous-estimer
+  # étale les mots sur du silence, et les coupes du montage cessent de
+  # tomber entre deux mots.
+  pause_phrase_s: 1.28      # après . ! ? …
+  pause_virgule_s: 0.35     # après , ; :
 
 controle:
   # Ce que `fresque lint` fait respecter. Ces règles vivaient jusqu'ici en
@@ -136,11 +140,6 @@ voix:
   # bibliothèque d'un moteur. Un projet choisit la sienne dans ses
   # `reglages`, ce que fait le bouton de l'interface.
   provider: edge
-
-  # Un fichier audio par beat du script. Permet de régénérer un seul beat
-  # sans refaire les quinze minutes, et correspond au calibre pour lequel
-  # Kokoro est conçu (segments courts, pas de long format d'un bloc).
-  decoupage: par_beat
 
   kokoro:
     # ff_siwis est l'UNIQUE voix française de Kokoro v1.0 : féminine,

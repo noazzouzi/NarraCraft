@@ -59,31 +59,32 @@ def mesure(script: script_parser.Script, mots_min: float = 140.0) -> dict:
     `mots_min` n'est pas un débit visé — plus rien n'en vise un. C'est le
     bouton qui permet à un test de demander un film long ou court.
     """
-    from fresque import config, voice as voice_mod
+    from fresque import voice as voice_mod
 
-    beat_gap = float(config.get("narration", "pause_entre_beats_s", default=0.4))
-    act_gap = float(config.get("narration", "pause_entre_actes_s", default=1.2))
-    phrase_gap = float(config.get("narration", "pause_phrase_s", default=0.6))
+    # Le film est une prise : les beats se suivent sans blanc posé entre
+    # eux, et chaque phrase est suivie du silence que le moteur y laisse.
+    # Les mots sont répartis sur leur phrase, pas sur le beat entier —
+    # comme le fait `synthesize` avec les bornes du moteur.
+    PAUSE_DE_PHRASE_S = 1.28
 
     clock = 0.0
-    acte: str | None = None
     beats: list[dict] = []
     for beat in script.beats:
-        if acte is not None:
-            clock += act_gap if beat.act != acte else beat_gap
-        acte = beat.act
-        phrases = len([
-            p for p in voice_mod._FIN_PHRASE.split(beat.text) if p.strip()])
-        duree = beat.word_count / mots_min * 60 + phrase_gap * max(phrases - 1, 0)
+        dites = [p for p in voice_mod._FIN_PHRASE.split(beat.text) if p.strip()]
+        debut = clock
+        mots: list[dict] = []
+        for phrase in dites:
+            duree = len(phrase.split()) / mots_min * 60
+            mots.extend(voice_mod._time_words(phrase, clock, duree))
+            clock += duree + PAUSE_DE_PHRASE_S
         beats.append({
             "id": beat.id,
             "acte": beat.act,
-            "debut_s": round(clock, 3),
-            "fin_s": round(clock + duree, 3),
-            "duree_s": round(duree, 3),
-            "mots": voice_mod._time_words(beat, clock, duree),
+            "debut_s": round(debut, 3),
+            "fin_s": round(clock, 3),
+            "duree_s": round(clock - debut, 3),
+            "mots": mots,
         })
-        clock += duree
 
     return {
         "source": "mesure",
@@ -154,12 +155,16 @@ def test_alignment_keeps_punctuation_for_display(script):
     assert all(not w["t"].endswith((",", ".")) for w in alignment["beats"][0]["mots"])
 
 
-def test_acts_get_a_longer_breath_than_beats(script):
-    alignment = mesure(script)
-    beats = alignment["beats"]
-    within_act = beats[1]["debut_s"] - beats[0]["fin_s"]
-    across_acts = beats[2]["debut_s"] - beats[1]["fin_s"]
-    assert across_acts > within_act
+def test_the_film_is_one_continuous_take(script):
+    """Plus aucun blanc n'est posé entre deux beats ni entre deux actes.
+
+    Le film est un seul appel au moteur : les beats se suivent sans trou,
+    et ce qui sépare deux phrases est ce que le moteur a laissé, dans la
+    durée du beat qui précède."""
+    beats = mesure(script)["beats"]
+    for avant, apres in zip(beats, beats[1:]):
+        assert apres["debut_s"] == pytest.approx(avant["fin_s"], abs=0.002), \
+            "un beat commence là où le précédent finit"
 
 
 def _shot(beat: str, index: int, movement: str = "zoom_in", weight: float = 1.0) -> Shot:
@@ -2092,7 +2097,7 @@ def test_template_overview_says_where_each_value_comes_from():
     plat = {chemin: source
             for _, lignes in donnees["axes"] for chemin, _, source in lignes}
 
-    assert plat["narration.pause_phrase_s"] == "template"
+    assert plat["controle.part_silence_min"] == "template"
     assert plat["montage.musique.source"] == "template"
     # Hérité : le template ne parle ni de résolution ni de fréquence d'images.
     assert plat["montage.fps"] == "base"
@@ -2146,14 +2151,14 @@ def test_a_project_can_override_its_template(tmp_path, monkeypatch):
     attendu = yaml.safe_load(
         (vrai / "templates" / "documentaire-historique.yaml").read_text(
             encoding="utf-8")
-    )["narration"]["pause_phrase_s"]
+    )["controle"]["part_silence_min"]
 
     try:
         Project.open("essai")
         # Le projet a le dernier mot…
         assert config_mod.get("production", "duree_cible_min") == 2
         # …sans écraser ce que le template dit par ailleurs.
-        assert config_mod.get("narration", "pause_phrase_s") == attendu
+        assert config_mod.get("controle", "part_silence_min") == attendu
     finally:
         config_mod.use_project_overrides({})
         config_mod.use_template(None)
@@ -2511,39 +2516,21 @@ def test_a_text_option_is_matched_before_it_reaches_an_argv():
         serveur.lancer("sarkozy-essai-2min", "render", {"frames": "$(whoami)"})
 
 
-def test_the_hook_is_heard_the_way_it_will_be_rendered(tmp_path, monkeypatch):
+def test_the_hook_is_heard_the_way_it_will_be_rendered():
     """Écouter le hook n'a de valeur que si c'est le vrai hook.
 
-    Une synthèse à part — le texte passé tel quel au moteur — donnerait un
-    fichier sans les silences entre phrases, alors que le silence est la
-    moitié du rythme. La commande passe donc par `_say_beat`, la fonction
-    même de la passe voix.
-    """
-    import numpy as np
+    Un appel, le texte du beat tel quel, la sortie telle quelle — exactement
+    ce que fait la passe voix, sur un beat au lieu du film."""
+    machine = _MoteurBavard()
+    attendu, _ = machine.dire("peu importe")
+    machine.appels.clear()
 
-    from fresque import voice as voice_mod
+    obtenu, rate = machine.dire("Une phrase. Puis une autre.")
 
-    appels: list[str] = []
-
-    class Faux(voice_mod.Moteur):
-        nom = "faux"
-        pause_naturelle_s = 0.0
-
-        def dire(self, phrase: str):
-            appels.append(phrase)
-            return np.zeros(int(0.5 * voice_mod.SAMPLE_RATE), "float32"), \
-                voice_mod.SAMPLE_RATE
-
-        def fiche(self):
-            return {"moteur": "faux"}
-
-    monkeypatch.setattr(voice_mod, "moteur", Faux)
-    samples, rate = voice_mod._say_beat(Faux(), "Une phrase. Puis une autre.", 0.45)
-
-    assert appels == ["Une phrase.", "Puis une autre."], \
-        "le beat doit être dit phrase par phrase"
-    assert len(samples) / rate == pytest.approx(0.5 + 0.45 + 0.5, abs=0.01), \
-        "le silence entre phrases doit être dans le fichier qu'on écoute"
+    assert machine.appels == ["Une phrase. Puis une autre."], \
+        "le beat part d'un bloc, sans découpage"
+    assert rate == 24_000
+    assert len(obtenu) == len(attendu)
 
 
 def test_a_refused_visual_never_comes_back_for_the_same_shot(tmp_path):
@@ -2825,7 +2812,9 @@ def test_the_word_budget_is_measured_in_time_not_in_words():
     config_mod.use_template(None)
     config_mod.use_project_overrides({"production": {"duree_cible_min": 1}})
     try:
-        plan = mesure(script)
+        # Un film volontairement trop long pour sa cible d'une minute.
+        plan = mesure(script, mots_min=40)
+        assert plan["duree_totale_s"] > 90
         message = " ".join(
             v.message for v in lint_mod.rule_word_budget(script, plan))
         assert "mesurées" in message
@@ -2894,176 +2883,179 @@ def test_the_historical_template_speaks_slowly_and_leaves_air():
     assert effectif["controle"]["mots_par_phrase_max"] <= 12
     assert effectif["controle"]["part_silence_min"] >= 0.20
     assert effectif["controle"]["mots_par_beat"][1] <= 20
-    # Les pauses portent le rythme : elles doivent dépasser celles de la base.
-    base = apercu._charger("documentaire-historique")[0]["narration"]
-    for cle in ("pause_phrase_s", "pause_entre_beats_s"):
-        assert effectif["narration"][cle] > base[cle], cle
-
-
-def test_a_beat_is_spoken_sentence_by_sentence_with_real_silence():
-    """Kokoro ne marque qu'un dixième de seconde après un point. Le silence
-    qui porte le rythme est donc inséré par nous, entre les phrases — sinon
-    `pause_phrase_s` ne servirait qu'à estimer, et jamais à produire.
-
-    Le moteur est remplacé par un faux : ce qui est vérifié ici est le
-    découpage et le silence, pas la synthèse.
-    """
-    import numpy as np
-
-    from fresque import voice as voice_mod
-
-    appels = []
-
-    class FauxMoteur(voice_mod.Moteur):
-        nom = "faux"
-        pause_naturelle_s = 0.10
-
-        def dire(self, phrase):
-            appels.append(phrase)
-            # Une seconde de « parole » par phrase, à amplitude non nulle.
-            return np.ones(voice_mod.SAMPLE_RATE, dtype="float32"), voice_mod.SAMPLE_RATE
-
-    machine = FauxMoteur()
-    samples, rate = voice_mod._say_beat(
-        machine, "Trois mots. Puis trois. Et fin.", 0.70)
-
-    assert appels == ["Trois mots.", "Puis trois.", "Et fin."]
-    # Trois secondes de parole, plus deux silences amputés de ce que le
-    # moteur fournit déjà.
-    attendu = 3 + 2 * (0.70 - machine.pause_naturelle_s)
-    assert abs(len(samples) / rate - attendu) < 0.02
-    assert (samples == 0).sum() > 0, "aucun silence n'a été inséré"
+    # Les pauses ne sont plus un réglage de template : ce sont les valeurs
+    # relevées sur le moteur, et une direction artistique n'en décide pas.
+    assert "narration" not in apercu._charger("documentaire-historique")[1]
 
 
 class _MoteurBavard:
-    """Un moteur qui marque lui-même ses phrases, comme Edge.
+    """Un faux moteur qui rend, comme Edge, l'audio ET ses bornes de phrase.
 
     Le motif reproduit ce qui a été mesuré sur `fr-FR-HenriNeural` : 0,35 s
-    après une virgule, 1,30 s après un point.
+    après une virgule, 1,28 s après un point.
     """
 
     nom = "bavard"
-    pause_naturelle_s = 0.0
-    marque_les_phrases = True
+    pause_naturelle_s = 1.28
 
-    MOTIF = ((1.0, True), (0.35, False), (1.0, True), (1.30, False),
-             (1.0, True), (1.34, False), (1.0, True))
+    #: (texte, secondes de parole, silence qui suit)
+    DIT = (
+        ("Un, deux.", 1.0, 0.35),
+        ("Trois.", 1.0, 1.28),
+        ("Quatre.", 1.0, 1.30),
+    )
 
     def __init__(self):
         self.appels: list[str] = []
+        self._phrases: list[tuple[str, float, float]] = []
 
-    def dire(self, phrase):
+    def dire(self, texte):
         import numpy as np
 
         from fresque import voice as voice_mod
 
-        self.appels.append(phrase)
+        self.appels.append(texte)
         rate = voice_mod.SAMPLE_RATE
-        morceaux = [
-            (np.ones if parle else np.zeros)(int(duree * rate), "float32")
-            for duree, parle in self.MOTIF
-        ]
+        morceaux = []
+        self._phrases = []
+        horloge = 0.0
+        for dit, parle, silence in self.DIT:
+            morceaux.append(np.ones(int(parle * rate), "float32"))
+            morceaux.append(np.zeros(int(silence * rate), "float32"))
+            self._phrases.append((dit, horloge, horloge + parle))
+            horloge += parle + silence
         return np.concatenate(morceaux), rate
 
+    def phrases(self):
+        return list(self._phrases)
 
-def test_a_beat_is_spoken_in_one_call_when_the_engine_marks_its_sentences():
-    """Découper un beat en phrases coupe la prosodie à chaque point.
+    def fiche(self):
+        return {"provider": "bavard"}
 
-    Edge et ElevenLabs lisent un paragraphe entier et savent où sont les
-    points : les découper leur fait recommencer une intonation d'ouverture
-    et une chute de fin toutes les quatre secondes. C'est ce que le film
-    `la-faillite-de-subway` donnait à entendre.
+
+def _script_bavard(tmp_path):
+    """Un script dont les beats sont exactement les phrases de `_MoteurBavard`."""
+    texte = (
+        "# Script — essai\n\n## Acte I — A\n\n"
+        "### B001\n> intention: x\nUn, deux. Trois.\n\n"
+        "## Acte II — B\n\n"
+        "### B002\n> intention: y\nQuatre.\n"
+    )
+    chemin = tmp_path / "02-script.md"
+    chemin.write_text(texte, encoding="utf-8")
+    return script_parser.parse(chemin)
+
+
+def test_the_whole_narration_goes_out_in_a_single_call(tmp_path, monkeypatch):
+    """Un film, un appel. C'est la règle dont tout le reste découle.
+
+    Découper la narration — par beat, ou pire par phrase — faisait
+    recommencer au moteur une intonation d'ouverture et une chute de fin à
+    chaque morceau, et obligeait le pipeline à recoller. Le film de
+    `la-faillite-de-subway` en est sorti avec quarante-huit pauses
+    identiques au millième près.
     """
     from fresque import voice as voice_mod
 
     machine = _MoteurBavard()
-    voice_mod._say_beat(machine, "Un, deux. Trois. Quatre.", 0.70)
-    assert machine.appels == ["Un, deux. Trois. Quatre."], \
-        "un moteur qui marque les phrases reçoit le beat d'un bloc"
+    monkeypatch.setattr(voice_mod, "moteur", lambda *a, **k: machine)
+    script = _script_bavard(tmp_path)
+
+    voice_mod.synthesize(script, tmp_path / "04-audio")
+
+    assert len(machine.appels) == 1, "un seul appel pour tout le film"
+    assert machine.appels[0] == "Un, deux. Trois.\n\nQuatre.", \
+        "la narration entière, les beats séparés comme des paragraphes"
 
 
-def test_the_engines_own_pauses_are_left_alone():
-    """Le défaut audible de Subway, mesuré : quarante-huit pauses de 0,450 s
-    au millième près, et un point qui durait autant qu'une virgule.
+def test_the_written_file_is_exactly_what_the_engine_returned(tmp_path, monkeypatch):
+    """Rien n'est rogné, rien n'est ajouté, rien n'est recalé.
 
-    La correction est de ne rien faire — un moteur qui sait lire une
-    ponctuation pose de meilleures pauses que nous. Sa sortie sort telle
-    quelle, avec sa hiérarchie et sa variation.
-    """
-    from fresque import voice as voice_mod
-
-    samples, rate = voice_mod._say_beat(
-        _MoteurBavard(), "Un, deux. Trois. Quatre.", 0.70)
-    pauses = [(b - a) / rate for a, b in voice_mod._silences(samples, rate, 0.1)]
-
-    assert pauses == [pytest.approx(d, abs=0.01)
-                      for d, parle in _MoteurBavard.MOTIF if not parle], \
-        "les pauses du moteur doivent sortir intactes"
-    assert pauses[1] > pauses[0] * 1.5, \
-        "un point doit s'entendre plus long qu'une virgule"
-
-
-def test_an_engine_deaf_to_punctuation_is_still_split():
-    """Kokoro laisse 0,10 s après un point comme après une virgule : chez
-    lui il n'y a pas de hiérarchie à resserrer, il faut la poser."""
-    import numpy as np
-
-    from fresque import voice as voice_mod
-
-    class Sourd(voice_mod.Moteur):
-        nom = "sourd"
-
-        def __init__(self):
-            self.appels: list[str] = []
-
-        def dire(self, phrase):
-            self.appels.append(phrase)
-            return np.ones(voice_mod.SAMPLE_RATE, "float32"), voice_mod.SAMPLE_RATE
-
-    machine = Sourd()
-    assert machine.marque_les_phrases is False
-    voice_mod._say_beat(machine, "Trois mots. Puis trois.", 0.70)
-    assert machine.appels == ["Trois mots.", "Puis trois."]
-
-
-def test_a_single_sentence_beat_is_not_split():
-    """Découper là où il n'y a rien à découper ferait payer un appel de plus
-    au moteur, et changerait la prosodie sans raison."""
-    import numpy as np
-
-    from fresque import voice as voice_mod
-
-    appels = []
-
-    class FauxMoteur(voice_mod.Moteur):
-        def dire(self, phrase):
-            appels.append(phrase)
-            return np.ones(100, dtype="float32"), voice_mod.SAMPLE_RATE
-
-    texte = "Une seule phrase, avec une virgule."
-    voice_mod._say_beat(FauxMoteur(), texte, 0.70)
-    assert appels == [texte]
-
-
-def test_nothing_is_added_or_removed_from_the_engines_output():
-    """La sortie d'un moteur qui marque les phrases est écrite telle quelle.
-
-    Ni découpage, ni rognage, ni recalage — pas même le vide dont Edge
-    emballe sa réponse. Ce test compare échantillon par échantillon : toute
-    retouche future le fera tomber.
+    Comparaison échantillon par échantillon : toute retouche future de la
+    sortie du moteur fera tomber ce test.
     """
     import numpy as np
 
     from fresque import voice as voice_mod
 
     machine = _MoteurBavard()
-    attendu, _ = machine.dire("peu importe")
-    obtenu, rate = voice_mod._say_beat(
-        machine, "Un, deux. Trois. Quatre.", 0.70)
+    attendu, rate = machine.dire("peu importe")
+    machine.appels.clear()
+    monkeypatch.setattr(voice_mod, "moteur", lambda *a, **k: machine)
 
-    assert rate == voice_mod.SAMPLE_RATE
-    assert np.array_equal(obtenu, attendu), \
-        "la sortie du moteur doit ressortir identique"
+    audio = tmp_path / "04-audio"
+    voice_mod.synthesize(_script_bavard(tmp_path), audio)
+
+    import wave
+
+    with wave.open(str(audio / "voix.wav"), "rb") as fh:
+        assert fh.getframerate() == rate
+        ecrit = np.frombuffer(
+            fh.readframes(fh.getnframes()), dtype="<i2").astype("float32") / 32767
+
+    assert len(ecrit) == len(attendu)
+    assert np.abs(ecrit - np.asarray(attendu, "float32")).max() < 1e-4
+
+
+def test_beat_bounds_come_from_the_engine_not_from_a_measurement(tmp_path, monkeypatch):
+    """Le montage coupe aux bornes de beat. Elles viennent du moteur.
+
+    Edge dit, dans le même flux que l'audio, où tombe chaque phrase. Un
+    beat commence donc au début de sa première phrase et finit à la fin de
+    sa dernière — aucune mesure de notre part, aucune estimation.
+    """
+    from fresque import voice as voice_mod
+
+    machine = _MoteurBavard()
+    monkeypatch.setattr(voice_mod, "moteur", lambda *a, **k: machine)
+
+    plan = voice_mod.synthesize(_script_bavard(tmp_path), tmp_path / "04-audio")
+    b1, b2 = plan["beats"]
+
+    # B001 = « Un, deux. » + « Trois. » : de 0 à la fin de la deuxième.
+    assert b1["debut_s"] == pytest.approx(0.0, abs=0.01)
+    assert b1["fin_s"] == pytest.approx(1.0 + 0.35 + 1.0, abs=0.01)
+    # B002 = « Quatre. », qui commence après le silence de fin de B001.
+    assert b2["debut_s"] == pytest.approx(1.0 + 0.35 + 1.0 + 1.28, abs=0.01)
+    assert plan["source"] == "mesure"
+    assert plan["nb_phrases"] == 3
+
+
+def test_a_mismatch_between_what_was_sent_and_what_came_back_stops_everything(
+        tmp_path, monkeypatch):
+    """Si les bornes ne recouvrent pas le script, le découpage est faux.
+
+    Un montage posé sur de fausses bornes coupe au milieu des mots, et rien
+    ne le signale avant le rendu. Mieux vaut s'arrêter ici.
+    """
+    from fresque import voice as voice_mod
+
+    class Menteur(_MoteurBavard):
+        DIT = (("Un, deux.", 1.0, 0.35), ("Autre chose.", 1.0, 1.28))
+
+    monkeypatch.setattr(voice_mod, "moteur", lambda *a, **k: Menteur())
+    with pytest.raises(voice_mod.VoiceError, match="pas dit ce qu'on lui a donné"):
+        voice_mod.synthesize(_script_bavard(tmp_path), tmp_path / "04-audio")
+
+
+def test_an_engine_without_sentence_bounds_says_what_to_do(tmp_path, monkeypatch):
+    """Kokoro rend de l'audio et rien d'autre. Le fichier est écrit, le
+    découpage est inconnu, et le message nomme les deux issues."""
+    from fresque import voice as voice_mod
+
+    class Muet(_MoteurBavard):
+        nom = "muet"
+
+        def phrases(self):
+            return []
+
+    monkeypatch.setattr(voice_mod, "moteur", lambda *a, **k: Muet())
+    audio = tmp_path / "04-audio"
+    with pytest.raises(voice_mod.VoiceError, match="aligner"):
+        voice_mod.synthesize(_script_bavard(tmp_path), audio)
+
+    assert (audio / "voix.wav").is_file(), \
+        "l'audio est écrit même si le découpage manque : il a coûté un appel"
 
 
 def test_an_unknown_voice_provider_says_which_ones_exist():
@@ -3212,10 +3204,12 @@ def test_forced_alignment_refuses_an_estimate_it_cannot_trust():
     with pytest.raises(AlignError, match="estimées"):
         bases_depuis({"source": "estimate", "beats": []})
 
-    mesure = {"source": "mesure",
-              "beats": [{"id": "B001", "debut_s": 0.0},
-                        {"id": "B002", "debut_s": 4.25}]}
-    assert bases_depuis(mesure) == {"B001": 0.0, "B002": 4.25}
+    # Début ET fin : le film est une prise, donc découper un beat pour
+    # l'aligner demande de savoir où il s'arrête.
+    mesuré = {"source": "mesure",
+              "beats": [{"id": "B001", "debut_s": 0.0, "fin_s": 4.25},
+                        {"id": "B002", "debut_s": 4.25, "fin_s": 9.5}]}
+    assert bases_depuis(mesuré) == {"B001": (0.0, 4.25), "B002": (4.25, 9.5)}
 
 
 # --- Sous-titres mot à mot ---------------------------------------------------
@@ -4207,7 +4201,7 @@ def test_the_source_field_names_the_method_not_the_engine():
     `voix.provider`. Ce champ dit d'où viennent les nombres."""
     from fresque import aligner as aligner_mod
 
-    bases = {"beats": [{"id": "B001", "debut_s": 0.0}]}
+    bases = {"beats": [{"id": "B001", "debut_s": 0.0, "fin_s": 3.0}]}
     for mesure in ("mesure", "kokoro", aligner_mod.SOURCE):
         aligner_mod.bases_depuis({**bases, "source": mesure})
 

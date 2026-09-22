@@ -223,8 +223,8 @@ def cmd_hook(args: argparse.Namespace) -> int:
     fois, sans retour en arrière. Un hook qui ne marche pas s'entend en
     quinze secondes ; en markdown il peut passer trois relectures.
 
-    C'est `_say_beat` qui travaille, la fonction même de la passe voix :
-    ce qu'on entend ici est exactement ce qui sortira, pauses comprises.
+    Un appel au moteur sur le texte du beat, et sa sortie telle quelle —
+    exactement ce que fait la passe voix, sur un beat au lieu du film.
     """
     from . import voice as voice_mod
 
@@ -239,10 +239,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
 
     try:
         machine = voice_mod.moteur()
-        samples, rate = voice_mod._say_beat(
-            machine, beat.text,
-            float(config.get("narration", "pause_phrase_s", default=0.45)),
-        )
+        samples, rate = machine.dire(beat.text)
     except voice_mod.VoiceError as erreur:
         return _fail(str(erreur))
 
@@ -1388,10 +1385,7 @@ def cmd_voix_essai(args: argparse.Namespace) -> int:
 
     try:
         machine = voice.moteur(fournisseur, args.voix or "")
-        samples, rate = voice._say_beat(
-            machine, texte,
-            float(config.get("narration", "pause_phrase_s", default=0.45)),
-        )
+        samples, rate = machine.dire(texte)
     except voice.VoiceError as erreur:
         return _fail(str(erreur))
 

@@ -1,15 +1,20 @@
 """Synthèse de la voix, et l'alignement qui en découle.
 
-Un fichier audio par beat, puis une piste unique concaténée. Synthétiser
-beat par beat achète deux choses : un beat se refait seul, et — surtout —
-la durée **réelle** de chaque beat est mesurée au lieu d'être devinée.
+**Un appel, un fichier.** La narration entière part en une fois, et ce qui
+revient est écrit tel quel dans `voix.wav`. Le film est une prise : aucun
+découpage, aucun rognage, aucun silence ajouté, aucune retouche.
 
-Ces durées réelles deviennent les points de coupe du montage, donc chaque
-coupe tombe exactement là où la narration passe à autre chose. La position
-d'un mot *à l'intérieur* d'un beat reste répartie au poids syllabique :
-aucun des moteurs n'expose de timing par mot, et sur une trentaine de mots
-la répartition pondérée suffit aux sous-titres. `alignment.json` dit lequel
-est lequel dans son champ `source`.
+Reste à savoir où commence chaque beat, puisque c'est là que le montage a
+le droit de changer d'image. Le moteur le dit lui-même : Edge rend, dans le
+même flux que l'audio, les bornes de chaque phrase qu'il prononce. On les
+recoupe contre le texte envoyé, et on s'arrête si les deux divergent.
+
+La position d'un mot *à l'intérieur* d'un beat reste répartie au poids
+syllabique, jusqu'à ce que `fresque aligner` la mesure.
+`narration.pause_phrase_s` et `pause_virgule_s` pondèrent cette
+répartition : ce sont des valeurs relevées sur le moteur, et elles ne
+produisent aucun son. `alignment.json` dit quelle méthode a servi, dans son
+champ `source`.
 
 TROIS MOTEURS
 =============
@@ -27,29 +32,29 @@ préfixe chez Kokoro, du JSON Microsoft chez Edge, des étiquettes libres
 chez ElevenLabs. `Voix` et `catalogue()` les normalisent, pour que la
 bibliothèque se filtre par langue et par sexe sans trois interfaces.
 
-ON NE RETOUCHE PAS LA SORTIE DU MOTEUR
-======================================
+Seul Edge rend ses bornes de phrase. Kokoro n'expose rien, et l'endpoint
+ElevenLabs utilisé ici non plus : avec eux `voix.wav` est écrit, le
+découpage reste inconnu, et `synthesize` renvoie vers `fresque aligner`.
+
+POURQUOI UN SEUL APPEL
+======================
 Ce qui suit vient d'une mesure, après qu'un film entier a sonné mécanique.
 
-Ce module a longtemps découpé chaque beat en phrases, rogné le silence de
-chaque morceau et recollé le tout autour d'un blanc constant. Résultat
-mesuré sur `la-faillite-de-subway` : quarante-huit pauses de 0,450 s au
-millième près, et un point qui durait exactement aussi longtemps qu'une
-virgule. C'est ce qu'on entend comme « robotique ».
+Ce module a longtemps découpé chaque beat en phrases, appelé le moteur sur
+chaque morceau, rogné son silence et recollé le tout autour d'un blanc
+constant. Résultat mesuré sur `la-faillite-de-subway` : quarante-huit
+pauses de 0,450 s au millième près, et un point qui durait exactement aussi
+longtemps qu'une virgule. C'est ce qu'on entend comme « robotique ».
 
-Un moteur en ligne sait lire un paragraphe. Sur un beat entier, Edge laisse
-0,35 s après une virgule et 1,28 s après un point — il connaît la ponctuation
-mieux que nous. Il reçoit donc le beat d'un bloc, et **sa sortie est écrite
-telle quelle** : pas de découpage, pas de rognage, pas de recalage.
-
-Kokoro fait exception, et seulement parce qu'il ne sait pas : il laisse
-0,10 s après un point comme après une virgule, et aucun réglage ne
-l'allonge. Chez lui, et chez lui seul, le pipeline découpe à la phrase et
-pose `narration.pause_phrase_s` lui-même.
+Un moteur en ligne sait lire un texte long. Sur un texte entier, Edge
+laisse 0,35 s après une virgule et 1,28 s après un point, et son intonation
+tient d'une phrase à l'autre. Il connaît la ponctuation mieux que nous, et
+il est le seul à savoir ce qu'il vient de dire.
 """
 from __future__ import annotations
 
 import re
+import unicodedata
 import wave
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,7 +62,7 @@ from typing import Any, Callable
 
 from . import config
 from .align import syllables, _tokenize  # noqa: PLC2701 — same module family
-from .script_parser import Beat, Script
+from .script_parser import Script
 
 SAMPLE_RATE = 24_000
 
@@ -150,23 +155,29 @@ def filtrer(voix: list[Voix], langue: str = "", genre: str = "") -> list[Voix]:
 
 # --- Les moteurs -------------------------------------------------------------
 
+#: Une phrase telle que le moteur dit l'avoir dite : son texte, et où elle
+#: tombe dans l'audio qu'il vient de rendre. C'est de la donnée du
+#: fournisseur, pas une mesure de notre part.
+Phrase = tuple[str, float, float]
+
+
 class Moteur:
-    """Ce qu'un moteur de voix doit savoir faire : dire une phrase.
+    """Ce qu'un moteur de voix doit savoir faire : dire un texte.
 
-    `pause_naturelle_s` est le silence que le moteur laisse déjà après un
-    point. Le pipeline l'ôte de celui qu'il ajoute, sinon les deux
-    s'additionnent et la pause réelle dépasse celle qui est demandée.
+    Un seul appel par film. `dire()` reçoit la narration entière et rend
+    l'audio entier ; ce qu'il rend est écrit tel quel.
 
-    `marque_les_phrases` dit si le moteur fait lui-même la différence entre
-    une virgule et un point quand on lui donne un beat entier. Quand il la
-    fait, on lui livre le beat d'un bloc et on ne retouche pas sa sortie ;
-    sinon on découpe et on pose le silence à sa place. Voir `_say_beat` —
-    c'est le réglage qui décide si la narration sonne humaine ou mécanique.
+    `phrases` est ce que le moteur dit de sa propre sortie : où chaque
+    phrase tombe dedans. Edge le donne, et c'est ce qui permet de savoir où
+    commence chaque beat sans découper la narration en morceaux. Un moteur
+    qui ne le donne pas laisse la liste vide, et `synthesize` le dit.
     """
 
     nom: str = ""
+    #: Le silence que le moteur laisse après un point. N'entre plus dans
+    #: aucun calcul : plus personne n'ajoute de silence. Gardé parce que
+    #: c'est une caractéristique du moteur, et qu'elle s'affiche.
     pause_naturelle_s: float = 0.0
-    marque_les_phrases: bool = False
 
     @classmethod
     def catalogue(cls) -> list["Voix"]:  # pragma: no cover - interface
@@ -174,8 +185,12 @@ class Moteur:
         pas charger trois cents mégaoctets de modèle ni ouvrir de session."""
         raise NotImplementedError
 
-    def dire(self, phrase: str):  # pragma: no cover - interface
+    def dire(self, texte: str):  # pragma: no cover - interface
         raise NotImplementedError
+
+    def phrases(self) -> list[Phrase]:
+        """Les bornes du dernier `dire()`. Vide si le moteur n'en rend pas."""
+        return []
 
     def fiche(self) -> dict[str, Any]:  # pragma: no cover - interface
         raise NotImplementedError
@@ -244,6 +259,10 @@ class MoteurKokoro(Moteur):
 #: Sert à mesurer et à contrôler, jamais à retoucher.
 _SEUIL_SILENCE = 0.01
 
+#: Les offsets d'Edge sont en centaines de nanosecondes — l'unité de temps
+#: de Windows, qui traverse l'API telle quelle.
+_TICKS_PAR_SECONDE = 10_000_000
+
 
 class MoteurEdge(Moteur):
     """Les voix neuronales de Microsoft Edge. Gratuites, sans clé, en ligne.
@@ -253,11 +272,9 @@ class MoteurEdge(Moteur):
     """
 
     nom = "edge"
-    pause_naturelle_s = 0.0
-    #: Mesuré : sur un beat entier, Edge laisse 0,35 s après une virgule et
-    #: 1,30 s après un point. Il sait donc lire une ponctuation, et sa sortie
-    #: est prise telle quelle.
-    marque_les_phrases = True
+    #: Mesuré sur un texte entier : 0,35 s après une virgule, 1,28 s après
+    #: un point. Il lit la ponctuation, c'est son travail.
+    pause_naturelle_s = 1.28
 
     @classmethod
     def catalogue(cls) -> list[Voix]:
@@ -295,6 +312,7 @@ class MoteurEdge(Moteur):
         self.rate = str(config.get("voix", "edge", "rate", default="+0%"))
         self.volume = str(config.get("voix", "edge", "volume", default="+0%"))
         self.pitch = str(config.get("voix", "edge", "pitch", default="+0Hz"))
+        self._phrases: list[Phrase] = []
         try:
             import edge_tts  # noqa: F401
             import soundfile  # noqa: F401
@@ -303,7 +321,13 @@ class MoteurEdge(Moteur):
                 "edge-tts n'est pas installé : pip install edge-tts soundfile"
             ) from error
 
-    def dire(self, phrase: str):
+    def dire(self, texte: str):
+        """Un appel, quelle que soit la longueur du texte.
+
+        Le flux porte deux choses : les morceaux d'audio, et des évènements
+        `SentenceBoundary` qui disent où chaque phrase tombe dedans. Les
+        offsets sont en centaines de nanosecondes, l'unité de Windows.
+        """
         import asyncio
         import io
         import os
@@ -311,27 +335,35 @@ class MoteurEdge(Moteur):
         import edge_tts
         import soundfile as sf
 
-        async def chercher() -> bytes:
+        async def chercher() -> tuple[bytes, list[Phrase]]:
             # `proxy` sert les réseaux d'entreprise ; sans variable
             # d'environnement il vaut None et ne change rien.
             parole = edge_tts.Communicate(
-                phrase, self.voice, rate=self.rate,
+                texte, self.voice, rate=self.rate,
                 volume=self.volume, pitch=self.pitch,
                 proxy=os.environ.get("HTTPS_PROXY"),
             )
             tampon = io.BytesIO()
+            bornes: list[Phrase] = []
             async for morceau in parole.stream():
                 if morceau["type"] == "audio":
                     tampon.write(morceau["data"])
-            return tampon.getvalue()
+                elif morceau["type"] in ("SentenceBoundary", "WordBoundary"):
+                    debut = morceau["offset"] / _TICKS_PAR_SECONDE
+                    duree = morceau["duration"] / _TICKS_PAR_SECONDE
+                    bornes.append((morceau["text"], debut, debut + duree))
+            return tampon.getvalue(), bornes
 
-        brut = asyncio.run(chercher())
+        brut, self._phrases = asyncio.run(chercher())
         if not brut:
             raise VoiceError(
-                f"Edge n'a rien rendu pour « {phrase[:40]}… » — "
+                f"Edge n'a rien rendu pour « {texte[:40]}… » — "
                 f"vérifier la voix `{self.voice}` et la connexion."
             )
         return sf.read(io.BytesIO(brut), dtype="float32", always_2d=False)
+
+    def phrases(self) -> list[Phrase]:
+        return list(self._phrases)
 
     def fiche(self) -> dict[str, Any]:
         return {
@@ -354,9 +386,10 @@ class MoteurElevenLabs(Moteur):
     """
 
     nom = "elevenlabs"
+    #: Son point de terminaison `with-timestamps` rendrait les bornes de
+    #: phrase, ce que celui-ci ne fait pas : `phrases()` reste vide, et
+    #: `synthesize` renvoie vers `fresque aligner`.
     pause_naturelle_s = 0.0
-    #: Comme Edge : un modèle multilingue lit la ponctuation d'un paragraphe.
-    marque_les_phrases = True
 
     API = "https://api.elevenlabs.io/v1"
 
@@ -501,13 +534,13 @@ def _write_wav(path: Path, samples, rate: int) -> None:
         fh.writeframes((pcm * 32767).astype("<i2").tobytes())
 
 
-def _time_words(beat: Beat, start: float, duration: float) -> list[dict[str, Any]]:
+def _time_words(texte: str, start: float, duration: float) -> list[dict[str, Any]]:
     """Spread a beat's words across its measured duration.
 
     Punctuation pauses are taken out first, then the remaining time is split
     between words in proportion to their syllable count.
     """
-    words = _tokenize(beat.text)
+    words = _tokenize(texte)
     pauses = [pause for _, _, pause in words]
     pause_total = sum(pauses[:-1]) if len(pauses) > 1 else 0.0
     speech = max(duration - pause_total, duration * 0.35)
@@ -556,35 +589,57 @@ def _silences(x, rate: int, mini: float) -> list[tuple[int, int]]:
     ]
 
 
-def _say_beat(machine: Moteur, texte: str, phrase_gap: float):
-    """Synthétise un beat. Deux chemins, selon ce que le moteur sait faire.
+def _lettres(texte: str) -> str:
+    """Le texte réduit à ses lettres et ses chiffres, sans accent ni casse.
 
-    **Le moteur marque les phrases** (Edge, ElevenLabs). Il reçoit le beat
-    entier, d'un seul appel, et sa sortie ressort telle quelle. Rien n'est
-    ôté, rien n'est ajouté — pas même le vide dont Edge emballe sa réponse.
-
-    **Le moteur ne les marque pas** (Kokoro : un dixième de seconde après un
-    point, à peine plus qu'après une virgule, et aucun réglage ne
-    l'allonge). On découpe à la phrase et on insère le silence nous-mêmes.
+    Sert à reconnaître qu'une phrase rendue par le moteur est bien celle
+    du script, malgré la ponctuation et les espaces qui diffèrent.
     """
-    import numpy as np
+    plat = unicodedata.normalize("NFD", texte.lower())
+    return "".join(c for c in plat if c.isalnum())
 
-    if machine.marque_les_phrases:
-        return machine.dire(texte)
 
-    phrases = [p.strip() for p in _FIN_PHRASE.split(texte) if p.strip()]
-    if len(phrases) <= 1:
-        return machine.dire(texte)
+def _phrases_par_beat(
+    script: Script, phrases: list[Phrase],
+) -> list[list[Phrase]]:
+    """Quelles phrases appartiennent à quel beat, d'après le moteur.
 
-    morceaux: list[Any] = []
-    rate = SAMPLE_RATE
-    for index, phrase in enumerate(phrases):
-        samples, rate = machine.dire(phrase)
-        morceaux.append(np.asarray(samples, dtype="float32"))
-        manquant = phrase_gap - machine.pause_naturelle_s
-        if index < len(phrases) - 1 and manquant > 0:
-            morceaux.append(np.zeros(int(manquant * rate), dtype="float32"))
-    return np.concatenate(morceaux), rate
+    Le moteur rend ses phrases dans l'ordre du texte qu'on lui a donné, et
+    ce texte est la concaténation des beats. On avance donc en parallèle :
+    on consomme des phrases jusqu'à avoir couvert les lettres du beat
+    courant, et ses bornes sont celles de la première et de la dernière.
+
+    Rien n'est mesuré ici, rien n'est deviné : ce sont les nombres du
+    fournisseur, recoupés contre le texte qu'on lui a envoyé.
+    """
+    groupes: list[list[Phrase]] = []
+    index = 0
+    for beat in script.beats:
+        vise = _lettres(beat.text)
+        accumule = ""
+        premier = index
+        while index < len(phrases) and len(accumule) < len(vise):
+            accumule += _lettres(phrases[index][0])
+            index += 1
+        if index == premier:
+            raise VoiceError(
+                f"{beat.id} : le moteur n'a rendu aucune phrase pour ce beat. "
+                "Le texte envoyé et les bornes reçues ne concordent pas."
+            )
+        if accumule != vise:
+            raise VoiceError(
+                f"{beat.id} : le moteur n'a pas dit ce qu'on lui a donné.\n"
+                f"  attendu : {vise[:60]}…\n"
+                f"  rendu   : {accumule[:60]}…"
+            )
+        groupes.append(phrases[premier:index])
+
+    if index != len(phrases):
+        raise VoiceError(
+            f"{len(phrases) - index} phrase(s) rendues en trop : le texte "
+            "envoyé et le script ne correspondent pas."
+        )
+    return groupes
 
 
 def synthesize(
@@ -592,70 +647,82 @@ def synthesize(
     audio_dir: Path,
     progress: Callable[[int, int, float], None] | None = None,
 ) -> dict[str, Any]:
-    """Render every beat, concatenate, and return the alignment."""
+    """Un appel au moteur, un fichier, et les bornes qu'il a données.
+
+    La narration entière part en une fois. Ce qui revient est écrit tel
+    quel dans `voix.wav` : aucun découpage, aucun rognage, aucun silence
+    ajouté entre les beats ou entre les actes. Le film est une prise.
+
+    Reste à savoir où commence chaque beat, puisque c'est là que le montage
+    a le droit de changer d'image. Edge le dit lui-même, phrase par phrase,
+    dans le même flux que l'audio. On ne mesure donc rien : on recoupe ce
+    qu'il annonce contre le texte qu'on lui a envoyé (`_phrases_par_beat`),
+    et si les deux ne concordent pas, on s'arrête plutôt que de deviner.
+
+    Un moteur qui ne rend pas ses bornes — Kokoro, ElevenLabs — laisse le
+    film sans découpage. Le fichier est là, le montage ne peut pas se
+    faire : `fresque aligner` les retrouve par alignement forcé.
+    """
     import numpy as np
 
     machine = moteur()
-    beat_gap = float(config.get("narration", "pause_entre_beats_s", default=0.4))
-    act_gap = float(config.get("narration", "pause_entre_actes_s", default=1.2))
-    phrase_gap = float(config.get("narration", "pause_phrase_s", default=0.45))
+    # Le texte envoyé, et rien de plus : les beats séparés par une ligne
+    # vide, comme des paragraphes. Le moteur y lira ses respirations.
+    texte = "\n\n".join(beat.text for beat in script.beats)
 
-    beats_dir = audio_dir / "beats"
-    beats_dir.mkdir(parents=True, exist_ok=True)
+    if progress:
+        progress(0, len(script.beats), 0.0)
+    samples, rate = machine.dire(texte)
+    samples = np.asarray(samples, dtype="float32")
+    if rate != SAMPLE_RATE:
+        raise VoiceError(f"Fréquence inattendue : {rate} Hz (attendu {SAMPLE_RATE}).")
 
-    pieces: list[Any] = []
+    _write_wav(audio_dir / "voix.wav", samples, rate)
+    duree_totale = len(samples) / rate
+
+    phrases = machine.phrases()
+    if not phrases:
+        raise VoiceError(
+            f"{machine.nom} ne dit pas où tombent ses phrases, donc le "
+            "découpage en beats est inconnu. `voix.wav` est écrit ; lancer "
+            "`fresque aligner` pour retrouver les bornes, ou passer à un "
+            "moteur qui les rend (`voix.provider: edge`)."
+        )
+
+    groupes = _phrases_par_beat(script, phrases)
     entries: list[dict[str, Any]] = []
-    clock = 0.0
-    previous_act: str | None = None
-
-    for index, beat in enumerate(script.beats):
-        if previous_act is not None:
-            gap = act_gap if beat.act != previous_act else beat_gap
-            pieces.append(np.zeros(int(gap * SAMPLE_RATE), dtype="float32"))
-            clock += gap
-        previous_act = beat.act
-
-        samples, rate = _say_beat(machine, beat.text, phrase_gap)
-        if rate != SAMPLE_RATE:
-            raise VoiceError(f"Fréquence inattendue : {rate} Hz (attendu {SAMPLE_RATE}).")
-
-        samples = np.asarray(samples, dtype="float32")
-        duration = len(samples) / rate
-        _write_wav(beats_dir / f"{beat.id}.wav", samples, rate)
-        pieces.append(samples)
-
+    for index, (beat, dites) in enumerate(zip(script.beats, groupes)):
+        # Le film commence au début du fichier : le moteur pose un dixième
+        # de seconde avant le premier mot, et ce dixième appartient au film.
+        debut = 0.0 if index == 0 else dites[0][1]
+        # Le dernier beat va jusqu'au bout du fichier, pour la même raison :
+        # le moteur arrête sa dernière phrase sur le dernier mot.
+        fin = duree_totale if index == len(script.beats) - 1 else dites[-1][2]
         entries.append({
             "id": beat.id,
             "acte": beat.act,
-            "debut_s": round(clock, 3),
-            "fin_s": round(clock + duration, 3),
-            "duree_s": round(duration, 3),
-            "mots": _time_words(beat, clock, duration),
+            "debut_s": round(debut, 3),
+            "fin_s": round(fin, 3),
+            "duree_s": round(fin - debut, 3),
+            "mots": _time_words(beat.text, debut, fin - debut),
         })
-        clock += duration
-
         if progress:
-            progress(index + 1, len(script.beats), clock)
-
-    track = np.concatenate(pieces) if pieces else np.zeros(0, dtype="float32")
-    _write_wav(audio_dir / "voix.wav", track, SAMPLE_RATE)
+            progress(index + 1, len(script.beats), fin)
 
     return {
         # `source` dit d'où viennent les nombres, pas quel moteur a parlé.
-        # Il valait « kokoro », du temps où il n'y avait qu'un moteur : un
-        # fichier produit avec Edge annonçait donc Kokoro. Les trois
-        # moteurs donnent des bornes de beat mesurées, donc la même qualité
-        # temporelle, et c'est cela que ce champ décrit. Qui a parlé est
-        # dans `voix.provider`, et nulle part ailleurs.
+        # Qui a parlé est dans `voix`, et nulle part ailleurs.
         "source": "mesure",
         "avertissement": (
-            "Durées de beat mesurées sur l'audio réel. Position des mots à "
-            "l'intérieur d'un beat répartie par syllabes : les coupes du "
-            "montage sont exactes, les sous-titres sont au mot près."
+            "Un seul appel au moteur, sa sortie écrite telle quelle. Bornes "
+            "de beat données par le moteur, phrase par phrase. Position des "
+            "mots à l'intérieur d'un beat répartie par syllabes — "
+            "`fresque aligner` la mesure."
         ),
         "voix": machine.fiche(),
-        "duree_totale_s": round(len(track) / SAMPLE_RATE, 3),
+        "duree_totale_s": round(duree_totale, 3),
         "nb_beats": len(entries),
         "nb_mots": sum(len(e["mots"]) for e in entries),
+        "nb_phrases": len(phrases),
         "beats": entries,
     }

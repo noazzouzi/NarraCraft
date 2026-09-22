@@ -55,11 +55,6 @@ meta:
 
 # --- Écriture ---------------------------------------------------------------
 
-narration:
-  # Même respiration que le documentaire historique : le graphisme change,
-  # la façon de poser une fin de phrase non.
-  pause_phrase_s: 0.70
-
 controle:
   mots_par_beat: [8, 20]
   mots_par_phrase_max: 12

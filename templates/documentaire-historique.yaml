@@ -42,37 +42,6 @@ meta:
 
 # --- Écriture ---------------------------------------------------------------
 
-narration:
-  # Le débit a été monté à 170 mots/min après que le premier montage a été
-  # jugé monotone. C'était la mauvaise moitié du problème : le rythme d'un
-  # documentaire se joue à l'image, et la voix doit laisser la place pour
-  # qu'on le sente. Frontier coupe deux fois plus vite que nous et parle
-  # deux fois moins vite — environ 105 mots/min quand elle parle, 70 sur la
-  # durée totale, parce que la voix se tait un tiers du temps
-  # (`docs/analyse-frontier.md`).
-  #
-  # Mesuré sur un extrait réel du script, avec la voix ff_siwis :
-  #   speed 0.62 → 107 mots/min   (au niveau de Frontier, mais traînant)
-  #   speed 0.69 → 117 mots/min
-  #   speed 0.75 → 124 mots/min   ← retenu
-  #   speed 0.82 → 146 mots/min
-  #   speed 0.95 → 167 mots/min   (ancien réglage)
-  #
-  # 124 plutôt que 107 : la voix française de Kokoro est notée B-, et plus
-  # on la ralentit plus sa prosodie se délite. Le reste du ralentissement
-  # vient du silence, qui ne coûte rien en qualité. C'est un réglage de
-  # moteur, pas une cible : rien ne vérifie le débit du film.
-  #
-  # Les respirations portent le rythme, et c'est délibéré. Elles étaient
-  # divisées par deux ; elles sont maintenant au-dessus de la base. Une
-  # phrase courte suivie d'un vrai silence frappe plus fort que n'importe
-  # quel adjectif — c'est déjà écrit dans le registre de ce template, ça
-  # n'était simplement pas dans les nombres.
-  pause_entre_actes_s: 2.0
-  pause_entre_beats_s: 0.9
-  pause_phrase_s: 0.70
-  pause_virgule_s: 0.22
-
 voix:
   kokoro:
     # Mesuré : 0.75 → environ 124 mots/min quand la voix parle.

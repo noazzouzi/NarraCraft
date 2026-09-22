@@ -1,9 +1,9 @@
 """Alignement forcé — où chaque mot tombe vraiment dans l'audio.
 
 CLAUDE.md sépare la voix de l'alignement, et c'est ce module qui justifie
-la séparation. Le moteur TTS produit un fichier par beat ; cet aligneur
-reprend le texte qu'on possède déjà — on ne devine aucune transcription —
-et cherche où chaque mot est tombé.
+la séparation. Le moteur TTS produit une seule prise et dit où tombe
+chaque phrase ; cet aligneur reprend le texte qu'on possède déjà — on ne
+devine aucune transcription — et cherche où chaque mot est tombé dedans.
 
 Ce que ça change, concrètement :
 
@@ -162,22 +162,28 @@ def _lire_mono(chemin: Path):
     return np.ascontiguousarray(x), sr
 
 
-def force(script: Script, audio_dir: Path, bases: dict[str, float],
+def force(script: Script, audio_dir: Path,
+          bases: dict[str, tuple[float, float]],
           report: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Réaligne le script sur l'audio réel, beat par beat.
 
-    `bases` donne l'instant de début de chaque beat, tel que la synthèse
-    l'a mesuré : on ne recalcule pas les bornes, on ne raffine que
+    `bases` donne les bornes de chaque beat, telles que le moteur les a
+    données : on ne recalcule pas les bornes, on ne raffine que
     l'intérieur. Un beat qui échoue garde ses positions estimées plutôt que
     de faire tomber tout le fichier.
+
+    Le film est une seule prise (`04-audio/voix.wav`) : chaque beat est
+    découpé en mémoire, à ses bornes. Rien n'est écrit sur le disque, et le
+    fichier de la voix n'est jamais touché.
     """
     torch, torchaudio, MMS_FA = _moteur()
-    beats_dir = audio_dir / "beats"
-    if not beats_dir.is_dir():
+    piste = audio_dir / "voix.wav"
+    if not piste.is_file():
         raise AlignError(
-            f"{beats_dir} absent — lancer `fresque voice` d'abord : "
+            f"{piste} absent — lancer `fresque voice` d'abord : "
             "l'alignement forcé a besoin de l'audio réel."
         )
+    entier, sr = _lire_mono(piste)
 
     modele = MMS_FA.get_model()
     tokenizer = MMS_FA.get_tokenizer()
@@ -189,15 +195,13 @@ def force(script: Script, audio_dir: Path, bases: dict[str, float],
     fin_totale = 0.0
 
     for beat in script.beats:
-        chemin = beats_dir / f"{beat.id}.wav"
-        depart = float(bases.get(beat.id, 0.0))
+        depart, arret = bases.get(beat.id, (0.0, 0.0))
         affiches = MOT_RE.findall(beat.text)
 
-        if not chemin.is_file():
-            echecs.append(f"{beat.id} : {chemin.name} absent")
+        onde = entier[int(depart * sr):int(arret * sr)]
+        if not len(onde):
+            echecs.append(f"{beat.id} : bornes vides ({depart:.2f}–{arret:.2f} s)")
             continue
-
-        onde, sr = _lire_mono(chemin)
         duree = len(onde) / sr
         # Les jetons d'alignement, et de quel mot affiché chacun provient.
         suite: list[str] = []
@@ -320,8 +324,12 @@ def _affichage(texte: str, mot: str, index: int, tous: list[str]) -> str:
     return mot + (suite.group(0) if suite else "")
 
 
-def bases_depuis(alignement: dict[str, Any]) -> dict[str, float]:
-    """Les instants de début de beat d'un alignement déjà mesuré."""
+def bases_depuis(alignement: dict[str, Any]) -> dict[str, tuple[float, float]]:
+    """Les bornes de chaque beat d'un alignement déjà mesuré.
+
+    Début ET fin : le film est une seule prise, donc découper un beat pour
+    l'aligner demande de savoir où il s'arrête.
+    """
     # « kokoro » est l'ancien nom de « mesure » : les projets
     # montés avant le renommage gardent leur fichier tel quel.
     if alignement.get("source") not in ("mesure", "kokoro", SOURCE):
@@ -330,4 +338,7 @@ def bases_depuis(alignement: dict[str, Any]) -> dict[str, float]:
             "ses bornes de beat sont estimées, pas mesurées. Lancer "
             "`fresque voice` avant l'alignement forcé."
         )
-    return {b["id"]: float(b["debut_s"]) for b in alignement["beats"]}
+    return {
+        b["id"]: (float(b["debut_s"]), float(b["fin_s"]))
+        for b in alignement["beats"]
+    }

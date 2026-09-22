@@ -302,7 +302,10 @@ point qui durait exactement aussi longtemps qu'une virgule. Frontier n'a pas
 ce défaut : c'est la *variation* des pauses qui s'entend, pas leur somme. Un
 moteur qui lit un paragraphe entier (Edge, ElevenLabs) reçoit désormais le
 beat d'un bloc, et on se contente de resserrer les pauses qu'il a posées.
-Kokoro, qui ne marque pas les phrases, reste découpé. Voir `voice._say_beat`.
+Puis, mesure faite, la règle est allée plus loin : **un seul appel pour tout
+le film**, sa sortie écrite telle quelle, et les bornes de beat lues dans
+les évènements `SentenceBoundary` qu'Edge rend avec l'audio. Le film est une
+prise. Voir `voice.synthesize`.
 
 **Et une conséquence, plus large.** Si le moteur décide des pauses, il décide
 de la durée. `mots_par_minute` — le débit annoncé dont tout le pipeline
