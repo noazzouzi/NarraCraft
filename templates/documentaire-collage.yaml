@@ -59,7 +59,9 @@ narration:
   # Même débit que le documentaire historique : c'est une mesure faite sur
   # Frontier, pas un goût, et elle ne dépend pas du graphisme.
   mots_par_minute: 124
-  pause_phrase_s: 0.45
+  # Même respiration que le documentaire historique : le graphisme change,
+  # la façon de poser une fin de phrase non.
+  pause_phrase_s: 0.70
 
 controle:
   mots_par_beat: [8, 20]

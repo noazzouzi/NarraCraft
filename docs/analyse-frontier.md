@@ -295,6 +295,15 @@ L'ordre est celui du rapport entre ce que ça change à l'écran et ce que
 > morceaux, ce qui porte la part de silence de 19 % à 31 % — dans la bande
 > mesurée chez Frontier.
 
+**Correction, après mesure sur `la-faillite-de-subway`.** Le découpage
+phrase par phrase atteignait bien la part de silence visée, mais avec des
+pauses toutes égales au millième près — 0,450 s quarante-huit fois — et un
+point qui durait exactement aussi longtemps qu'une virgule. Frontier n'a pas
+ce défaut : c'est la *variation* des pauses qui s'entend, pas leur somme. Un
+moteur qui lit un paragraphe entier (Edge, ElevenLabs) reçoit désormais le
+beat d'un bloc, et on se contente de resserrer les pauses qu'il a posées.
+Kokoro, qui ne marque pas les phrases, reste découpé. Voir `voice._say_beat`.
+
 1. **Couper deux fois plus vite, et en franc.** `plans_par_minute` à 25,
    `duree_plan_max_s` à 3, transitions à 0, fondu noir réservé aux
    changements d'acte, sons de transition désactivés par défaut. Ce sont

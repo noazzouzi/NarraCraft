@@ -2875,6 +2875,97 @@ def test_a_beat_is_spoken_sentence_by_sentence_with_real_silence():
     assert (samples == 0).sum() > 0, "aucun silence n'a été inséré"
 
 
+class _MoteurBavard:
+    """Un moteur qui marque lui-même ses phrases, comme Edge.
+
+    Le motif reproduit ce qui a été mesuré sur `fr-FR-HenriNeural` : 0,35 s
+    après une virgule, 1,30 s après un point.
+    """
+
+    nom = "bavard"
+    pause_naturelle_s = 0.0
+    marque_les_phrases = True
+
+    MOTIF = ((1.0, True), (0.35, False), (1.0, True), (1.30, False),
+             (1.0, True), (1.34, False), (1.0, True))
+
+    def __init__(self):
+        self.appels: list[str] = []
+
+    def dire(self, phrase):
+        import numpy as np
+
+        from fresque import voice as voice_mod
+
+        self.appels.append(phrase)
+        rate = voice_mod.SAMPLE_RATE
+        morceaux = [
+            (np.ones if parle else np.zeros)(int(duree * rate), "float32")
+            for duree, parle in self.MOTIF
+        ]
+        return np.concatenate(morceaux), rate
+
+
+def test_a_beat_is_spoken_in_one_call_when_the_engine_marks_its_sentences():
+    """Découper un beat en phrases coupe la prosodie à chaque point.
+
+    Edge et ElevenLabs lisent un paragraphe entier et savent où sont les
+    points : les découper leur fait recommencer une intonation d'ouverture
+    et une chute de fin toutes les quatre secondes. C'est ce que le film
+    `la-faillite-de-subway` donnait à entendre.
+    """
+    from fresque import voice as voice_mod
+
+    machine = _MoteurBavard()
+    voice_mod._say_beat(machine, "Un, deux. Trois. Quatre.", 0.70)
+    assert machine.appels == ["Un, deux. Trois. Quatre."], \
+        "un moteur qui marque les phrases reçoit le beat d'un bloc"
+
+
+def test_the_comma_pause_stays_shorter_than_the_full_stop_pause():
+    """Le défaut audible de Subway, mesuré : quarante-huit pauses de 0,450 s
+    au millième près, et un point qui durait autant qu'une virgule.
+
+    Le recalage doit donc resserrer sans égaliser — la pause la plus longue
+    reste la plus longue, et la virgule n'est pas touchée.
+    """
+    from fresque import voice as voice_mod
+
+    samples, rate = voice_mod._say_beat(
+        _MoteurBavard(), "Un, deux. Trois. Quatre.", 0.70)
+    pauses = [(b - a) / rate for a, b in voice_mod._silences(samples, rate, 0.1)]
+
+    assert len(pauses) == 3, pauses
+    assert pauses[0] == pytest.approx(0.35, abs=0.01), "la virgule est intacte"
+    assert all(p == pytest.approx(0.70, abs=0.03) for p in pauses[1:]), pauses
+    assert pauses[2] > pauses[1], "la plus longue des deux doit le rester"
+    assert pauses[1] > pauses[0] * 1.5, \
+        "un point doit s'entendre plus long qu'une virgule"
+
+
+def test_an_engine_deaf_to_punctuation_is_still_split():
+    """Kokoro laisse 0,10 s après un point comme après une virgule : chez
+    lui il n'y a pas de hiérarchie à resserrer, il faut la poser."""
+    import numpy as np
+
+    from fresque import voice as voice_mod
+
+    class Sourd(voice_mod.Moteur):
+        nom = "sourd"
+
+        def __init__(self):
+            self.appels: list[str] = []
+
+        def dire(self, phrase):
+            self.appels.append(phrase)
+            return np.ones(voice_mod.SAMPLE_RATE, "float32"), voice_mod.SAMPLE_RATE
+
+    machine = Sourd()
+    assert machine.marque_les_phrases is False
+    voice_mod._say_beat(machine, "Trois mots. Puis trois.", 0.70)
+    assert machine.appels == ["Trois mots.", "Puis trois."]
+
+
 def test_a_single_sentence_beat_is_not_split():
     """Découper là où il n'y a rien à découper ferait payer un appel de plus
     au moteur, et changerait la prosodie sans raison."""
