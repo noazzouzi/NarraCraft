@@ -27,37 +27,25 @@ préfixe chez Kokoro, du JSON Microsoft chez Edge, des étiquettes libres
 chez ElevenLabs. `Voix` et `catalogue()` les normalisent, pour que la
 bibliothèque se filtre par langue et par sexe sans trois interfaces.
 
-Ce qu'ils ne font pas pareil, et qui compte : le silence qu'ils laissent
-autour d'une phrase. Mesuré sur trois phrases courtes —
-
-    moteur                          tête    queue
-    kokoro ff_siwis                0,042 s  0,149 s
-    fr-FR-RemyMultilingualNeural   0,174 s  0,587 s
-    fr-FR-HenriNeural              0,213 s  0,918 s
-
-Edge emballe donc chaque phrase dans plus d'une seconde de vide. Le moteur
-Edge rogne donc son propre silence de tête et de queue.
-
-QUI POSE LES PAUSES
-===================
+ON NE RETOUCHE PAS LA SORTIE DU MOTEUR
+======================================
 Ce qui suit vient d'une mesure, après qu'un film entier a sonné mécanique.
 
-Les moteurs en ligne savent lire un paragraphe : sur un beat entier, Edge
-laisse 0,35 s après une virgule et 1,30 s après un point. La hiérarchie
-existe — elle est seulement trop large pour un documentaire. Kokoro, lui,
-laisse 0,10 s dans les deux cas : chez lui la hiérarchie n'existe pas.
+Ce module a longtemps découpé chaque beat en phrases, rogné le silence de
+chaque morceau et recollé le tout autour d'un blanc constant. Résultat
+mesuré sur `la-faillite-de-subway` : quarante-huit pauses de 0,450 s au
+millième près, et un point qui durait exactement aussi longtemps qu'une
+virgule. C'est ce qu'on entend comme « robotique ».
 
-`_say_beat` traite donc les deux cas différemment, et `marque_les_phrases`
-dit lequel s'applique. Un moteur qui marque les phrases reçoit le beat d'un
-bloc et sa sortie est prise telle quelle : un appel au lieu de huit, sa
-prosodie d'un bout à l'autre du beat, et ses pauses à lui. Découper le beat
-pour les trois, ce que faisait ce module, produisait des pauses toutes
-identiques au millième près — le défaut audible de `la-faillite-de-subway`,
-mesuré dans le docstring de `_say_beat`.
+Un moteur en ligne sait lire un paragraphe. Sur un beat entier, Edge laisse
+0,35 s après une virgule et 1,28 s après un point — il connaît la ponctuation
+mieux que nous. Il reçoit donc le beat d'un bloc, et **sa sortie est écrite
+telle quelle** : pas de découpage, pas de rognage, pas de recalage.
 
-`narration.pause_phrase_s` ne produit donc plus de silence que chez Kokoro.
-Partout ailleurs il ne sert qu'à estimer, avant la synthèse, la durée que
-le film aura.
+Kokoro fait exception, et seulement parce qu'il ne sait pas : il laisse
+0,10 s après un point comme après une virgule, et aucun réglage ne
+l'allonge. Chez lui, et chez lui seul, le pipeline découpe à la phrase et
+pose `narration.pause_phrase_s` lui-même.
 """
 from __future__ import annotations
 
@@ -253,33 +241,15 @@ class MoteurKokoro(Moteur):
 
 #: Sous ce niveau, on considère que le moteur ne dit rien. Relevé sur les
 #: deux voix Edge : leur silence est un vrai zéro numérique, pas un souffle.
+#: Sert à mesurer et à contrôler, jamais à retoucher.
 _SEUIL_SILENCE = 0.01
-
-#: Ce qu'on laisse de part et d'autre après avoir rogné. Sans marge, une
-#: occlusive initiale — un « p », un « t » — se fait couper net.
-_MARGE_ROGNAGE_S = 0.03
-
-
-def _rogner(samples, rate: int):
-    """Ôte le silence de tête et de queue, en gardant une marge."""
-    import numpy as np
-
-    x = np.asarray(samples, dtype="float32")
-    fort = np.abs(x) > _SEUIL_SILENCE
-    if not fort.any():
-        return x
-    marge = int(_MARGE_ROGNAGE_S * rate)
-    debut = max(int(np.argmax(fort)) - marge, 0)
-    fin = min(len(x) - int(np.argmax(fort[::-1])) + marge, len(x))
-    return x[debut:fin]
 
 
 class MoteurEdge(Moteur):
     """Les voix neuronales de Microsoft Edge. Gratuites, sans clé, en ligne.
 
-    Le silence est rogné à la sortie : voir la mesure en tête de module.
-    Après rognage il ne reste rien à compenser, donc la pause que pose le
-    pipeline est celle qu'il demande.
+    Sa sortie est écrite telle quelle. Voir « ON NE RETOUCHE PAS LA SORTIE
+    DU MOTEUR », en tête de module.
     """
 
     nom = "edge"
@@ -361,8 +331,7 @@ class MoteurEdge(Moteur):
                 f"Edge n'a rien rendu pour « {phrase[:40]}… » — "
                 f"vérifier la voix `{self.voice}` et la connexion."
             )
-        samples, rate = sf.read(io.BytesIO(brut), dtype="float32", always_2d=False)
-        return _rogner(samples, rate), rate
+        return sf.read(io.BytesIO(brut), dtype="float32", always_2d=False)
 
     def fiche(self) -> dict[str, Any]:
         return {
@@ -381,9 +350,7 @@ class MoteurElevenLabs(Moteur):
     dans une commande. Sans elle, le moteur le dit et s'arrête — il ne
     tente pas un appel qui reviendrait en 401.
 
-    Le silence est rogné comme chez Edge : tout moteur en ligne emballe ses
-    phrases, et le rythme d'un documentaire se pose ici, pas chez le
-    fournisseur.
+    Sa sortie est écrite telle quelle, comme celle d'Edge.
     """
 
     nom = "elevenlabs"
@@ -485,9 +452,8 @@ class MoteurElevenLabs(Moteur):
         if not reponse.content:
             raise VoiceError(f"ElevenLabs n'a rien rendu pour « {phrase[:40]}… »")
 
-        samples, rate = sf.read(
+        return sf.read(
             io.BytesIO(reponse.content), dtype="float32", always_2d=False)
-        return _rogner(samples, rate), rate
 
     def fiche(self) -> dict[str, Any]:
         return {
@@ -594,27 +560,12 @@ def _say_beat(machine: Moteur, texte: str, phrase_gap: float):
     """Synthétise un beat. Deux chemins, selon ce que le moteur sait faire.
 
     **Le moteur marque les phrases** (Edge, ElevenLabs). Il reçoit le beat
-    entier, d'un seul appel, et sa sortie est prise telle quelle. Il sait
-    lire une ponctuation : 0,35 s après une virgule, 1,30 s après un point,
-    mesuré sur `fr-FR-HenriNeural`. On ne retouche pas ce qu'il a posé.
+    entier, d'un seul appel, et sa sortie ressort telle quelle. Rien n'est
+    ôté, rien n'est ajouté — pas même le vide dont Edge emballe sa réponse.
 
     **Le moteur ne les marque pas** (Kokoro : un dixième de seconde après un
     point, à peine plus qu'après une virgule, et aucun réglage ne
     l'allonge). On découpe à la phrase et on insère le silence nous-mêmes.
-
-    Ce que le pipeline continue d'ôter chez Edge, et seulement cela : le vide
-    dont il emballe **chaque requête**, 1,4 s en moyenne (`_rogner`, appelé
-    par `MoteurEdge.dire`). C'est un artefact de la requête, pas de la
-    lecture — à un appel par beat, le garder poserait 1,4 s de blanc mort à
-    chaque frontière de beat, par-dessus `pause_entre_beats_s`.
-
-    Ce choix n'est pas cosmétique. Le découpage systématique — ce que faisait
-    ce module pour les trois moteurs — a produit la voix de `la-faillite-de-
-    subway` : quarante-huit pauses de 0,450 s au millième près, dix-huit de
-    0,400 s, et une pause de point qui durait exactement aussi longtemps
-    qu'une pause de virgule. Mesuré sur le film : écart-type des pauses
-    0,126 s contre 0,510 s pour le même texte dit d'un bloc. C'est
-    précisément ce qu'on entend comme « robotique ».
     """
     import numpy as np
 

@@ -7,10 +7,17 @@ production:
   tolerance_duree_pct: 15      # ±15% acceptable avant re-découpe du script
 
 narration:
-  # Débit de lecture d'une voix off documentaire française.
-  # Plus lent que l'anglais et plus lent que la parole courante : le silence
-  # fait partie du format. Sert à convertir mots <-> durée dans le script.
-  mots_par_minute: 140
+  # Il n'y a pas de débit visé ici, et c'est volontaire. `mots_par_minute`
+  # a longtemps servi à convertir un compte de mots en durée, partout : le
+  # budget du script, la densité de plans, l'alignement. C'était une
+  # prédiction, et le moteur de voix ne s'y tenait pas — l'écart se payait
+  # en aval, sur un film qu'on croyait calibré.
+  #
+  # La durée est désormais mesurée sur l'audio, une seule fois, par
+  # `voice.synthesize`. D'où l'ordre du pipeline : la voix vient juste après
+  # le script, et tout ce qui a besoin d'une durée la lit dans
+  # `04-audio/alignment.json`.
+  #
   # Respiration insérée entre deux actes, en secondes. Compte dans la durée.
   pause_entre_actes_s: 1.2
   pause_entre_beats_s: 0.4
@@ -18,15 +25,11 @@ narration:
   # Silence entre deux phrases d'un même beat. Deux usages, selon le moteur :
   #   - Kokoro ne laisse que 0,10 s après un point, ce qui n'est pas une
   #     respiration : le pipeline pose celle-ci à sa place.
-  #   - Edge et ElevenLabs lisent la ponctuation eux-mêmes et leur sortie
-  #     n'est pas retouchée. La valeur ne sert alors qu'à estimer la durée
-  #     du film avant de l'avoir synthétisé.
-  #
-  # Mesuré sur `fr-FR-HenriNeural` : 0,35 s après une virgule, 1,28 s après
-  # un point. L'estimation reste donc en dessous de la réalité chez Edge —
-  # 0,45 s la mettait sous la pause de virgule, ce qui n'avait aucun sens.
+  #   - Edge et ElevenLabs lisent la ponctuation eux-mêmes. La valeur ne
+  #     les concerne pas : leur sortie n'est pas retouchée. Mesuré sur
+  #     `fr-FR-HenriNeural` : 0,35 s après une virgule, 1,28 s après un point.
   pause_phrase_s: 0.60      # après . ! ? …
-  # Celui-ci n'est qu'un poids d'estimation : il sert à placer les mots
+  # Celui-ci n'est qu'un poids de répartition : il sert à placer les mots
   # dans un beat dont la durée est mesurée, jamais à produire du silence.
   pause_virgule_s: 0.18     # après , ; :
 
@@ -45,8 +48,8 @@ controle:
   phrase_courte_mots: 8
   phrase_courte_tous_les_beats: 5
 
-  # Part minimale de la durée estimée passée sans voix, vérifiée par
-  # `fresque lint`. Zéro désactive la règle, ce qui est le défaut : c'est
+  # Part minimale de la durée mesurée passée sans voix, vérifiée par
+  # `fresque lint` une fois la voix synthétisée. Zéro désactive la règle, ce qui est le défaut : c'est
   # une exigence de genre, et un template la relève s'il en veut.
   #
   # Le silence ne se règle pas qu'avec les pauses : il dépend de l'écriture.
@@ -160,10 +163,12 @@ voix:
     # Débit, volume et hauteur, au format de Microsoft : un pourcentage
     # signé, ou des hertz pour la hauteur.
     #
-    # Mesuré sur un script réel de douze beats, silences du montage compris :
+    # Mesuré sur un script réel de douze beats, silences compris :
     #   +0%   150 mots/min      -18%  129 mots/min
     #   -12%  136 mots/min      -23%  123 mots/min
-    # La cible des templates est 124. Descendre plus bas traîne.
+    #
+    # Ce n'est pas une cible à tenir, c'est le réglage d'un moteur : on
+    # l'écoute et on le choisit. Plus bas que -23%, la voix traîne.
     rate: "-23%"
     volume: "+0%"
     pitch: "+0Hz"

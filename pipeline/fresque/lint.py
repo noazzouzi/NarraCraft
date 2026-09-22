@@ -17,10 +17,15 @@ from typing import Callable, Iterator
 from . import align, config
 from .script_parser import Beat, Script
 
-#: Le plan temporel estimé du script, tel que `align.estimate` le produit.
-#: Les règles qui parlent de durée le reçoivent au lieu de la recalculer :
-#: deux arithmétiques parallèles divergent, et c'est toujours celle du lint
-#: qui a tort au moment où ça compte.
+#: Le plan temporel du script, tel que `voice.synthesize` le mesure. Les
+#: règles qui parlent de durée le reçoivent au lieu de la recalculer : deux
+#: arithmétiques parallèles divergent, et c'est toujours celle du lint qui
+#: a tort au moment où ça compte.
+#:
+#: Il n'existe donc qu'une fois la voix synthétisée. Avant, les règles de
+#: rythme ne tournent pas — elles préféraient jadis une durée déduite d'un
+#: débit annoncé, ce qui revenait à vérifier le script contre une hypothèse
+#: plutôt que contre le film.
 Plan = dict
 
 WORD_RE = re.compile(r"\b[\w'’-]+\b", re.UNICODE)
@@ -135,16 +140,13 @@ def rule_forbidden(script: Script, plan: Plan) -> Iterator[Violation]:
 def rule_word_budget(script: Script, plan: Plan) -> Iterator[Violation]:
     """La cible est une durée, alors on compare des durées.
 
-    Cette règle multipliait la durée cible par `mots_par_minute`. C'était
-    juste tant que la narration était continue : `mots_par_minute` est le
-    débit **parlé**, et les silences s'ajoutent par-dessus. Dès qu'on laisse
-    de l'air — ce que la mesure de Frontier impose, 34 % du temps sans voix —
-    le compte de mots cesse de prédire la durée, et un script « dans le
-    budget » dépasse sa cible d'un tiers.
+    Cette règle a d'abord multiplié la durée cible par un débit annoncé en
+    mots par minute, puis interrogé un estimateur qui faisait la même chose
+    en mieux. Les deux prédisaient. Aucun ne mesurait.
 
-    On demande donc la durée à `align.estimate`, c'est-à-dire au code même
-    qui la calculera ensuite. Une seule source de vérité temporelle, comme
-    partout ailleurs dans ce pipeline.
+    Elle lit maintenant la durée du film telle que la voix l'a produite. Le
+    compte de mots ne prédit pas une durée : le moteur décide du débit et
+    des silences, et lui seul.
     """
     target_min = float(config.get("production", "duree_cible_min", default=15))
     tolerance = float(config.get("production", "tolerance_duree_pct", default=15)) / 100
@@ -156,7 +158,7 @@ def rule_word_budget(script: Script, plan: Plan) -> Iterator[Violation]:
     if abs(drift) > tolerance:
         yield Violation(
             "—", "budget",
-            f"{align.format_duration(reelle_s)} estimées pour une cible de "
+            f"{align.format_duration(reelle_s)} mesurées pour une cible de "
             f"{target_min:g} min ({drift:+.0%}, tolérance ±{tolerance:.0%}) — "
             f"{script.word_count} mots, silences compris.",
             # Length is a judgement call the human owns; flag it, don't block.
@@ -241,18 +243,21 @@ def rule_hook(script: Script, plan: Plan) -> Iterator[Violation]:
     documentary this pipeline produced: the hook ran long, its first sentence
     unfolded across three clauses before landing a fact, and it opened on a
     setting rather than on the person the story is about.
+
+    Les deux dernières se lisent dans le texte. La première demande une
+    durée, donc la voix : sans elle, le hook n'est pas chronométré.
     """
     if not script.beats:
         return
 
     first = script.beats[0]
     hook_s = float(config.get("structure", "hook_s", default=20))
-    tenu_s = float(plan["beats"][0]["duree_s"]) if plan["beats"] else 0.0
+    tenu_s = float(plan["beats"][0]["duree_s"]) if plan and plan["beats"] else 0.0
 
     if tenu_s > hook_s:
         yield Violation(
             first.id, "hook-longueur",
-            f"{tenu_s:.0f} s estimées — le hook vise {hook_s:.0f} s. "
+            f"{tenu_s:.0f} s mesurées — le hook vise {hook_s:.0f} s. "
             f"Ce qui dépasse appartient au beat suivant. "
             f"({first.word_count} mots, silences compris.)",
         )
@@ -331,6 +336,10 @@ def rule_boucles(script: Script, plan: Plan) -> Iterator[Violation]:
     Une boucle est une question posée à un beat et répondue bien plus loin.
     Tout se vérifie ici sauf la seule chose qui ne se vérifie pas : qu'elle
     soit intéressante.
+
+    La structure — déclarée, ouverte, fermée, dans le bon ordre — se lit
+    dans le tableau de contrôle. Sa longueur, elle, demande des durées :
+    sans `plan`, ces deux contrôles-là ne tournent pas.
     """
     if not _assez_long(script):
         return
@@ -348,7 +357,7 @@ def rule_boucles(script: Script, plan: Plan) -> Iterator[Violation]:
         )
         return
 
-    durees = {b["id"]: float(b["duree_s"]) for b in plan["beats"]}
+    durees = {b["id"]: float(b["duree_s"]) for b in plan["beats"]} if plan else {}
     rang = {beat.id: index for index, beat in enumerate(script.beats)}
     debut = {}
     cumul = 0.0
@@ -377,6 +386,8 @@ def rule_boucles(script: Script, plan: Plan) -> Iterator[Violation]:
                 boucle.ouvre, "boucle",
                 f"{boucle.nom} se ferme avant de s'ouvrir.",
             )
+            continue
+        if not durees:
             continue
         tenue = debut[boucle.ferme] - debut[boucle.ouvre]
         if tenue < min_s:
@@ -409,6 +420,8 @@ def rule_boucles(script: Script, plan: Plan) -> Iterator[Violation]:
                 blocking=False,
             )
         ouvertes -= set(fermetures.get(beat.id, []))
+        if not durees:
+            continue
         reste = totale - (debut[beat.id] + durees.get(beat.id, 0.0))
         if not ouvertes and reste > fin_s and not signale_vide:
             signale_vide = True
@@ -454,29 +467,44 @@ def rule_souffle(script: Script, plan: Plan) -> Iterator[Violation]:
         index += fenetre
 
 
-RULES: list[Callable[[Script, Plan], Iterator[Violation]]] = [
-    rule_word_budget,
-    rule_air,
-    rule_hook,
+#: Ce qui se vérifie sur le texte seul, à n'importe quel moment de
+#: l'écriture. C'est le lint qu'on relance après chaque correction.
+REGLES_TEXTE: list[Callable[[Script, Plan], Iterator[Violation]]] = [
     rule_beat_length,
     rule_sentence_length,
     rule_tts_hazards,
     rule_acronyms,
     rule_forbidden,
-    rule_retention,
     rule_enchainement,
-    rule_boucles,
     rule_souffle,
+    # Ces deux-là font les deux : leur part structurelle se lit dans le
+    # texte, leur part chronométrée s'active quand `plan` arrive.
+    rule_hook,
+    rule_boucles,
 ]
 
+#: Ce qui exige des durées, et donc la voix. Un débit annoncé ne les
+#: remplace pas : c'est ce qu'on faisait, et le script « dans le budget »
+#: sortait à côté de sa cible.
+REGLES_RYTHME: list[Callable[[Script, Plan], Iterator[Violation]]] = [
+    rule_word_budget,
+    rule_air,
+    rule_retention,
+]
 
-def check(script: Script) -> list[Violation]:
-    # Le plan temporel est estimé une fois, ici, et prêté aux règles qui en
-    # ont besoin. Le calculer dans chacune coûterait trois fois le travail
-    # et laisserait trois occasions de diverger.
-    plan = align.estimate(script)
+RULES = REGLES_TEXTE + REGLES_RYTHME
+
+
+def check(script: Script, plan: Plan | None = None) -> list[Violation]:
+    """Les violations du script. Avec `plan`, celles du rythme en plus.
+
+    `plan` est l'alignement mesuré (`04-audio/alignment.json`). Sans lui,
+    seules les règles de texte tournent — mieux vaut sept règles vraies que
+    douze dont cinq reposent sur une durée supposée.
+    """
+    regles = REGLES_TEXTE + (REGLES_RYTHME if plan else [])
     found: list[Violation] = []
-    for rule in RULES:
+    for rule in regles:
         found.extend(rule(script, plan))
     # Blocking first, then in script order.
     order = {beat.id: index for index, beat in enumerate(script.beats)}

@@ -50,9 +50,6 @@ export type Commande = {
   produit: string;
   depense: boolean;
   longue: boolean;
-  // Celle qui accomplit vraiment l'étape, quand plusieurs écrivent
-  // le même fichier. `align` estime, `voice` synthétise.
-  principale: boolean;
   options: Option[];
 };
 

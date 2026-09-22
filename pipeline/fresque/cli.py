@@ -168,22 +168,19 @@ def cmd_pistes(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_align(args: argparse.Namespace) -> int:
-    project = Project.open(args.slug)
-    script = script_parser.parse(project.script)
-    alignment = align.estimate(script)
-    align.write(alignment, project.alignment)
+def _mesure(project: Project) -> dict | None:
+    """L'alignement mesuré du projet, s'il existe.
 
-    target_min = float(args.target or 0)
-    duration = alignment["duree_totale_s"]
-    print(f"✓ {project.alignment.relative_to(project.root.parent.parent)}")
-    print(f"  {alignment['nb_beats']} beats · {alignment['nb_mots']} mots")
-    print(f"  durée estimée : {align.format_duration(duration)}")
-    if target_min:
-        drift = (duration / 60 - target_min) / target_min * 100
-        print(f"  écart à la cible de {target_min:g} min : {drift:+.1f} %")
-    print("  ⚠ timings estimés — seront remplacés par l'alignement forcé")
-    return 0
+    Rend `None` tant que la voix n'a pas tourné. Les appelants s'en passent
+    plutôt que de deviner une durée — c'est toute la différence entre
+    contrôler un film et contrôler une hypothèse.
+    """
+    if not project.alignment.is_file():
+        return None
+    try:
+        return align.load(project.alignment)
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def cmd_voice(args: argparse.Namespace) -> int:
@@ -390,10 +387,16 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
     project = Project.open(args.slug)
     script = script_parser.parse(project.script)
-    violations = lint_mod.check(script)
+    mesure = _mesure(project)
+    violations = lint_mod.check(script, mesure)
 
     blocking = [v for v in violations if v.blocking]
     warnings = [v for v in violations if not v.blocking]
+
+    if mesure is None:
+        print("· voix pas encore synthétisée — les règles de rythme "
+              "(durée, air, rétention, hook, boucles) ne tournent pas.")
+        print("  `fresque voice` les active, sur les durées réelles.\n")
 
     if not violations:
         print(f"✓ {script.word_count} mots · {len(script.beats)} beats · "
@@ -422,18 +425,26 @@ def cmd_shots(args: argparse.Namespace) -> int:
     for kind, count in sorted(kinds.items()):
         print(f"  {kind:<10} {count}")
 
-    par_minute = len(plan) / (script.word_count / float(
-        config.get("narration", "mots_par_minute", default=140)))
-    vise = float(config.get("visuels", "plans_par_minute", default=8))
-    print(f"  {par_minute:.1f} plans/min (visé : {vise:g})")
+    # Sans la voix, on ne sait pas combien de temps dure ce film — donc ni
+    # sa densité de plans, ni si une image est tenue trop longtemps.
+    mesure = _mesure(project)
+    if mesure is None:
+        print("  · durées inconnues — `fresque voice` avant de contrôler "
+              "la densité de plans")
+    else:
+        durees = {b["id"]: float(b["duree_s"]) for b in mesure["beats"]}
+        minutes = float(mesure["duree_totale_s"]) / 60
+        vise = float(config.get("visuels", "plans_par_minute", default=8))
+        if minutes:
+            print(f"  {len(plan) / minutes:.1f} plans/min (visé : {vise:g})")
 
-    slow = shots_mod.density(plan, script.beats)
-    if slow:
-        print(f"\n  ⚠ {len(slow)} beat(s) tiennent une image trop longtemps :")
-        for line in slow[:12]:
-            print(f"    {line}")
-        if len(slow) > 12:
-            print(f"    … et {len(slow) - 12} autre(s)")
+        slow = shots_mod.density(plan, script.beats, durees)
+        if slow:
+            print(f"\n  ⚠ {len(slow)} beat(s) tiennent une image trop longtemps :")
+            for line in slow[:12]:
+                print(f"    {line}")
+            if len(slow) > 12:
+                print(f"    … et {len(slow) - 12} autre(s)")
 
     # L'ouverture décide si le deuxième plan est vu. La variété décide si
     # le film se regarde. Les deux font échouer le checkpoint, avant la
@@ -1481,8 +1492,6 @@ def main(argv: list[str] | None = None) -> int:
         node.add_argument(
             "--modele", default=None, help="modèle Claude (défaut : opus)")
 
-    align_cmd = add("align", "Estimer les timings depuis le script", cmd_align)
-    align_cmd.add_argument("--target", type=float, help="durée cible en minutes")
     add("lint", "Vérifier le script contre les règles d'écriture", cmd_lint)
     refaire_cmd = add("refaire", "Remplacer le visuel d'un plan", cmd_refaire)
     refaire_cmd.add_argument(

@@ -55,7 +55,6 @@ def commandes() -> dict[str, Any]:
             "produit": c.produit,
             "depense": c.depense,
             "longue": c.longue,
-            "principale": c.principale,
             "options": [asdict(o) for o in c.options],
         }
         for nom, c in serveur.COMMANDES.items()

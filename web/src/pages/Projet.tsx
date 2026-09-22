@@ -82,18 +82,15 @@ export default function Projet() {
   if (erreur) return <div className="erreur" style={{ margin: 40 }}>{erreur}</div>;
   if (!projet) return <p className="vide" style={{ padding: 40 }}>Lecture des fichiers…</p>;
 
-  // Trois commandes écrivent `alignment.json` : `align` l'estime sans
-  // audio, `voice` le mesure sur du son réel, `aligner` y replace les mots.
-  // La ligne « voix » de la chaîne doit porter celle qui accomplit l'étape,
-  // pas la première déclarée — sinon le bouton propose l'estimation, et
-  // cliquer dessus remplit l'étape sans qu'aucun son existe.
+  // Deux commandes écrivent `alignment.json` : `voice` le crée en
+  // synthétisant, `aligner` y replace les mots ensuite. La ligne « voix »
+  // de la chaîne doit porter celle qui accomplit l'étape — d'où la règle :
+  // une commande qui exige le fichier qu'elle produit l'affine, elle ne le
+  // fait pas naître, et n'a rien à faire sur la chaîne.
   const parProduit = new Map<string, Commande>();
   for (const c of Object.values(commandes)) {
-    if (!c.produit) continue;
-    const tenante = parProduit.get(c.produit);
-    if (!tenante || (c.principale && !tenante.principale)) {
-      parProduit.set(c.produit, c);
-    }
+    if (!c.produit || c.exige === c.produit) continue;
+    if (!parProduit.has(c.produit)) parProduit.set(c.produit, c);
   }
   const surLaChaine = new Set([...parProduit.values()].map((c) => c.nom));
   const pistesEcrites = projet.fichiers.find((f) => f.fichier === "pistes.md" && f.existe);

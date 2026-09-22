@@ -304,15 +304,23 @@ moteur qui lit un paragraphe entier (Edge, ElevenLabs) reçoit désormais le
 beat d'un bloc, et on se contente de resserrer les pauses qu'il a posées.
 Kokoro, qui ne marque pas les phrases, reste découpé. Voir `voice._say_beat`.
 
+**Et une conséquence, plus large.** Si le moteur décide des pauses, il décide
+de la durée. `mots_par_minute` — le débit annoncé dont tout le pipeline
+déduisait ses durées, du budget du script au nombre de plans — a donc été
+supprimé. La voix est synthétisée juste après le script, et tout ce qui a
+besoin d'une durée la lit dans `04-audio/alignment.json`. Les mesures
+ci-dessous restent valables comme observations ; elles ne sont plus des
+cibles que le code fait respecter.
+
 1. **Couper deux fois plus vite, et en franc.** `plans_par_minute` à 25,
    `duree_plan_max_s` à 3, transitions à 0, fondu noir réservé aux
    changements d'acte, sons de transition désactivés par défaut. Ce sont
    des valeurs de template : aucun code à écrire, et c'est le changement
    le plus visible.
-2. **Ralentir la narration et raccourcir les phrases.**
-   `mots_par_minute` à 100, plafond de mots par beat très bas, et une
-   règle de lint qui refuse une phrase de plus de douze mots. Le silence
-   devient un élément du script, pas un accident.
+2. **Ralentir la narration et raccourcir les phrases.** Un débit de voix
+   plus lent (`voix.edge.rate`, `voix.kokoro.speed`), plafond de mots par
+   beat très bas, et une règle de lint qui refuse une phrase de plus de
+   douze mots. Le silence devient un élément du script, pas un accident.
 3. **Réduire l'amplitude du zoom.** Viser +2,5 %/s calculé sur la durée
    réelle du plan, au lieu d'une plage fixe parcourue quelle que soit la
    durée.

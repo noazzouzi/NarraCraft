@@ -61,7 +61,9 @@ Ce n'est pas une contrainte esthétique, c'est le rythme. Alterner est le travai
 
 ## LE DÉCOUPAGE
 
-Viser `plans_par_minute`. **Calculer, ne pas estimer** : la durée d'un beat vaut `mots_du_beat / mots_par_minute × 60`, et le nombre de plans vaut cette durée divisée par `montage.duree_plan_max_s`, arrondi au supérieur. Un beat de 40 mots à 140 mots/min dure dix-sept secondes : il lui faut **cinq plans**, pas un.
+Viser `plans_par_minute`. **Lire, ne pas estimer** : la durée de chaque beat est dans `projects/<slug>/04-audio/alignment.json`, champ `duree_s`, mesurée sur l'audio réel. Le nombre de plans vaut cette durée divisée par `montage.duree_plan_max_s`, arrondi au supérieur. Un beat de dix-sept secondes demande **cinq plans**, pas un.
+
+Ce fichier existe forcément : la voix est synthétisée avant le plan visuel, précisément pour que ce calcul porte sur le film et non sur une hypothèse.
 
 **Il n'y a pas de limite basse.** Mesuré sur deux documentaires Frontier : durée médiane d'un plan 1,7 et 2,4 s, le plus court tient cinq images. Un plan très court est un outil. Ce qui fatigue, c'est un plan long sur une narration qui avance.
 

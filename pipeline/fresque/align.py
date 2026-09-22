@@ -1,10 +1,13 @@
 """Word-level timing — the spine the whole montage hangs from.
 
-Two producers, one format:
+Une seule source : l'audio. `voice.synthesize` mesure la durée de chaque
+beat sur le fichier qu'il vient d'écrire, `aligner.force` affine ensuite la
+position des mots à l'intérieur. Les deux écrivent la même structure.
 
-  * `estimate()`  derives timings from word counts. No audio, no API, no cost.
-  * forced alignment (jalon 3) will realign the known script text onto real
-    audio and write the same structure.
+Ce module a longtemps porté un troisième producteur, `estimate()`, qui
+déduisait les durées d'un débit annoncé en mots par minute. Il a été
+supprimé : un débit visé n'a jamais décrit ce que le moteur de voix fait
+vraiment, et l'écart se payait en aval. On demande au moteur, on mesure.
 
 Everything downstream reads `alignment.json` and nothing else. In particular
 it never reads timestamps returned by a TTS engine — see CLAUDE.md.
@@ -17,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 from . import config
-from .script_parser import Beat, Script
 
 WORD_RE = re.compile(r"[\w'’-]+|[^\w\s]", re.UNICODE)
 VOWEL_GROUP_RE = re.compile(r"[aeiouyàâäéèêëîïôöùûüœæ]+", re.IGNORECASE)
@@ -62,71 +64,6 @@ def _tokenize(text: str) -> list[tuple[str, str, float]]:
             glue = "" if token in ")]}»,;:.!?…" else " "
             words[-1] = (word, f"{display}{glue}{token}", max(existing, pause))
     return words
-
-
-def _time_beat(beat: Beat, clock: float, wpm: float) -> dict[str, Any]:
-    words = _tokenize(beat.text)
-    if not words:
-        raise ValueError(f"{beat.id} : aucun mot exploitable.")
-
-    speech_s = len(words) / wpm * 60.0
-    weights = [syllables(word) for word, _, _ in words]
-    total_weight = sum(weights)
-
-    start = clock
-    timed: list[dict[str, Any]] = []
-    for (word, display, pause_after), weight in zip(words, weights):
-        duration = speech_s * weight / total_weight
-        timed.append({
-            "t": word,
-            "tx": display,
-            "debut_s": round(clock, 3),
-            "fin_s": round(clock + duration, 3),
-        })
-        clock += duration + pause_after
-
-    # Trailing pause belongs to the inter-beat gap, not to the beat itself.
-    clock -= words[-1][2]
-
-    return {
-        "id": beat.id,
-        "acte": beat.act,
-        "debut_s": round(start, 3),
-        "fin_s": round(clock, 3),
-        "duree_s": round(clock - start, 3),
-        "mots": timed,
-    }
-
-
-def estimate(script: Script) -> dict[str, Any]:
-    wpm = float(config.get("narration", "mots_par_minute", default=140))
-    beat_gap = float(config.get("narration", "pause_entre_beats_s", default=0.4))
-    act_gap = float(config.get("narration", "pause_entre_actes_s", default=1.2))
-
-    clock = 0.0
-    previous_act: str | None = None
-    beats: list[dict[str, Any]] = []
-
-    for beat in script.beats:
-        if previous_act is not None:
-            clock += act_gap if beat.act != previous_act else beat_gap
-        previous_act = beat.act
-        entry = _time_beat(beat, clock, wpm)
-        beats.append(entry)
-        clock = entry["fin_s"]
-
-    return {
-        "source": "estimate",
-        "avertissement": (
-            "Timings estimés à partir du compte de mots, sans audio. "
-            "Remplacés par l'alignement forcé dès que la voix est générée."
-        ),
-        "mots_par_minute": wpm,
-        "duree_totale_s": round(clock, 3),
-        "nb_beats": len(beats),
-        "nb_mots": sum(len(b["mots"]) for b in beats),
-        "beats": beats,
-    }
 
 
 def write(alignment: dict[str, Any], path: Path) -> None:

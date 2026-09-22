@@ -15,7 +15,7 @@ description: Écrit la narration d'un documentaire Fresque à partir de la piste
 - `projects/<slug>/pistes.md` — la piste N : angle, pivot, preuves.
 - `projects/<slug>/01-research.md` — les faits. **Rien d'autre n'est une source.**
 - `templates/<template>.yaml` — `meta.registre`, `meta.structure_narrative`, `meta.interdits_specifiques` priment sur ce skill.
-- `fresque.config.yaml` — `duree_cible_min`, `mots_par_minute`, `hook_s`, `relance_retention_s`, `controle.*`.
+- `fresque.config.yaml` — `duree_cible_min`, `hook_s`, `relance_retention_s`, `controle.*`.
 
 ## SORTIE
 
@@ -76,7 +76,7 @@ Le texte ne sera jamais lu. Il sera entendu, une fois, sans retour en arrière.
 
 ## PROCÉDURE
 
-**1. Le budget.** `duree_cible_min × mots_par_minute` = budget de mots. Le répartir entre les actes. L'écrire en tête de fichier.
+**1. Le budget.** Il n'y a pas de formule : aucun débit n'est visé, et un compte de mots ne prédit pas une durée — c'est le moteur de voix qui décide du débit et des silences. Partir du dernier film mesuré s'il y en a un (`04-audio/alignment.json`, `nb_mots` et `duree_totale_s`), sinon écrire et mesurer.
 
 **2. La colonne vertébrale.** Avant d'écrire une seule phrase : lister 8 à 12 retournements, une ligne chacun, avec leur lien `mais`/`donc` et les boucles qu'ils ouvrent ou ferment. Le pivot de la piste est l'un d'eux, aux deux tiers environ. Si la chaîne ne tient pas ici, elle ne tiendra pas non plus en 2000 mots.
 
@@ -90,7 +90,9 @@ Le texte ne sera jamais lu. Il sera entendu, une fois, sans retour en arrière.
 
 **7. `python -m fresque lint <slug>`**, jusqu'à zéro violation bloquante. Recommencer autant de fois que nécessaire. L'utilisateur ne doit relire qu'un script qui passe déjà cette barre.
 
-**8. Présenter** : compte de mots réel contre cible, les boucles et leur tenue, les deux ou trois passages les moins sûrs. Puis s'arrêter — c'est un checkpoint.
+**8. `python -m fresque voice <slug>`**, puis le lint une dernière fois. La voix donne la durée réelle du film, et cinq règles ne tournent pas sans elle : durée, air, rétention, longueur du hook, tenue des boucles. Tant qu'elle n'a pas tourné, le script est vérifié sur son texte seul.
+
+**9. Présenter** : la durée mesurée contre la cible, les boucles et leur tenue, les deux ou trois passages les moins sûrs. Puis s'arrêter — c'est un checkpoint.
 
 ---
 

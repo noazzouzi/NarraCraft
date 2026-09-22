@@ -60,8 +60,12 @@ ETAPES: tuple[tuple[str, str], ...] = (
     ("pistes", "pistes.md"),
     ("recherche", "01-research.md"),
     ("script", "02-script.md"),
-    ("plan visuel", "03-shots.json"),
+    # La voix précède le plan visuel : c'est elle qui donne la durée réelle
+    # de chaque beat, et c'est sur cette durée que se décide le nombre de
+    # plans. L'inverse revenait à découper un film dont on ignorait la
+    # longueur.
     ("voix", "04-audio/alignment.json"),
+    ("plan visuel", "03-shots.json"),
     ("visuels", "05-visuals/assets.json"),
     # Un film dont les visuels n'ont pas été regardés n'est pas fini. Le
     # code vérifie la licence, la résolution et les doublons ; seul un
@@ -96,12 +100,6 @@ class Commande:
     depense: bool = False          # appelle une API payante
     longue: bool = False           # plusieurs minutes, bouton d'arrêt utile
     options: tuple[Option, ...] = ()
-    #: Celle qui accomplit vraiment l'étape, quand plusieurs écrivent le
-    #: même fichier. `align` et `voice` produisent tous deux
-    #: `alignment.json`, mais `align` n'écrit que des durées estimées : la
-    #: ligne « voix » de la chaîne proposait donc l'estimation, et cliquer
-    #: dessus remplissait l'étape sans qu'aucun son existe.
-    principale: bool = False
 
 
 #: Liste close. Une commande absente d'ici n'est pas lançable depuis le
@@ -126,21 +124,18 @@ COMMANDES: dict[str, Commande] = {
         "Écrire le script", exige="01-research.md",
         produit="02-script.md", longue=True,
     ),
+    # La voix d'abord : le plan visuel se calcule sur des durées de beat
+    # mesurées, et il n'y en a pas avant qu'elle ait tourné.
     "plans": Commande(
-        "Écrire le plan visuel", exige="02-script.md",
+        "Écrire le plan visuel", exige="04-audio/alignment.json",
         produit="03-shots.json", longue=True,
     ),
     "status": Commande("État d'avancement"),
     "lint": Commande("Vérifier le script", exige="02-script.md"),
-    "align": Commande(
-        "Estimer les timings", exige="02-script.md",
-        produit="04-audio/alignment.json",
-        options=(Option("target", "durée cible (min)", "nombre"),),
-    ),
     "shots": Commande("Valider le plan visuel", exige="03-shots.json"),
     "voice": Commande(
         "Générer l'audio", exige="02-script.md",
-        produit="04-audio/alignment.json", longue=True, principale=True,
+        produit="04-audio/alignment.json", longue=True,
     ),
     "fetch": Commande(
         "Sourcer les archives libres", exige="03-shots.json",

@@ -51,7 +51,6 @@ narration:
   # durée totale, parce que la voix se tait un tiers du temps
   # (`docs/analyse-frontier.md`).
   #
-  # `mots_par_minute` est le débit PARLÉ : les pauses s'ajoutent par-dessus.
   # Mesuré sur un extrait réel du script, avec la voix ff_siwis :
   #   speed 0.62 → 107 mots/min   (au niveau de Frontier, mais traînant)
   #   speed 0.69 → 117 mots/min
@@ -61,8 +60,9 @@ narration:
   #
   # 124 plutôt que 107 : la voix française de Kokoro est notée B-, et plus
   # on la ralentit plus sa prosodie se délite. Le reste du ralentissement
-  # vient du silence, qui ne coûte rien en qualité.
-  mots_par_minute: 124
+  # vient du silence, qui ne coûte rien en qualité. C'est un réglage de
+  # moteur, pas une cible : rien ne vérifie le débit du film.
+  #
   # Les respirations portent le rythme, et c'est délibéré. Elles étaient
   # divisées par deux ; elles sont maintenant au-dessus de la base. Une
   # phrase courte suivie d'un vrai silence frappe plus fort que n'importe
@@ -75,7 +75,7 @@ narration:
 
 voix:
   kokoro:
-    # Cohérent avec `narration.mots_par_minute` ci-dessus : 0.75 → 124.
+    # Mesuré : 0.75 → environ 124 mots/min quand la voix parle.
     speed: 0.75
 
 structure:
@@ -93,7 +93,7 @@ controle:
   # Les phrases de Frontier font trois à six mots : « August 31st, 2026. »,
   # « It started in Rosario. ». Douze est un plafond, pas une cible.
   mots_par_phrase_max: 12
-  # Part minimale de silence sur la durée estimée. Mesuré chez Frontier :
+  # Part minimale de silence sur la durée mesurée. Mesuré chez Frontier :
   # 34 % sur un documentaire, 21 % sur l'autre. C'est une règle d'écriture
   # autant que de réglage — un beat d'une seule longue phrase ne respire
   # nulle part, quelles que soient les pauses configurées.

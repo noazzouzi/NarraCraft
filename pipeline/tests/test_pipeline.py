@@ -48,6 +48,54 @@ def script(tmp_path: Path) -> script_parser.Script:
     return script_parser.parse(path)
 
 
+def mesure(script: script_parser.Script, mots_min: float = 140.0) -> dict:
+    """Un alignement mesuré, de la forme que `voice.synthesize` produit.
+
+    Le pipeline n'estime plus aucune durée : il les mesure sur l'audio. Les
+    tests qui parlent de durée ont pourtant besoin d'un plan temporel, et
+    synthétiser quatre-vingts beats dans une suite de tests n'est pas une
+    option. Ce fabricant tient donc lieu de passe voix.
+
+    `mots_min` n'est pas un débit visé — plus rien n'en vise un. C'est le
+    bouton qui permet à un test de demander un film long ou court.
+    """
+    from fresque import config, voice as voice_mod
+
+    beat_gap = float(config.get("narration", "pause_entre_beats_s", default=0.4))
+    act_gap = float(config.get("narration", "pause_entre_actes_s", default=1.2))
+    phrase_gap = float(config.get("narration", "pause_phrase_s", default=0.6))
+
+    clock = 0.0
+    acte: str | None = None
+    beats: list[dict] = []
+    for beat in script.beats:
+        if acte is not None:
+            clock += act_gap if beat.act != acte else beat_gap
+        acte = beat.act
+        phrases = len([
+            p for p in voice_mod._FIN_PHRASE.split(beat.text) if p.strip()])
+        duree = beat.word_count / mots_min * 60 + phrase_gap * max(phrases - 1, 0)
+        beats.append({
+            "id": beat.id,
+            "acte": beat.act,
+            "debut_s": round(clock, 3),
+            "fin_s": round(clock + duree, 3),
+            "duree_s": round(duree, 3),
+            "mots": voice_mod._time_words(beat, clock, duree),
+        })
+        clock += duree
+
+    return {
+        "source": "mesure",
+        "avertissement": "fabriqué par les tests, à la forme d'une mesure",
+        "voix": {"provider": "faux"},
+        "duree_totale_s": round(clock, 3),
+        "nb_beats": len(beats),
+        "nb_mots": sum(len(b["mots"]) for b in beats),
+        "beats": beats,
+    }
+
+
 def test_parse_extracts_beats_acts_and_intentions(script):
     assert [b.id for b in script.beats] == ["B001", "B002", "B003"]
     assert script.beats[0].intention == "un plan large"
@@ -85,7 +133,7 @@ def test_missing_intention_is_refused(tmp_path: Path):
 
 
 def test_alignment_is_monotonic_and_covers_every_beat(script):
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     assert alignment["nb_beats"] == 3
     previous = -1.0
     for beat in alignment["beats"]:
@@ -98,7 +146,7 @@ def test_alignment_is_monotonic_and_covers_every_beat(script):
 
 
 def test_alignment_keeps_punctuation_for_display(script):
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     displays = [w["tx"] for w in alignment["beats"][0]["mots"]]
     assert any(d.endswith(",") for d in displays), displays
     assert any(d.endswith(".") for d in displays), displays
@@ -107,7 +155,7 @@ def test_alignment_keeps_punctuation_for_display(script):
 
 
 def test_acts_get_a_longer_breath_than_beats(script):
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     beats = alignment["beats"]
     within_act = beats[1]["debut_s"] - beats[0]["fin_s"]
     across_acts = beats[2]["debut_s"] - beats[1]["fin_s"]
@@ -352,7 +400,7 @@ def test_an_unknown_subtitle_family_is_refused_before_the_render():
 
 
 def test_the_subtitle_settings_reach_the_renderer(script):
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]
     assets = {s.id: {"fichier": f"{s.id}.jpg"} for s in shots}
 
@@ -444,7 +492,7 @@ def test_a_licence_notice_pasted_into_an_author_field_is_cut():
 def test_the_end_card_extends_the_film_rather_than_covering_it(script):
     """Sa durée entre dans `duree_frames` : sinon le rendu s'arrête avant
     lui, et la musique se tait au milieu des crédits."""
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]
     assets = {s.id: {"fichier": f"{s.id}.jpg", "credit": "A (CC BY 4.0)",
                      "licence": "CC BY 4.0", "auteur": "A",
@@ -461,7 +509,7 @@ def test_the_end_card_extends_the_film_rather_than_covering_it(script):
 
 def test_a_film_owing_nothing_gets_no_end_card(script):
     """Domaine public d'un bout à l'autre : rien à créditer, pas de carton."""
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]
     assets = {s.id: {"fichier": f"{s.id}.jpg"} for s in shots}
 
@@ -470,7 +518,7 @@ def test_a_film_owing_nothing_gets_no_end_card(script):
 
 
 def test_timeline_is_contiguous_and_matches_alignment(script):
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]
     assets = {s.id: {"fichier": f"{s.id}.jpg"} for s in shots}
 
@@ -484,7 +532,7 @@ def test_timeline_is_contiguous_and_matches_alignment(script):
 
 
 def test_weights_split_a_beat_proportionally(script):
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     shots = [
         _shot("B001", 0, weight=3.0), _shot("B001", 1, "pan_left", weight=1.0),
         _shot("B002", 2), _shot("B003", 3),
@@ -518,7 +566,7 @@ def test_unknown_movement_is_refused(tmp_path: Path, script):
 
 def test_movement_varies_between_shots(script):
     """Identical Ken Burns on every shot is what makes a montage look generated."""
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     shots = [_shot("B001", 0), _shot("B002", 1), _shot("B003", 2)]
     assets = {s.id: {"fichier": f"{s.id}.jpg"} for s in shots}
     clips = timeline_mod.build(alignment, shots, assets)["clips"]
@@ -877,6 +925,17 @@ def _beat(identifier: str, text: str) -> str:
     return f"### {identifier}\n> intention: x\n{text}\n"
 
 
+def _lint(script, mots_min: float = 140.0):
+    """Le lint complet : règles de texte ET de rythme.
+
+    Le rythme exige un plan temporel mesuré — le pipeline ne l'estime plus.
+    `mesure()` en fabrique un à la forme de ce que la voix produit.
+    """
+    from fresque import lint as lint_mod
+
+    return lint_mod.check(script, mesure(script, mots_min))
+
+
 def _rules_hit(violations) -> set[str]:
     return {v.rule for v in violations}
 
@@ -944,7 +1003,7 @@ def test_a_beat_that_can_only_say_and_is_refused(tmp_path):
 def test_a_beat_without_a_link_is_blocking(tmp_path):
     table = _table_saine(10)
     table[3] = "| B004 | | | |"
-    violations = lint_mod.check(_script_from(_corps(10) + _controle(table), tmp_path))
+    violations = _lint(_script_from(_corps(10) + _controle(table), tmp_path))
     faute = [v for v in violations if v.rule == "enchaînement"]
     assert faute and faute[0].beat == "B004" and faute[0].blocking
 
@@ -961,7 +1020,7 @@ def test_a_loop_that_never_closes_is_blocking(tmp_path):
     """Une promesse non tenue se paie en commentaires."""
     table = _table_saine(10)
     table[-1] = "| B010 | donc | | |"
-    violations = lint_mod.check(_script_from(_corps(10) + _controle(table), tmp_path))
+    violations = _lint(_script_from(_corps(10) + _controle(table), tmp_path))
     faute = [v for v in violations if v.rule == "boucle"]
     assert faute and "jamais fermée" in faute[0].message and faute[0].blocking
 
@@ -971,7 +1030,7 @@ def test_a_loop_shorter_than_a_minute_and_a_half_is_not_a_loop(tmp_path):
     table = _table_saine(12)
     table[1] = "| B002 | donc | ouvre L2 — qui a signé | |"
     table[2] = "| B003 | donc | ferme L2 | |"
-    violations = lint_mod.check(_script_from(_corps(12) + _controle(table), tmp_path))
+    violations = _lint(_script_from(_corps(12) + _controle(table), tmp_path))
     assert "boucle-courte" in _rules_hit(violations)
 
 
@@ -980,7 +1039,7 @@ def test_closing_the_last_loop_too_early_is_where_viewers_leave(tmp_path):
     table = _table_saine(12)
     table[-1] = "| B012 | donc | | |"
     table[5] = "| B006 | donc | ferme L1 | |"
-    violations = lint_mod.check(_script_from(_corps(12) + _controle(table), tmp_path))
+    violations = _lint(_script_from(_corps(12) + _controle(table), tmp_path))
     assert "boucle-vide" in _rules_hit(violations)
 
 
@@ -1004,7 +1063,7 @@ def test_a_stretch_without_a_single_short_sentence_is_flagged(tmp_path):
 def test_retention_counts_from_the_last_declared_relance(tmp_path):
     """Une relance ne se reconnaît pas au texte : elle se déclare."""
     long = _beat("B001", "mot " * 160) + _beat("B002", "mot " * 160)
-    assert "rétention" in _rules_hit(lint_mod.check(_script_from(long, tmp_path)))
+    assert "rétention" in _rules_hit(_lint(_script_from(long, tmp_path)))
 
     # Le même texte, coupé par une relance déclarée, ne déclenche plus rien.
     coupe = (
@@ -1012,7 +1071,7 @@ def test_retention_counts_from_the_last_declared_relance(tmp_path):
         + "### B002\n> intention: x\n> relance: révélation\n"
         + "mot " * 160 + "\n"
     )
-    assert "rétention" not in _rules_hit(lint_mod.check(_script_from(coupe, tmp_path)))
+    assert "rétention" not in _rules_hit(_lint(_script_from(coupe, tmp_path)))
 
 
 def test_a_hook_that_opens_on_a_question_is_caught(tmp_path):
@@ -1033,7 +1092,7 @@ def test_a_hook_whose_first_sentence_runs_long_is_caught(tmp_path):
 def test_a_hook_over_its_time_budget_is_caught(tmp_path):
     body = _beat("B001", "Court. " * 3 + "mot " * 120)
     script = _script_from(body, tmp_path)
-    assert "hook-longueur" in _rules_hit(lint_mod.check(script))
+    assert "hook-longueur" in _rules_hit(_lint(script))
 
 
 def test_hour_written_in_digits_is_caught(tmp_path):
@@ -1083,7 +1142,7 @@ def test_beat_too_long_is_caught(tmp_path):
 def test_budget_is_a_warning_not_a_blocker(tmp_path):
     """La longueur est un arbitrage humain : on le signale, on ne bloque pas."""
     script = _script_from(_beat("B001", "mot " * 40), tmp_path)
-    budget = [v for v in lint_mod.check(script) if v.rule == "budget"]
+    budget = [v for v in _lint(script) if v.rule == "budget"]
     assert budget and not budget[0].blocking
 
 
@@ -1092,13 +1151,13 @@ def test_a_clean_beat_raises_nothing_blocking(tmp_path):
             "passerelle, ne comprend encore ce qui vient de se passer. "
             "Six ponts plus bas, les hommes continuent de pelleter.")
     script = _script_from(_beat("B001", text), tmp_path)
-    blocking = [v for v in lint_mod.check(script) if v.blocking]
+    blocking = [v for v in _lint(script) if v.blocking]
     assert blocking == [], blocking
 
 
 def test_blocking_violations_are_listed_first(tmp_path):
     script = _script_from(_beat("B001", "Il est 01h23. " + "mot " * 30), tmp_path)
-    found = lint_mod.check(script)
+    found = _lint(script)
     assert found[0].blocking and not found[-1].blocking
 
 
@@ -1409,7 +1468,7 @@ def test_motion_clip_needs_no_image_in_the_timeline(tmp_path):
 
     shot = Shot(index=0, beat="B001", type="motion",
                 motion={"kind": "chiffre", "valeur": "20", "libelle": "jours"})
-    timeline = timeline_mod.build(align.estimate(script), [shot], {})
+    timeline = timeline_mod.build(mesure(script), [shot], {})
     assert timeline_mod.check(timeline) == []
 
 
@@ -1426,7 +1485,7 @@ def _timeline_de(tmp_path, actes: list[tuple[str, list[str]]], shots: list[Shot]
     script_path = tmp_path / "02-script.md"
     script_path.write_text("\n".join(lignes), encoding="utf-8")
     script = script_parser.parse(script_path)
-    return timeline_mod.build(align.estimate(script), shots, {}, **kwargs)
+    return timeline_mod.build(mesure(script), shots, {}, **kwargs)
 
 
 def test_transitions_follow_the_structure_of_the_story():
@@ -1503,7 +1562,7 @@ def test_a_shot_held_too_long_is_reported(tmp_path):
 
     shot = Shot(index=0, beat="B001", type="motion",
                 motion={"kind": "chiffre", "valeur": "20", "libelle": "jours"})
-    timeline = timeline_mod.build(align.estimate(script), [shot], {})
+    timeline = timeline_mod.build(mesure(script), [shot], {})
     problems = timeline_mod.check(timeline)
     assert any("plan tenu" in p for p in problems)
 
@@ -1517,8 +1576,12 @@ def test_density_catches_a_beat_planned_with_too_few_shots(tmp_path):
     script_path.write_text(f"# T\n\n## Acte I — A\n\n{body}", encoding="utf-8")
     beats = script_parser.parse(script_path).beats
 
+    # Les durées viennent de l'audio, jamais d'un débit supposé.
+    durees = {"B001": 26.0}
+
     seul = [Shot(index=0, beat="B001", type="archive", requete="x")]
-    assert density(seul, beats), "un plan pour soixante mots doit être signalé"
+    assert density(seul, beats, durees), \
+        "un plan pour vingt-six secondes doit être signalé"
 
     # Le plan le plus lourd décide, pas la moyenne : découper sans corriger
     # les poids ne résout rien.
@@ -1526,7 +1589,10 @@ def test_density_catches_a_beat_planned_with_too_few_shots(tmp_path):
         Shot(index=0, beat="B001", type="archive", requete="x", poids=1),
         Shot(index=1, beat="B001", type="archive", requete="y", poids=9),
     ]
-    assert density(desequilibre, beats)
+    assert density(desequilibre, beats, durees)
+
+    # Sans mesure, pas de verdict : mieux vaut ne rien dire que deviner.
+    assert density(seul, beats, {}) == []
 
 
 def test_a_run_of_identical_shots_is_refused():
@@ -2026,7 +2092,7 @@ def test_template_overview_says_where_each_value_comes_from():
     plat = {chemin: source
             for _, lignes in donnees["axes"] for chemin, _, source in lignes}
 
-    assert plat["narration.mots_par_minute"] == "template"
+    assert plat["narration.pause_phrase_s"] == "template"
     assert plat["montage.musique.source"] == "template"
     # Hérité : le template ne parle ni de résolution ni de fréquence d'images.
     assert plat["montage.fps"] == "base"
@@ -2080,14 +2146,14 @@ def test_a_project_can_override_its_template(tmp_path, monkeypatch):
     attendu = yaml.safe_load(
         (vrai / "templates" / "documentaire-historique.yaml").read_text(
             encoding="utf-8")
-    )["narration"]["mots_par_minute"]
+    )["narration"]["pause_phrase_s"]
 
     try:
         Project.open("essai")
         # Le projet a le dernier mot…
         assert config_mod.get("production", "duree_cible_min") == 2
         # …sans écraser ce que le template dit par ailleurs.
-        assert config_mod.get("narration", "mots_par_minute") == attendu
+        assert config_mod.get("narration", "pause_phrase_s") == attendu
     finally:
         config_mod.use_project_overrides({})
         config_mod.use_template(None)
@@ -2261,7 +2327,7 @@ def test_a_bar_chart_with_one_series_is_refused(tmp_path):
 def test_a_panel_inherits_the_texture_of_a_neighbouring_shot(script):
     """Un panneau sur fond noir plat se lit comme une diapositive posée à
     côté du film. L'image du plan voisin, floutée dessous, le rattache."""
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     shots = [
         Shot(index=0, beat="B001", type="archive", requete="q"),
         Shot(index=1, beat="B002", type="motion",
@@ -2279,7 +2345,7 @@ def test_a_panel_inherits_the_texture_of_a_neighbouring_shot(script):
 
 def test_a_panel_that_opens_the_film_borrows_the_shot_that_follows(script):
     """Sinon il s'ouvrirait sur du noir, faute de plan précédent."""
-    alignment = align.estimate(script)
+    alignment = mesure(script)
     shots = [
         Shot(index=0, beat="B001", type="motion",
              motion={"kind": "chiffre", "valeur": "5", "libelle": "ans"}),
@@ -2741,10 +2807,12 @@ def _script(texte: str):
 
 
 def test_the_word_budget_is_measured_in_time_not_in_words():
-    """La cible est une durée. `mots_par_minute` est le débit PARLÉ, et les
-    silences s'ajoutent par-dessus : multiplier l'un par l'autre sous-estime
-    la durée dès qu'on laisse de l'air, et un script « dans le budget »
-    dépasse sa cible d'un tiers.
+    """La cible est une durée, et la durée vient de l'audio.
+
+    Cette règle a longtemps multiplié un compte de mots par un débit
+    annoncé. C'était une prédiction : les silences s'ajoutent par-dessus, et
+    un script « dans le budget » dépassait sa cible d'un tiers. Elle lit
+    maintenant `duree_totale_s`, et rien d'autre.
     """
     from fresque import align as align_mod, config as config_mod, lint as lint_mod
 
@@ -2757,15 +2825,10 @@ def test_the_word_budget_is_measured_in_time_not_in_words():
     config_mod.use_template(None)
     config_mod.use_project_overrides({"production": {"duree_cible_min": 1}})
     try:
-        plan = align_mod.estimate(script)
-        parlee_s = script.word_count / float(
-            config_mod.get("narration", "mots_par_minute")) * 60
-        assert plan["duree_totale_s"] > parlee_s, \
-            "les pauses doivent allonger la durée au-delà du temps parlé"
-
+        plan = mesure(script)
         message = " ".join(
             v.message for v in lint_mod.rule_word_budget(script, plan))
-        assert "estimées" in message
+        assert "mesurées" in message
         # La durée annoncée est celle du plan, pas un produit mots × débit.
         assert align_mod.format_duration(plan["duree_totale_s"]) in message
     finally:
@@ -2792,7 +2855,7 @@ def test_a_script_without_air_is_flagged():
     config_mod.use_project_overrides({"controle": {"part_silence_min": 0.25}})
     try:
         def part(script):
-            return list(lint_mod.rule_air(script, align_mod.estimate(script)))
+            return list(lint_mod.rule_air(script, mesure(script)))
 
         assert part(_script(dense)), "un pavé sans ponctuation doit être signalé"
         assert not part(_script(aere)), "un script ponctué ne doit pas l'être"
@@ -2800,11 +2863,13 @@ def test_a_script_without_air_is_flagged():
         config_mod.use_project_overrides({})
 
 
-def test_the_voice_speed_matches_the_words_per_minute_it_claims():
-    """`mots_par_minute` et `voix.kokoro.speed` disent la même chose à deux
-    endroits : l'un sert à convertir mots <-> durée dans tout le pipeline,
-    l'autre pilote le moteur. Les changer séparément fait dériver toutes les
-    estimations de durée sans qu'aucun test ne tombe.
+def test_the_kokoro_speed_stays_on_a_measured_value():
+    """`voix.kokoro.speed` pilote un moteur, et rien d'autre ne le double.
+
+    Ce test comparait jadis cette vitesse à un `mots_par_minute` annoncé
+    ailleurs — deux endroits disant la même chose, qu'on pouvait changer
+    séparément. Le débit annoncé a disparu ; reste à ne pas choisir une
+    vitesse qu'on n'a jamais écoutée.
 
     La table vient d'une mesure sur un extrait réel du script Sarkozy avec
     la voix ff_siwis, la seule voix française de Kokoro v1.0.
@@ -2815,22 +2880,17 @@ def test_the_voice_speed_matches_the_words_per_minute_it_claims():
 
     effectif = apercu.resume("documentaire-historique")["effectif"]
     vitesse = float(effectif["voix"]["kokoro"]["speed"])
-    annonce = float(effectif["narration"]["mots_par_minute"])
 
     plus_proche = min(MESURE, key=lambda v: abs(v - vitesse))
     assert abs(plus_proche - vitesse) < 0.01, (
         f"speed {vitesse} n'est pas dans la table mesurée {sorted(MESURE)} — "
         "mesurer avant de changer")
-    assert abs(MESURE[plus_proche] - annonce) <= 4, (
-        f"speed {vitesse} produit {MESURE[plus_proche]} mots/min, "
-        f"mais la config en annonce {annonce}")
 
 
 def test_the_historical_template_speaks_slowly_and_leaves_air():
     from fresque import apercu
 
     effectif = apercu.resume("documentaire-historique")["effectif"]
-    assert effectif["narration"]["mots_par_minute"] <= 130
     assert effectif["controle"]["mots_par_phrase_max"] <= 12
     assert effectif["controle"]["part_silence_min"] >= 0.20
     assert effectif["controle"]["mots_par_beat"][1] <= 20
@@ -2985,38 +3045,25 @@ def test_a_single_sentence_beat_is_not_split():
     assert appels == [texte]
 
 
-def test_edge_trims_the_silence_it_wraps_each_sentence_in():
-    """Mesuré sur trois phrases courtes, Edge laisse 0,21 s avant et 0,92 s
-    après — plus d'une seconde de vide par phrase. Sur les quatre cents
-    phrases d'un quart d'heure, c'est plusieurs minutes de blanc que
-    personne n'a demandées, et qu'aucun réglage ne rattrape ensuite."""
+def test_nothing_is_added_or_removed_from_the_engines_output():
+    """La sortie d'un moteur qui marque les phrases est écrite telle quelle.
+
+    Ni découpage, ni rognage, ni recalage — pas même le vide dont Edge
+    emballe sa réponse. Ce test compare échantillon par échantillon : toute
+    retouche future le fera tomber.
+    """
     import numpy as np
 
     from fresque import voice as voice_mod
 
-    rate = voice_mod.SAMPLE_RATE
-    parole = np.ones(rate, dtype="float32")          # une seconde
-    avant = np.zeros(int(0.21 * rate), dtype="float32")
-    apres = np.zeros(int(0.92 * rate), dtype="float32")
+    machine = _MoteurBavard()
+    attendu, _ = machine.dire("peu importe")
+    obtenu, rate = voice_mod._say_beat(
+        machine, "Un, deux. Trois. Quatre.", 0.70)
 
-    rogne = voice_mod._rogner(np.concatenate([avant, parole, apres]), rate)
-
-    marge = voice_mod._MARGE_ROGNAGE_S
-    assert abs(len(rogne) / rate - (1 + 2 * marge)) < 0.01
-    # La marge existe pour ne pas couper une occlusive initiale.
-    assert marge > 0
-
-
-def test_trimming_a_silent_take_returns_it_whole():
-    """Rogner ce qui ne contient rien ne doit pas rendre un tableau vide :
-    un beat muet vaut mieux qu'un beat de longueur nulle, qui décalerait
-    tout le montage derrière lui."""
-    import numpy as np
-
-    from fresque import voice as voice_mod
-
-    muet = np.zeros(1000, dtype="float32")
-    assert len(voice_mod._rogner(muet, voice_mod.SAMPLE_RATE)) == 1000
+    assert rate == voice_mod.SAMPLE_RATE
+    assert np.array_equal(obtenu, attendu), \
+        "la sortie du moteur doit ressortir identique"
 
 
 def test_an_unknown_voice_provider_says_which_ones_exist():
@@ -4169,18 +4216,20 @@ def test_the_source_field_names_the_method_not_the_engine():
 
 
 def test_the_step_that_completes_a_file_holds_its_line():
-    """Trois commandes écrivent `alignment.json`. La ligne « voix » de la
-    chaîne doit porter celle qui la remplit vraiment : `align` n'écrit que
-    des durées estimées, et cliquer dessus remplissait l'étape sans
-    qu'aucun son existe."""
+    """Deux commandes écrivent `alignment.json`. La ligne « voix » de la
+    chaîne doit porter celle qui le fait naître, pas celle qui l'affine.
+
+    D'où la règle, que l'interface applique : une commande qui exige le
+    fichier qu'elle produit ne le crée pas. `aligner` replace les mots dans
+    un alignement existant ; seule `voice` le produit."""
     from fresque import serveur
 
     memes = [c for c in serveur.COMMANDES.values()
              if c.produit == "04-audio/alignment.json"]
-    principales = [c for c in memes if c.principale]
+    creatrices = [c for c in memes if c.exige != c.produit]
 
     assert len(memes) > 1, "le cas ne se pose que si plusieurs écrivent le fichier"
-    assert [c.libelle for c in principales] == ["Générer l'audio"]
+    assert [c.libelle for c in creatrices] == ["Générer l'audio"]
 
 
 def test_an_estimated_alignment_is_not_a_voice(tmp_path):
@@ -4211,15 +4260,15 @@ def test_an_estimated_alignment_is_not_a_voice(tmp_path):
     assert serveur_mod._etape_faite(dossier, "07-out/video.mp4") is False
 
 
-def test_the_checkpoint_estimate_counts_the_silence_it_will_insert():
-    """`mots_par_minute` est le débit du FILM : il compte les blancs entre
-    beats et entre actes, qui ne sont pas dans le beat. Estimer un beat avec
-    ce chiffre le raccourcit — mesuré sur les 168 beats du premier
-    documentaire complet, 9,1 % sous la durée réelle en médiane.
+def test_the_checkpoint_judges_on_measured_durations():
+    """Ce contrôle existe pour attraper un plan tenu trop longtemps AVANT de
+    payer les images.
 
-    C'est la mauvaise direction : ce contrôle existe pour attraper un plan
-    trop long AVANT de payer les images. Sous-estimer laisse passer au
-    checkpoint ce que la timeline refusera après la dépense."""
+    Il déduisait la durée d'un beat d'un débit annoncé en mots par minute.
+    Mesuré sur les 168 beats du premier documentaire complet, cette
+    déduction tombait 9,1 % sous la réalité en médiane — dans la mauvaise
+    direction : elle laissait passer au checkpoint ce que la timeline
+    refuserait après la dépense. Il lit maintenant la mesure."""
     from fresque import config, shots as shots_mod
 
     class FauxBeat:
@@ -4227,25 +4276,10 @@ def test_the_checkpoint_estimate_counts_the_silence_it_will_insert():
         word_count = 40
         text = "Trois mots ici. Puis trois autres. Et une fin."
 
-    config.use_project_overrides({
-        "narration": {"mots_par_minute": 120, "pause_phrase_s": 1.0},
-        "montage": {"duree_plan_max_s": 20},
-    })
+    config.use_project_overrides({"montage": {"duree_plan_max_s": 20}})
     try:
         plan = [Shot(index=0, beat="B001", type="archive", requete="q")]
-        # 40 mots à 120 mots/min = 20 s de parole, plus deux pauses d'une
-        # seconde : 22 s. Sans les pauses, 20 s passerait tout juste sous le
-        # plafond de 20 s ; avec elles, le plan est signalé.
-        assert shots_mod.density(plan, [FauxBeat()]) != []
-    finally:
-        config.use_project_overrides(None)
-
-    config.use_project_overrides({
-        "narration": {"mots_par_minute": 120, "pause_phrase_s": 0},
-        "montage": {"duree_plan_max_s": 20},
-    })
-    try:
-        plan = [Shot(index=0, beat="B001", type="archive", requete="q")]
-        assert shots_mod.density(plan, [FauxBeat()]) == []
+        assert shots_mod.density(plan, [FauxBeat()], {"B001": 22.0}) != []
+        assert shots_mod.density(plan, [FauxBeat()], {"B001": 18.0}) == []
     finally:
         config.use_project_overrides(None)
