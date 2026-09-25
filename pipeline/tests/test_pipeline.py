@@ -2896,7 +2896,6 @@ class _MoteurBavard:
     """
 
     nom = "bavard"
-    pause_naturelle_s = 1.28
 
     #: (texte, secondes de parole, silence qui suit)
     DIT = (

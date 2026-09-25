@@ -174,10 +174,6 @@ class Moteur:
     """
 
     nom: str = ""
-    #: Le silence que le moteur laisse après un point. N'entre plus dans
-    #: aucun calcul : plus personne n'ajoute de silence. Gardé parce que
-    #: c'est une caractéristique du moteur, et qu'elle s'affiche.
-    pause_naturelle_s: float = 0.0
 
     @classmethod
     def catalogue(cls) -> list["Voix"]:  # pragma: no cover - interface
@@ -197,10 +193,14 @@ class Moteur:
 
 
 class MoteurKokoro(Moteur):
+    """Local, sans réseau, et sans bornes de phrase.
+
+    Mesuré sur ff_siwis : 0,10 s après un point, à peine plus qu'après une
+    virgule. Il ne dit pas non plus où tombent ses phrases, donc un film
+    parlé par lui demande `fresque aligner` pour être monté.
+    """
+
     nom = "kokoro"
-    #: Mesuré sur ff_siwis : 0,10 s à vitesse 0,75, 0,12 s à 0,82 — à peine
-    #: plus qu'après une virgule.
-    pause_naturelle_s = 0.10
 
     #: Kokoro encode langue et sexe dans les deux premières lettres du nom
     #: d'une voix : `ff_siwis` est française et féminine. C'est la seule
@@ -254,11 +254,6 @@ class MoteurKokoro(Moteur):
         }
 
 
-#: Sous ce niveau, on considère que le moteur ne dit rien. Relevé sur les
-#: deux voix Edge : leur silence est un vrai zéro numérique, pas un souffle.
-#: Sert à mesurer et à contrôler, jamais à retoucher.
-_SEUIL_SILENCE = 0.01
-
 #: Les offsets d'Edge sont en centaines de nanosecondes — l'unité de temps
 #: de Windows, qui traverse l'API telle quelle.
 _TICKS_PAR_SECONDE = 10_000_000
@@ -272,9 +267,6 @@ class MoteurEdge(Moteur):
     """
 
     nom = "edge"
-    #: Mesuré sur un texte entier : 0,35 s après une virgule, 1,28 s après
-    #: un point. Il lit la ponctuation, c'est son travail.
-    pause_naturelle_s = 1.28
 
     @classmethod
     def catalogue(cls) -> list[Voix]:
@@ -382,14 +374,13 @@ class MoteurElevenLabs(Moteur):
     dans une commande. Sans elle, le moteur le dit et s'arrête — il ne
     tente pas un appel qui reviendrait en 401.
 
-    Sa sortie est écrite telle quelle, comme celle d'Edge.
+    Sa sortie est écrite telle quelle, comme celle d'Edge. Le point de
+    terminaison utilisé ici ne rend pas les bornes de phrase (il en existe
+    un, `with-timestamps`, qui les donnerait) : `phrases()` reste donc vide,
+    et un film parlé par lui demande `fresque aligner` pour être monté.
     """
 
     nom = "elevenlabs"
-    #: Son point de terminaison `with-timestamps` rendrait les bornes de
-    #: phrase, ce que celui-ci ne fait pas : `phrases()` reste vide, et
-    #: `synthesize` renvoie vers `fresque aligner`.
-    pause_naturelle_s = 0.0
 
     API = "https://api.elevenlabs.io/v1"
 
@@ -570,24 +561,6 @@ def _time_words(texte: str, start: float, duration: float) -> list[dict[str, Any
 #: l'exigence d'un espace et d'une majuscule — et le script, de toute façon,
 #: ne doit plus contenir ni l'un ni l'autre (voir `lint.TTS_HAZARDS`).
 _FIN_PHRASE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÀ-Ý])")
-
-def _silences(x, rate: int, mini: float) -> list[tuple[int, int]]:
-    """Les plages muettes d'au moins `mini` secondes, en échantillons."""
-    import numpy as np
-
-    muet = np.abs(x) <= _SEUIL_SILENCE
-    bord = np.diff(muet.astype(np.int8))
-    debuts = np.flatnonzero(bord == 1) + 1
-    fins = np.flatnonzero(bord == -1) + 1
-    if len(muet) and muet[0]:
-        debuts = np.r_[0, debuts]
-    if len(muet) and muet[-1]:
-        fins = np.r_[fins, len(x)]
-    return [
-        (int(a), int(b)) for a, b in zip(debuts, fins)
-        if (b - a) / rate >= mini
-    ]
-
 
 def _lettres(texte: str) -> str:
     """Le texte réduit à ses lettres et ses chiffres, sans accent ni casse.

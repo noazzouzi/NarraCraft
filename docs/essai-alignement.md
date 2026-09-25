@@ -7,30 +7,31 @@ Ce document existe parce que le chiffre vivait à trois endroits — `CLAUDE.md`
 la docstring de `pipeline/fresque/aligner.py`, et `README.md` — et qu'une
 donnée à trois exemplaires se corrige à un seul le jour où elle change.
 
-## Les trois états de `alignment.json`
+## Les deux états de `alignment.json`
 
-Le champ `source` dit toujours d'où viennent les nombres. C'est le seul
-endroit du pipeline où l'on sait si un timecode est une mesure ou une
-estimation.
+Le champ `source` dit toujours d'où viennent les nombres.
 
 | `source` | Bornes de beat | Position des mots | Écrit par | Coût |
 |---|---|---|---|---|
-| `estimate` | estimées | estimées | `fresque align` | nul, sans audio |
-| `mesure` | **mesurées sur l'audio** | estimées par syllabes | `fresque voice` | selon le moteur |
-| `forced` | mesurées | **mesurées** | `fresque aligner` | nul, local |
+| `mesure` | **données par le moteur** | estimées par syllabes | `fresque voice` | selon le moteur |
+| `forced` | idem | **mesurées** | `fresque aligner` | nul, local |
 
-`mesure` prend la longueur réelle de la forme d'onde produite
-(`duration = len(samples) / rate`) — ce n'est **pas** un timestamp rapporté
-par le moteur. C'est la distinction qui fait tenir la règle de `CLAUDE.md` :
-les coupes du montage tombent déjà au bon endroit dès `voice`, parce qu'elles
-ne dépendent que des bornes de beat.
+Il y en avait un troisième, `estimate`, écrit par une commande `fresque
+align` qui déduisait toutes les durées d'un débit annoncé en mots par
+minute. Les deux ont été supprimés : un débit visé n'a jamais décrit ce que
+le moteur fait vraiment, et l'écart se payait en aval.
 
-Ce champ décrit **d'où viennent les nombres, pas quel moteur a parlé** :
-les trois moteurs rendent des bornes mesurées. Qui a parlé est dans
-`voix.provider`. La valeur s'appelait `kokoro` du temps où il n'y avait
-qu'un moteur, si bien qu'un fichier produit avec Edge annonçait Kokoro ;
-les projets montés avant le renommage gardent l'ancienne valeur, que le
-code accepte toujours.
+Les bornes de beat de `mesure` ne sont pas non plus une mesure de notre
+part. Le film est **une seule prise** — un appel au moteur pour toute la
+narration — et c'est le moteur qui dit où tombe chaque phrase dedans
+(évènements `SentenceBoundary` chez Edge). On recoupe ce qu'il annonce
+contre le texte qu'on lui a envoyé, et on s'arrête si les deux divergent.
+
+Ce champ décrit **d'où viennent les nombres, pas quel moteur a parlé**.
+Qui a parlé est dans `voix.provider`. La valeur s'appelait `kokoro` du
+temps où il n'y avait qu'un moteur, si bien qu'un fichier produit avec Edge
+annonçait Kokoro ; les projets montés avant le renommage gardent l'ancienne
+valeur, que le code accepte toujours.
 
 Ce qui restait faux, c'est la position d'un mot *à l'intérieur* d'un beat —
 donc les sous-titres, et tout surlignage mot à mot.

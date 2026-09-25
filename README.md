@@ -128,14 +128,18 @@ Le pipeline s'arrête à deux endroits, et deux seulement :
 1. **après le script** — un mauvais script gâche la voix et cent cinquante images ;
 2. **après le plan visuel** — dernier point avant de dépenser en API.
 
+La voix passe entre les deux, juste après le script. Elle est gratuite avec
+Edge, et c'est elle qui donne la durée réelle du film : le nombre de plans
+par beat s'en déduit, au lieu d'être déduit d'un débit supposé.
+
 Entre ces deux points et jusqu'au fichier final, rien ne t'interrompt.
 
 Les étapes mécaniques s'appellent aussi à la main, sur n'importe quel projet :
 
 ```bash
-python -m fresque align  <slug>   # timings estimés, sans audio
+python -m fresque voice  <slug>   # un appel au moteur, une prise
+python -m fresque lint   <slug>   # vérifier le script
 python -m fresque shots  <slug>   # valider le plan visuel
-python -m fresque voice  <slug>   # synthèse + durées mesurées
 python -m fresque aligner <slug>  # position réelle de chaque mot (local)
 python -m fresque fetch  <slug>   # sourcer les archives libres
 python -m fresque timeline <slug> # construire le montage
