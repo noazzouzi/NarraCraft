@@ -1,0 +1,274 @@
+# Template — Documentaire historique narré
+#
+# Surcouche de fresque.config.yaml : ne redéfinit que ce qui change. Les
+# champs `meta.*` sont en prose et lus par les skills ; tout le reste est lu
+# par le code.
+#
+# Validé de bout en bout sur le pilote « Titanic, la salle des machines » :
+# archives Wikimedia réelles, voix Kokoro, montage Remotion.
+
+meta:
+  nom: Documentaire historique
+  description: >-
+    Événement daté et documenté, raconté par la voix off sur des archives
+    réelles. Le format le moins cher et le plus tolérant aux défauts.
+
+  registre: >-
+    Sobre et factuel. La tension vient de l'ordre dans lequel les
+    informations arrivent, jamais des adjectifs posés dessus. Le silence
+    fait partie du dispositif : une phrase courte isolée après un
+    paragraphe dense frappe plus fort que n'importe quel superlatif. On
+    n'annonce pas ce qu'on va dire, on le dit.
+
+  structure_narrative: >-
+    Quatre actes. I — l'événement, posé sec, avec sa date et son heure.
+    II — ce qui l'a rendu possible, et que personne n'a vu venir.
+    III — le pivot : ce que le spectateur croyait savoir s'effondre.
+    IV — les conséquences, et ce qu'on ignore encore aujourd'hui.
+    Chaque acte se termine sur une question ouverte, sauf le dernier.
+
+  interdits_specifiques: >-
+    Aucune reconstitution présentée comme une archive. Aucune date ou
+    aucun chiffre sans source dans 01-research.md. Ne jamais combler un
+    trou documentaire par une déduction énoncée sur le ton du fait établi :
+    « on ne sait pas ce qui s'est dit dans cette pièce » est une phrase de
+    documentaire, l'inventer ne l'est pas.
+
+  sourcing: >-
+    Archives d'abord, toujours. Sur un sujet historique, une photographie
+    d'époque imparfaite est plus convaincante qu'une illustration générée
+    impeccable, et le spectateur fait la différence sans savoir l'expliquer.
+    On ne génère que l'intérieur détruit, la scène sans témoin, l'abstraction.
+
+# --- Écriture ---------------------------------------------------------------
+
+voix:
+  kokoro:
+    # Mesuré : 0.75 → environ 124 mots/min quand la voix parle.
+    speed: 0.75
+
+structure:
+  actes: 4
+  # Une relance toutes les minute au plus. À 90 s le spectateur a le temps
+  # de décrocher entre deux changements d'état.
+  relance_retention_s: 60
+  hook_s: 15
+
+controle:
+  # Beats courts. Un beat = une unité de narration, et c'est la maille à
+  # laquelle le montage peut changer d'intention. 20 mots à 124 mots/min
+  # font dix secondes une fois les pauses comptées — déjà trois plans.
+  mots_par_beat: [8, 20]
+  # Les phrases de Frontier font trois à six mots : « August 31st, 2026. »,
+  # « It started in Rosario. ». Douze est un plafond, pas une cible.
+  mots_par_phrase_max: 12
+  # Part minimale de silence sur la durée mesurée. Mesuré chez Frontier :
+  # 34 % sur un documentaire, 21 % sur l'autre. C'est une règle d'écriture
+  # autant que de réglage — un beat d'une seule longue phrase ne respire
+  # nulle part, quelles que soient les pauses configurées.
+  part_silence_min: 0.25
+  interdits:
+    - abonnez-vous
+    - dans cette vidéo
+    - dans cet article
+    - mais avant ça
+    - et si je vous disais
+    - vous n'allez pas croire
+    - incroyable
+    - choquant
+    - personne ne sait
+    - restez jusqu'à la fin
+    # Propres au genre : la reconstitution déguisée en archive.
+    - comme on peut le voir sur cette image
+    - cette image montre
+    - images d'archives exceptionnelles
+
+# --- Visuels ----------------------------------------------------------------
+
+visuels:
+  # L'archive d'abord. Ce template raconte des événements datés : une
+  # banque d'images contemporaine y sert le présent — « le lieu, aujourd'hui »
+  # — jamais le passé. Le sourcing essaie donc la Library of Congress en
+  # premier, et ne tombe sur Pexels que s'il n'y a pas d'archive.
+  #
+  # Ce n'est pas une précaution théorique : le template interdit nommément
+  # la reconstitution déguisée en archive, et un plan de tribunal filmé
+  # cette année sous une narration qui raconte 2007 en est une.
+  sources_video: [loc, pexels]
+
+  # Un changement d'image toutes les deux secondes et demie. La valeur est
+  # relevée, pas devinée : les deux documentaires Frontier analysés tiennent
+  # 24,8 et 25,2 plans par minute, avec une médiane de plan à 1,7 et 2,4 s
+  # (`docs/analyse-frontier.md`). Nous étions à 13 sur le montage Sarkozy —
+  # soit la moitié.
+  #
+  # Ce nombre est une intention d'écriture, lue par le skill du plan visuel.
+  # Le plafond qui l'attrape vraiment est `montage.duree_plan_max_s`.
+  plans_par_minute: 25
+  generation:
+    # Identique à la base : ce template est celui pour lequel elle a été
+    # écrite. Les interdits ne sont plus répétés ici — ils vivent dans leur
+    # propre champ, et le code les ajoute en queue de prompt.
+    direction_artistique: >-
+      Photographie documentaire d'archive, grain argentique fin,
+      lumière naturelle contrastée, palette désaturée
+
+# --- Rendu ------------------------------------------------------------------
+
+montage:
+  # Un plan tenu plus longtemps que ça est signalé par `fresque timeline`.
+  # C'est le garde-fou mécanique du rythme : la config peut viser vingt-cinq
+  # plans par minute, seul l'audio réel dit si le montage les tient.
+  #
+  # 3,5 s laisse de la marge au-dessus de la médiane mesurée chez Frontier
+  # (1,7 à 2,4 s) sans autoriser le plan de six secondes qui a fait juger le
+  # premier montage monotone.
+  duree_plan_max_s: 3.5
+  # Un panneau doit être lu, pas seulement vu : un tableau de quatre lignes
+  # en cascade demande plus de temps qu'une photographie. Il garde donc son
+  # propre plafond, plus haut — mais il descend lui aussi, parce qu'un
+  # panneau tenu neuf secondes arrête le film.
+  duree_panneau_max_s: 5.5
+
+  # Le mouvement suit maintenant la durée du plan (voir `timeline._movement`).
+  # L'ancien réglage — 1,06 → 1,30 quelle que soit la durée — valait 3,5 %/s
+  # sur un plan de 6,5 s, mais 9,4 %/s dès que le plan tombait à 2,4 s. En
+  # accélérant le montage sans y toucher, on aurait transformé chaque plan en
+  # zoom avant brutal.
+  #
+  # 2,8 %/s est le haut de la plage mesurée : ce template assume un mouvement
+  # un peu plus présent que la base, pas trois fois plus rapide.
+  ken_burns:
+    vitesse_pct_s: 2.8
+    echelle_depart: 1.06
+    zoom_max: 1.30
+    derive_pct_s: 3.5
+    derive_max_pct: 10
+    easing: easeOutCubic
+    micro_rotation_deg: 0.7
+
+  traitement:
+    grain: 0.06
+    vignette: 0.25
+
+  # Lit sonore. Tierce mineure : sur un sujet judiciaire, le lit doit peser
+  # sans commenter. Le niveau reste sous le seuil où l'on entend « de la
+  # musique » — on ne le remarque qu'en l'enlevant, et c'est le but.
+  musique:
+    # Un vrai enregistrement plutôt que le lit synthétique : des cordes
+    # tenues, sans rythme ni mélodie qui accroche, choisies à l'écoute
+    # parmi cinq candidats libres.
+    source: fichier
+    fichier: assets/musiques/documentary-music-strings.mp3
+
+    # CC BY 4.0 : le crédit DOIT figurer dans la description de chaque
+    # vidéo qui l'utilise. Il est repris dans les crédits de la timeline
+    # pour ne pas dépendre d'une mémoire.
+    licence: CC BY 4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    auteur: tyops
+    page_url: https://freesound.org/people/tyops/sounds/631776
+    credit: >-
+      « Documentary Music Strings » par tyops, sous licence CC BY 4.0 —
+      https://freesound.org/people/tyops/sounds/631776
+
+    # Fondu croisé qui replie la fin du morceau sur son début. Sans lui,
+    # une piste de cinquante-quatre secondes claque toutes les
+    # cinquante-quatre secondes pendant un quart d'heure.
+    boucle_fondu_s: 4.0
+
+    niveau_relatif_db: -22
+    # Le lit est là dès la première image, à plein niveau. Les quinze
+    # premières secondes décident du reste : leur retirer la musique pour
+    # ménager une entrée en fondu revient à l'enlever là où elle sert.
+    fondu_entree_s: 0.0
+    fondu_sortie_s: 4.0
+
+  # Comment un plan arrive : rien. Sur vingt et une transitions relevées
+  # dans deux documentaires Frontier, toutes étaient des coupes d'une image,
+  # et l'énergie au-dessus de 3 kHz y est plus faible qu'ailleurs dans le
+  # film — donc ni fondu, ni souffle.
+  #
+  # Nous avions fait l'inverse : 0,3 s de transition et un souffle à chaque
+  # changement de beat. À vingt-cinq plans par minute, ces 0,3 s mangeraient
+  # douze pour cent du temps d'écran.
+  #
+  # `style: coupe` retire le flash et la glisse, donc leurs souffles. Restent
+  # le fondu au noir de changement d'acte et son impact : c'est la seule
+  # respiration du récit, et rien de ce qui a été mesuré ne dit de l'enlever
+  # — les échantillons duraient vingt et trente-quatre secondes et ne
+  # changeaient pas d'acte.
+  transitions:
+    style: coupe
+    fondu_noir_s: 0.6
+    amorce_s: 0.12
+    gain: 0.20
+
+  # Sous-titres, au pixel près d'après la mesure Frontier
+  # (`docs/analyse-frontier.md`) : blanc #FAFAFA, mot courant #F5BC4D, ligne
+  # de base à 90,8 % du cadre, et AUCUN bandeau — l'image reste visible, la
+  # lisibilité tient à l'ombre portée.
+  #
+  # Le surlignage exige `alignment.json` en `source: forced`. Sur des
+  # positions estimées par syllabes il dériverait de 305 ms en médiane, ce
+  # qui se voit sur une phrase de six mots.
+  sous_titres:
+    # Des phrases de douze mots au plus tiennent sur une ligne, et une seule
+    # ligne est ce qui a été mesuré.
+    mots_par_ligne: 6
+    ligne_de_base_pct: 90.8
+    voile: false
+    surlignage:
+      actif: true
+      couleur: "#F5BC4D"
+      fondu_frames: 3
+      duree_min_frames: 3
+
+  # Panneaux graphiques. Un or vieilli sur un fond d'encre : c'est la
+  # couleur du document officiel, et elle distingue immédiatement ce
+  # template d'un documentaire criminel ou d'un portrait d'entreprise.
+  motion:
+    fond: "#0b0d11"
+    texte: "#f2f4f8"
+    accent: "#c9a227"
+    attenue: "#7c8698"
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    cascade_s: 0.4
+
+    # La scène derrière le panneau. Sans elle, un panneau est un rectangle
+    # noir avec du texte : il se lit comme une diapositive posée à côté du
+    # film. Avec l'image du plan précédent dessous — assombrie, floutée,
+    # désaturée jusqu'à n'être qu'une texture — il redevient un plan.
+    #
+    # Le spectateur n'identifie pas l'image. Il ne voit pas non plus le fond
+    # changer de nature toutes les dix secondes, et c'est tout l'enjeu.
+    scene:
+      # 14 % : assez pour que le cadre ne soit pas mort, assez peu pour que
+      # le texte garde son contraste sans ombre portée.
+      opacite: 0.14
+      flou_px: 28
+      # Presque monochrome. Une texture colorée redeviendrait une image, et
+      # l'œil essaierait de la lire au lieu de lire le panneau.
+      saturation: 0.3
+      echelle: 1.12
+      # Un filet d'accent qui se trace en haut du cadre. C'est la signature
+      # du template, et la seule chose qui soit purement décorative ici.
+      filet: true
+      # Le même traitement que les plans photographiques, en plus discret :
+      # c'est ce qui fait que panneaux et archives appartiennent au même film.
+      grain: 0.04
+      vignette: 0.42
+
+  palette:
+    fond: "#000000"
+    sous_titre: "#fafafa"   # mesuré chez Frontier
+    voile: "rgba(0,0,0,0.72)"
+    ombre: "rgba(0,0,0,0.55)"
+    letterbox: "#0a0c10"
+
+  typographie:
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    taille: 52
+    graisse: 500
+    interligne: 1.28
+    interlettrage: "-0.01em"

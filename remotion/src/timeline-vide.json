@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "duree_frames": 60,
+  "duree_s": 2,
+  "source_timings": "vide",
+  "audio": null,
+  "template": null,
+  "style": {
+    "palette": {
+      "fond": "#000000",
+      "sous_titre": "#f4f6fa",
+      "voile": "rgba(0,0,0,0.72)",
+      "ombre": "rgba(0,0,0,0.55)",
+      "letterbox": "#0a0c10"
+    },
+    "typographie": {
+      "famille": "'Inter', 'Helvetica Neue', Arial, sans-serif",
+      "taille": 52,
+      "graisse": 500,
+      "interligne": 1.28,
+      "interlettrage": "-0.01em"
+    },
+    "traitement": { "grain": 0.06, "vignette": 0.25 },
+    "motion": {
+      "fond": "#0d1014", "texte": "#f2f4f8", "accent": "#c9a227",
+      "attenue": "#7c8698",
+      "famille": "'Inter', 'Helvetica Neue', Arial, sans-serif",
+      "cascade_s": 0.45
+    }
+  },
+  "clips": [],
+  "sous_titres": [],
+  "credits": []
+}

@@ -1,0 +1,12 @@
+.env
+node_modules/
+projects/*
+!projects/.gitkeep
+.DS_Store
+out/
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+models/
+.render/

@@ -1,0 +1,59 @@
+{
+  "query": {
+    "pages": [
+      {
+        "title": "File:RMS Titanic 3.jpg",
+        "imageinfo": [{
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:RMS_Titanic_3.jpg",
+          "thumburl": "https://upload.wikimedia.org/thumb/RMS_Titanic_3.jpg/1920px.jpg",
+          "url": "https://upload.wikimedia.org/RMS_Titanic_3.jpg",
+          "thumbwidth": 1920, "thumbheight": 1280,
+          "width": 4000, "height": 2667,
+          "mime": "image/jpeg",
+          "extmetadata": {
+            "LicenseShortName": {"value": "Public domain"},
+            "LicenseUrl": {"value": "https://creativecommons.org/publicdomain/mark/1.0/"},
+            "Artist": {"value": "<a href=\"x\">F. G. O. Stuart</a>"},
+            "ImageDescription": {"value": "The <b>RMS Titanic</b> departing Southampton"}
+          }
+        }]
+      },
+      {
+        "title": "File:Titanic poster.jpg",
+        "imageinfo": [{
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Titanic_poster.jpg",
+          "thumburl": "https://upload.wikimedia.org/thumb/poster/1920px.jpg",
+          "thumbwidth": 1920, "thumbheight": 1080,
+          "width": 2000, "height": 1125,
+          "mime": "image/jpeg",
+          "extmetadata": {
+            "LicenseShortName": {"value": "Fair use"},
+            "Artist": {"value": "Studio"}
+          }
+        }]
+      },
+      {
+        "title": "File:Tiny thumbnail.png",
+        "imageinfo": [{
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Tiny.png",
+          "thumburl": "https://upload.wikimedia.org/tiny.png",
+          "thumbwidth": 320, "thumbheight": 200,
+          "width": 320, "height": 200,
+          "mime": "image/png",
+          "extmetadata": {"LicenseShortName": {"value": "CC BY-SA 4.0"}}
+        }]
+      },
+      {
+        "title": "File:Scan.svg",
+        "imageinfo": [{
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Scan.svg",
+          "thumburl": "https://upload.wikimedia.org/scan.svg",
+          "thumbwidth": 2000, "thumbheight": 1400,
+          "width": 2000, "height": 1400,
+          "mime": "image/svg+xml",
+          "extmetadata": {"LicenseShortName": {"value": "CC0"}}
+        }]
+      }
+    ]
+  }
+}

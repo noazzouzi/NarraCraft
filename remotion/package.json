@@ -1,0 +1,25 @@
+{
+  "name": "fresque-remotion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Renderer for Fresque. Consumes 06-timeline.json and nothing else.",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Documentaire"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.409",
+    "@types/d3-geo": "^3.1.1",
+    "@types/topojson-client": "^3.1.5",
+    "d3-geo": "^3.1.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.409",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "typescript": "5.9.3"
+  }
+}

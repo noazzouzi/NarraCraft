@@ -1,0 +1,791 @@
+# Fresque — réglages de production
+# Toute valeur ajustable du pipeline vit ici. Rien en dur dans le code.
+
+production:
+  langue: fr
+  duree_cible_min: 15          # minutes de montage final visé
+  tolerance_duree_pct: 15      # ±15% acceptable avant re-découpe du script
+
+narration:
+  # Il n'y a pas de débit visé ici, et c'est volontaire. `mots_par_minute`
+  # a longtemps servi à convertir un compte de mots en durée, partout : le
+  # budget du script, la densité de plans, l'alignement. C'était une
+  # prédiction, et le moteur de voix ne s'y tenait pas — l'écart se payait
+  # en aval, sur un film qu'on croyait calibré.
+  #
+  # La durée est désormais mesurée sur l'audio, une seule fois, par
+  # `voice.synthesize`. D'où l'ordre du pipeline : la voix vient juste après
+  # le script, et tout ce qui a besoin d'une durée la lit dans
+  # `04-audio/alignment.json`.
+  #
+  # Il n'y a plus non plus de respiration posée par le pipeline. Le film
+  # est UNE prise : un seul appel au moteur pour toute la narration, sa
+  # sortie écrite telle quelle. `pause_entre_beats_s` et
+  # `pause_entre_actes_s` inséraient du silence entre deux morceaux — il
+  # n'y a plus de morceaux, et ces réglages ont disparu avec eux.
+  #
+  # Les deux qui restent ne produisent aucun son. Ce sont des poids : ils
+  # servent à répartir les mots à l'intérieur d'un beat dont les bornes
+  # sont données par le moteur, parce qu'une virgule tient moins longtemps
+  # qu'un point. `fresque aligner` remplace cette répartition par une
+  # mesure.
+  #
+  # Ce sont donc des valeurs à relever sur le moteur, pas à choisir. Celles
+  # de `fr-FR-HenriNeural`, mesurées sur un texte entier. Les sous-estimer
+  # étale les mots sur du silence, et les coupes du montage cessent de
+  # tomber entre deux mots.
+  pause_phrase_s: 1.28      # après . ! ? …
+  pause_virgule_s: 0.35     # après , ; :
+
+controle:
+  # Ce que `fresque lint` fait respecter. Ces règles vivaient jusqu'ici en
+  # prose dans les skills, où elles n'étaient que des suggestions : rien ne
+  # vérifiait qu'elles étaient suivies, et une seule fuite s'entend dans la
+  # voix off finale.
+  mots_par_beat: [25, 60]
+  mots_par_phrase_max: 25
+
+  # Le silence est un outil, et il s'écrit. Une phrase courte isolée après
+  # un paragraphe dense frappe plus fort que n'importe quel adjectif — mais
+  # seulement si elle existe. Sans cette règle, un script entier peut tenir
+  # sur des phrases de vingt mots et sonner plat du début à la fin.
+  phrase_courte_mots: 8
+  phrase_courte_tous_les_beats: 5
+
+  # Part minimale de la durée mesurée passée sans voix, vérifiée par
+  # `fresque lint` une fois la voix synthétisée. Zéro désactive la règle, ce qui est le défaut : c'est
+  # une exigence de genre, et un template la relève s'il en veut.
+  #
+  # Le silence ne se règle pas qu'avec les pauses : il dépend de l'écriture.
+  # Un beat fait d'une seule phrase de vingt mots ne produit qu'une pause,
+  # quelle que soit sa durée.
+  part_silence_min: 0.0
+
+  # Acronymes lus comme un mot. Tous les autres doivent être ponctués
+  # (U.R.S.S., F.B.I.) sinon la synthèse tranche au hasard.
+  acronymes_prononces:
+    - OTAN
+    - SIDA
+    - NASA
+    - UNESCO
+    - OVNI
+    - RADAR
+    - LASER
+
+  # Formules de chaîne YouTube et superlatifs creux. La signature sonore du
+  # contenu générique.
+  interdits:
+    - abonnez-vous
+    - dans cette vidéo
+    - dans cet article
+    - mais avant ça
+    - et si je vous disais
+    - vous n'allez pas croire
+    - incroyable
+    - choquant
+    - personne ne sait
+    - restez jusqu'à la fin
+
+structure:
+  # Découpage narratif par défaut. Le skill script peut s'en écarter s'il
+  # justifie pourquoi dans le brief.
+  actes: 4
+  # Une relance de rétention (question ouverte, révélation, changement de
+  # rythme) au moins tous les N secondes.
+  relance_retention_s: 90
+  # Durée cible du hook d'ouverture, avant le premier respire.
+  hook_s: 20
+
+  # Les boucles ouvertes. C'est la seule mécanique qui fait attendre un
+  # spectateur plusieurs minutes : une question posée à un beat, répondue
+  # bien plus loin. Elles sont déclarées dans le tableau de contrôle du
+  # script, parce qu'aucune machine ne peut les reconnaître dans le texte.
+  boucles:
+    # En dessous de ce nombre de beats, il n'y a pas d'enchaînement à
+    # vérifier : un montage d'essai de deux minutes n'a pas de boucles.
+    a_partir_de_beats: 8
+    # Une boucle plus courte que ça n'est pas une boucle, c'est une phrase.
+    min_s: 90
+    # Au-delà, le spectateur perd le fil de ce qu'on lui a promis.
+    max_simultanees: 3
+    # Fin du film : on a le droit de n'avoir plus rien en suspens.
+    fin_sans_boucle_s: 30
+
+  # Le premier plan décide si le deuxième est vu. Mesuré sur le premier
+  # documentaire complet de ce pipeline : il ouvrait sur une façade de
+  # prison pendant que la narration nommait un ancien président. Le
+  # spectateur n'avait rien sur quoi accrocher la phrase.
+  ouverture:
+    # Le premier plan porte une phrase incrustée à l'écran, et ne peut pas
+    # être un panneau graphique. Vérifié par `fresque shots`.
+    accroche_obligatoire: true
+    # Une phrase incrustée se lit en une seconde et demie, pendant que la
+    # voix dit autre chose. Au-delà, personne ne la lit.
+    accroche_mots_max: 12
+    # Longueur de la toute première phrase prononcée. Une phrase d'ouverture
+    # longue se dilue : le fait qui fait rester doit tomber d'un bloc.
+    phrase_mots_max: 20
+
+voix:
+  # Trois moteurs implémentés, interchangeables. L'alignement est découplé
+  # (voir plus bas), donc changer de provider n'impacte rien en aval.
+  #   edge       — voix neuronales de Microsoft Edge. Gratuites, sans clé,
+  #                mais par le réseau. 322 voix, 13 francophones, 7 hommes.
+  #   kokoro     — local, gratuit, sans réseau. 54 voix, dont une seule
+  #                française, et elle est féminine.
+  #   elevenlabs — payant, clé dans ELEVENLABS_API_KEY. Ses voix
+  #                multilingues parlent la langue du texte, pas la leur.
+  #
+  # `python -m fresque voix --provider X --langue fr --genre homme` liste la
+  # bibliothèque d'un moteur. Un projet choisit la sienne dans ses
+  # `reglages`, ce que fait le bouton de l'interface.
+  provider: edge
+
+  kokoro:
+    # ff_siwis est l'UNIQUE voix française de Kokoro v1.0 : féminine,
+    # notée B-, moins de 11 h de données d'entraînement. Il n'y a pas
+    # d'alternative dans ce modèle. Sur du long format, la prosodie se
+    # répète — c'est le compromis assumé du mode itération.
+    voice: ff_siwis
+    lang: fr-fr
+    # Mesuré : 0.82 donne ~140 mots/min, le débit documentaire visé.
+    # À 1.0 la voix monte à ~170, ce qui sonne comme un reportage télé.
+    speed: 0.82
+    # Téléchargés depuis les releases GitHub de kokoro-onnx (voir README).
+    model: models/kokoro-v1.0.onnx
+    voices: models/voices-v1.0.bin
+
+  edge:
+    # Voix masculines de France : fr-FR-HenriNeural et
+    # fr-FR-RemyMultilingualNeural. `python -m fresque voix` les liste toutes.
+    voice: fr-FR-HenriNeural
+    # Débit, volume et hauteur, au format de Microsoft : un pourcentage
+    # signé, ou des hertz pour la hauteur.
+    #
+    # Mesuré sur un script réel de douze beats, silences compris :
+    #   +0%   150 mots/min      -18%  129 mots/min
+    #   -12%  136 mots/min      -23%  123 mots/min
+    #
+    # Ce n'est pas une cible à tenir, c'est le réglage d'un moteur : on
+    # l'écoute et on le choisit. Plus bas que -23%, la voix traîne.
+    rate: "-23%"
+    volume: "+0%"
+    pitch: "+0Hz"
+
+  elevenlabs:
+    # Vide par défaut : ce moteur est payant, il n'a pas de voix qu'on
+    # puisse choisir à la place de l'utilisateur. La bibliothèque de
+    # l'interface écrit l'identifiant ici, dans les `reglages` du projet.
+    voice: ""
+    # `eleven_multilingual_v2` parle la langue du texte. Un modèle anglais
+    # lirait le français avec un accent, ce qui se remarque en une phrase.
+    model: eleven_multilingual_v2
+    # Stabilité basse = plus d'expressivité et plus de variation d'une
+    # phrase à l'autre. Sur un documentaire découpé en quatre cents
+    # phrases synthétisées séparément, la variation s'entend comme une
+    # panne : on reste au milieu.
+    stabilite: 0.5
+    similarite: 0.75
+    # La clé vit dans ELEVENLABS_API_KEY, jamais ici. Ce fichier est suivi
+    # par git.
+
+alignement:
+  # Découplé du TTS, volontairement. On réaligne le texte QU'ON CONNAÎT DÉJÀ
+  # sur l'audio produit, au lieu de faire confiance aux timestamps du moteur.
+  # Plus précis (vérité terrain du texte), et rend les providers
+  # interchangeables. Le français a un modèle d'alignement par défaut.
+  moteur: whisperx
+  langue: fr
+  # Aucune transcription n'est nécessaire : on fait de l'alignement forcé,
+  # le texte est déjà connu. Seul le modèle d'alignement est chargé.
+  mode: forced
+
+visuels:
+  # Ordre de préférence des sources. On ne génère que ce qu'on n'a pas trouvé.
+  strategie: archives_d_abord
+  # Fonds de MÉTRAGE VIDÉO, dans l'ordre d'essai — le premier qui répond
+  # gagne. C'est un réglage de genre, pas une préférence technique :
+  #
+  # - `pexels` — banque contemporaine, gratuite avec une clé. Nette et
+  #   abondante, mais ce n'est PAS de l'archive. Un plan tourné cette année
+  #   posé sous une narration qui raconte 2007 est un mensonge visuel, et
+  #   le template l'interdit nommément. Chaque plan qui en vient est marqué
+  #   `stock contemporain` dans `assets.json`, et la page de validation le
+  #   montre — le code ne peut pas savoir de quelle époque parle un beat,
+  #   alors il rend la décision visible au lieu de la prendre.
+  # - `loc` — Library of Congress, domaine public, vraie archive. Catalogue
+  #   américain et ancien : sur un sujet français récent, il rend des films
+  #   sans rapport. C'est ce qui a fait supprimer tous les plans `video` du
+  #   premier documentaire.
+  #
+  # Un sujet d'histoire met `loc` d'abord ; un sujet contemporain, `pexels`.
+  # Une liste vide désactive les plans `video`.
+  sources_video: [pexels, loc]
+
+  # Ordre de préférence. On ne génère que ce qu'aucune n'a fourni.
+  sources_archives:
+    - wikimedia_commons        # implémenté
+    - openverse                # 52 fonds d'un coup, filtre commercial côté serveur
+    - loc                      # seule source gratuite de vrai métrage 1080p
+    - archive_org              # gros volume filmé, mais intrinsèquement 640x480
+    - smithsonian              # CC0 net, IIIF haute résolution, couverture US
+    - pixabay                  # B-roll générique moderne, en dernier recours
+
+  # Écartées, avec le motif. Ne pas les réintroduire sans relire ceci.
+  sources_exclues:
+    gallica: >-
+      Réutilisation COMMERCIALE payante et sous licence BnF, y compris pour
+      des œuvres du domaine public (loi n° 78-753). L'API IIIF est pourtant
+      excellente — inutilisable pour une chaîne monétisée.
+    ina: >-
+      Aucune API publique, fonds sous droits gérés, licence commerciale au
+      clip. Incompatible avec un pipeline automatisé.
+    mixkit: >-
+      Deux licences distinctes selon l'item, non exposées dans les
+      métadonnées : impossible d'arbitrer par programme.
+    europeana_video: >-
+      edmIsShownBy renvoie souvent des pages Vimeo plutôt que des fichiers.
+      Europeana reste envisageable en source d'images.
+    archive_org_newsandpublicaffairs: >-
+      La TV News Archive est consultable mais ni téléchargeable ni
+      réutilisable. À exclure explicitement des requêtes mediatype:movies.
+
+  # Sources dont l'API n'expose aucun champ de licence exploitable. Leur
+  # statut vient d'une politique de collection, pas de l'item. La confiance
+  # est donc déclarée ici, dans un fichier versionné, jamais devinée en code.
+  collections_domaine_public:
+    # Fonds filmés. Seule source gratuite de vrai métrage en 1080p trouvée.
+    loc_video:
+      - national-screening-room
+    # Fonds photographiques du même établissement.
+    loc_image:
+      - fsa-owi-black-and-white-negatives
+      - detroit-publishing-company
+      - bain
+      - national-photo-company
+    archive_org:
+      - prelinger
+      - FedFlix
+      - universal_newsreels
+      - nasa
+
+  generation:
+    # `gemini`  — AI Studio, une clé d'API dans .env. Le plus simple.
+    # `vertex`  — Google Cloud, un projet et un jeton. Les mêmes modèles.
+    #
+    # Le choix n'est pas technique, il est comptable : depuis le 2 mars 2026,
+    # le crédit d'essai Google Cloud de 300 $ ne paie plus AI Studio, mais il
+    # paie Vertex. À 0,0336 $ l'image, 300 $ valent près de neuf mille images.
+    #
+    # Le défaut était `gemini`, ce qui contredisait le paragraphe ci-dessus :
+    # une clé AI Studio sans facturation tombe sur le palier gratuit, dont le
+    # quota journalier d'images est épuisé dès la première tentative. Mesuré
+    # sur un film réel : quatorze plans générés remplacés par des cartes de
+    # substitution, sans que rien n'ait été facturé — donc sans raison.
+    provider: vertex
+
+    vertex:
+      # Il n'y a plus de `mode`. Il y en a eu deux — `express` et `projet` —
+      # sur la supposition qu'une clé d'API ne pouvait pas porter de projet.
+      # Cinq sondes contre l'API réelle l'ont démentie : les adresses
+      # `projects/{id}/locations/global/...` rendent 200 avec la clé seule.
+      #
+      # Ce qui reste se lit dans l'environnement, pas ici :
+      #   VERTEX_PROJECT   facultatif — sans lui, le serveur retrouve le
+      #                    projet depuis le justificatif ; le nommer rend
+      #                    seulement l'appel lisible dans les journaux.
+      #   une clé d'API    VERTEX_API_KEY, GOOGLE_CLOUD_KEY ou GOOGLE_API_KEY
+      #   à défaut         un jeton OAuth (`gcloud auth application-default
+      #                    login`, ou un compte de service)
+      #
+      # La clé passe avant le jeton : la poser dans l'environnement est un
+      # geste explicite, un jeton peut venir d'une session oubliée ou du
+      # serveur de métadonnées d'une machine. Pour produire, le jeton vaut
+      # mieux — il expire seul et se rattache à des rôles.
+
+      # `global` couvre le monde entier et essuie nettement moins de 429
+      # qu'une région unique. Le projet ne fait aucun traitement réglementé,
+      # donc la seule réserve attachée à ce point d'entrée — ne pas savoir où
+      # le calcul a lieu — ne nous concerne pas.
+      region: global
+      # Le projet facturé vit dans .env (VERTEX_PROJECT) et jamais ici : ce
+      # fichier est versionné, un identifiant de compte n'y a pas sa place.
+
+    # Mesuré sur treize appels réels (`docs/etude-vertex.md`), même prompt,
+    # `taille: 2K` demandée :
+    #
+    #   gemini-3.1-flash-image       2752 × 1536   17,6 s   ← retenu
+    #   gemini-3-pro-image           2752 × 1536   24,1 s   mêmes pixels, plus cher
+    #   gemini-2.5-flash-image       1344 ×  768    7,0 s   ignore 2K EN SILENCE
+    #   gemini-3.1-flash-lite-image  400            0,8 s   ne dépasse pas 1K
+    #
+    # `2.5-flash` est le piège : il ne refuse pas, il rend une définition plus
+    # basse sans le dire. C'est pour ça que `images.generate()` mesure le
+    # fichier qu'il écrit au lieu de croire ce qu'il a demandé.
+    model: gemini-3.1-flash-image
+    ratio: "16:9"
+    # Définition demandée au modèle : 512px · 1K · 2K · 4K. Vide laisse le
+    # modèle décider.
+    #
+    # `1K` était le défaut, sur un raisonnement faux de ma part : « le cadre
+    # fait 1920 de large, donc 2K ne sert qu'à recadrer ». Le montage
+    # ne réduisait rien — il agrandissait. Mesuré sur `gemini-3.1-flash-image`,
+    # même prompt, `ratio: 16:9` :
+    #
+    #   1K   1376 ×  768    1,9 Mo   11,7 s   ×0,72 du cadre → à AGRANDIR
+    #   2K   2752 × 1536    8,6 Mo   17,6 s   ×1,43          ← retenu
+    #   4K   5504 × 3072   21,2 Mo   31,0 s   ×2,87          → jeté au montage
+    #
+    # Chaque palier double exactement les deux dimensions. Le cadre fait
+    # 1920 px et le Ken Burns monte à ×1,18, donc il faut environ 2266 px
+    # réels : `1K` est en dessous, `2K` couvre, `4K` est de la définition
+    # payée puis jetée au premier redimensionnement.
+    #
+    # Le format demandé est honoré à la grille du modèle près : 16:9 rend
+    # 1,792 aux trois paliers, soit +0,8 %. Toutes les dimensions mesurées
+    # sont des multiples de 32.
+    taille: "2K"
+    # Préfixée à chaque prompt. Une direction artistique unique pour toute la
+    # vidéo compte plus que la qualité d'une image isolée : cinq styles
+    # différents détruisent l'illusion, une image moyenne non.
+    direction_artistique: >-
+      Photographie documentaire d'archive, grain argentique fin,
+      lumière naturelle contrastée, palette désaturée
+    # Ajoutés en queue de chaque prompt. Séparés de la direction
+    # artistique parce qu'ils ne décrivent pas un style : ils listent ce
+    # qui casse un plan quoi qu'il arrive. Un texte incrusté par le
+    # modèle est illisible et faux ; un visage photoréaliste d'une
+    # personne réelle n'a rien à faire dans un documentaire.
+    interdits: >-
+      sans aucun texte ni inscription, sans logo, sans filigrane,
+      sans visage photoréaliste d'une personne identifiable
+    # Plafond de sécurité : au-delà, le pipeline s'arrête et demande.
+    max_images_par_projet: 120
+  # Nombre de visuels visé par minute de montage.
+  plans_par_minute: 8
+
+  # CE QUI A PRODUIT LE DIAPORAMA
+  # =============================
+  # Le premier film complet tenait 141 planches de collage sur 168 plans.
+  # Aucune règle ne l'interdisait : le skill disait « varier les types »,
+  # et personne ne comptait. Le montage était techniquement conforme et
+  # visuellement mort.
+  #
+  # Ces trois plafonds sont vérifiés par `fresque shots`, au checkpoint,
+  # avant la moindre dépense.
+  variete:
+    # Part maximale d'un même type de plan sur tout le montage.
+    part_max_par_type: 0.45
+    # Nombre de plans consécutifs du même type. Au-delà, c'est une série.
+    suite_max: 4
+    # Au moins un panneau graphique par acte : c'est ce qui coupe une
+    # suite d'images et ce qui porte les chiffres de la recherche.
+    panneaux_min_par_acte: 1
+    # En dessous de ce nombre de plans, rien n'est vérifié : un montage
+    # d'essai n'a pas de variété à tenir.
+    a_partir_de_plans: 20
+
+  # Une même image peut resservir. Mesuré sur un sujet judiciaire français
+  # contemporain : les fonds libres réellement pertinents plafonnent autour
+  # de la centaine d'images, alors qu'un quart d'heure à quinze plans par
+  # minute en demande le double. Refuser toute reprise laisserait un tiers
+  # du montage sans visuel.
+  #
+  # Ce qui rend une reprise acceptable, c'est la distance : jamais dans le
+  # même beat, et jamais à moins de N plans de sa dernière apparition. Le
+  # mouvement de caméra diffère de toute façon, puisqu'il dépend de
+  # l'identifiant du plan. Assez loin, une photographie revue se lit comme
+  # un retour, pas comme une panne.
+  reutilisation:
+    ecart_min_plans: 25
+
+# Métrage d'archive. Les fichiers sont des films entiers : mesuré, 1038 Mo
+# pour vingt-sept minutes. Les plafonds sont donc obligatoires, et vérifiés
+# avant le téléchargement, pas après.
+video:
+  duree_max_s: 900             # au-delà, c'est un long métrage, pas un plan
+  taille_max_mo: 400
+  # Un même film sert plusieurs plans à des points d'entrée différents.
+  # C'est ce qui rend le coût acceptable : un téléchargement, trois plans.
+  reutiliser_les_rushes: true
+  # Les films d'archive ouvrent sur des amorces et des cartons de titre.
+  saut_debut_pct: 10
+
+montage:
+  resolution: [1920, 1080]
+  fps: 30
+  # Qualité d'encodage H.264. Plus bas = meilleur et plus lourd.
+  # Le défaut de Remotion (18) est quasi sans perte et produit ~12 Mbit/s sur
+  # des photographies d'archive : inutilement lourd pour de la diffusion.
+  #
+  # Mesuré, et le chiffre dépend beaucoup du montage : 22 donnait 4 Mbit/s
+  # sur un montage à huit plans par minute, et 7,2 Mbit/s à quinze — soit
+  # 777 Mo pour un quart d'heure. Les coupes rapides, les flashs et les
+  # glissements floutés coûtent des bits, et un montage nerveux coûte donc
+  # le double d'un montage lent à qualité égale.
+  crf: 22
+  # Durée au-delà de laquelle un plan est signalé comme trop tenu.
+  # `plans_par_minute` est une intention d'écriture ; ce plafond-ci est
+  # vérifié sur la timeline réelle, donc sur l'audio réel. C'est le seul
+  # des deux qui garantisse quoi que ce soit.
+  duree_plan_max_s: 10
+
+  # Les panneaux graphiques ont leur propre plafond, plus haut, et ce n'est
+  # pas une exception de complaisance. Une photographie se périme : passé
+  # quelques secondes le mouvement de caméra est le seul événement, et il
+  # ne dit rien. Un tableau dont les lignes arrivent encore, une barre qui
+  # pousse, un réseau qui se trace sont toujours en train de dire quelque
+  # chose — les couper à la même durée revient à les rendre illisibles.
+  duree_panneau_max_s: 10
+
+  # Mouvement appliqué aux images fixes. Le soin mis ici fait toute la
+  # différence entre un zoom moche et un mouvement crédible.
+  # Le mouvement est une VITESSE, pas une amplitude. Une plage fixe
+  # (1,04 → 1,18) parcourue quelle que soit la durée du plan donne un
+  # mouvement différent à chaque changement de rythme : posé sur un plan
+  # long, précipité sur un plan court. En pourcentage par seconde, il reste
+  # le même à l'œil quand le montage s'accélère.
+  #
+  # 2,5 %/s est une mesure, pas un goût : les documentaires Frontier
+  # tiennent entre 2,1 et 3,1 %/s (`docs/analyse-frontier.md`).
+  ken_burns:
+    vitesse_pct_s: 2.5         # croissance d'échelle par seconde
+    echelle_depart: 1.04       # marge pour la dérive et la micro-rotation
+    zoom_max: 1.18             # plafond, atteint seulement par un plan long
+    derive_pct_s: 3.0          # translation par seconde, en % de la largeur
+    derive_max_pct: 6          # au-delà, le sujet sort du cadre
+    easing: easeInOutCubic
+    micro_rotation_deg: 0.4
+  traitement:
+    grain: 0.06
+    vignette: 0.25
+
+  # Comment un plan arrive. Une coupe nue lue quinze fois par minute se voit
+  # comme un diaporama qui avance ; la même coupe avec un souffle dessous se
+  # lit comme un montage. C'est le code qui choisit, d'après la place du plan
+  # dans le récit — jamais un LLM, et jamais au hasard.
+  transitions:
+    # Inventaire disponible : `effets` (flash, glisse, souffles) ou `coupe`
+    # (rien que la coupe franche). Le fondu au noir de changement d'acte
+    # survit aux deux.
+    #
+    # Ce n'est pas un goût mais un choix de genre, et il a un coût mesurable :
+    # à vingt-cinq plans par minute, 0,3 s de transition mange douze pour cent
+    # du temps d'écran. Les documentaires qui coupent vite coupent franc.
+    style: effets
+    # Durée de l'effet d'entrée. Au-delà de 0,4 s on regarde la transition
+    # au lieu de l'image.
+    duree_s: 0.3
+    # L'ouverture d'un acte se donne plus de temps : c'est une respiration.
+    fondu_noir_s: 0.55
+    # Le son précède la coupe. C'est contre-intuitif et c'est ce qui se fait :
+    # l'oreille annonce à l'oeil ce qui arrive.
+    amorce_s: 0.12
+    # Niveau des sons de transition, relatif à la voix. Au-dessus de 0,3 ils
+    # passent devant la narration.
+    gain: 0.22
+    # Un son sur chaque coupe serait insupportable : à quinze plans par
+    # minute, ça fait deux cent vingt-cinq sons sur un quart d'heure. Seuls
+    # les changements de beat et d'acte en portent un.
+    sons: true
+
+    # Force des effets, appliquée par le moteur qui n'en décide rien.
+    # Mesuré : à 0,55 un flash sur une façade en plein soleil blanchit
+    # franchement l'écran. 0,35 se sent comme une impulsion sans se voir
+    # comme un défaut.
+    flash_opacite: 0.35
+    # Translation d'entrée d'un glissement, en % de la largeur.
+    glisse_pct: 9
+    # Sur-échelle d'un flash, en %. Au-delà de 8 on voit un zoom.
+    punch_pct: 5
+
+  # Direction artistique. Transportée par la timeline jusqu'au moteur de
+  # rendu, qui ne fait que l'appliquer. Un template la redéfinit — c'est ce
+  # qui fera qu'un documentaire criminel et un documentaire historique ne se
+  # ressembleront pas, sans qu'une ligne de composant change.
+  palette:
+    fond: "#000000"
+    sous_titre: "#f4f6fa"
+    voile: "rgba(0,0,0,0.72)"      # dégradé sous les sous-titres
+    ombre: "rgba(0,0,0,0.55)"
+    letterbox: "#0a0c10"           # fond des documents verticaux
+
+  typographie:
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    taille: 52                   # sous-titres
+    # Corps de l'accroche incrustée. Un template qui compose ses plans sur
+    # une planche de papier la descend : à 104 px, deux lignes et leur filet
+    # occupent plus de la moitié de la hauteur, et la planche n'a plus de
+    # place. Sur une photographie plein cadre, c'est au contraire la bonne
+    # taille — d'où deux valeurs et non une.
+    accroche: 104
+    graisse: 500
+    interligne: 1.28
+    interlettrage: "-0.01em"
+
+  # Planches de collage — le style « Vox » relevé chez Frontier. Une photo
+  # d'archive collée sur du papier, avec ses tampons déchirés et ses accents
+  # découpés, et dont les pièces bougent à des vitesses différentes.
+  #
+  # Elles sont COMPOSÉES, pas générées. Quatre modèles d'image ont été mesurés
+  # avant d'en arriver là (`docs/essai-collage.md`) : le meilleur rendait une
+  # bonne planche en quatre secondes pour 0,0336 $, et restait un aplat cuit
+  # dans des pixels. Une planche cuite ne se relit pas, ne change pas de
+  # palette avec le template, et ne s'anime pas par couches.
+  #
+  # Tout ce bloc est de la donnée que le moteur applique. C'est la condition
+  # posée par CLAUDE.md : une thématique de plus doit être un fichier YAML,
+  # jamais un composant de plus.
+  collage:
+    papier: "#F2EDE1"
+    encre: "#1C1B19"
+    accent: "#8C2230"
+    lisere: "#FBF8F1"           # le liseré blanc autour de la photo
+    adhesif: "rgba(226,214,186,0.72)"
+    ombre: "rgba(60,44,28,0.30)"
+    # Voile sous l'accroche. Nul, et c'est une mesure : sur une planche
+    # claire le texte est en encre sombre et n'a besoin d'aucun fond. Le
+    # premier rendu portait un voile crème à 90 % — il délavait la moitié
+    # haute de la planche, le tampon rouge virait au rose. Un template à
+    # papier sombre le rallume.
+    voile_titre: "transparent"
+
+    # Trame d'impression posée sur les aplats. Sans elle, un aplat de couleur
+    # unie se lit comme du vecteur — c'est le défaut mesuré sur les essais de
+    # génération locale : saturation 187/255 contre 95 attendus.
+    trame: 0.35
+    grain: 0.05                 # la fibre du papier, sous les pièces
+
+    # duotone · gris · brut. Le duotone est ce qui rattache la photographie
+    # au papier : sans lui, une image couleur posée sur du crème se lit comme
+    # une vignette collée sur une maquette.
+    photo: duotone
+
+    # Part du mouvement de caméra que reçoit la pièce la plus au fond. C'est
+    # TOUTE la parallaxe, et c'est la seule chose qu'une affiche générée ne
+    # sait pas faire. À 1,0 les pièces bougent ensemble et la planche redevient
+    # plate ; en dessous de 0,15 le fond a l'air fixé au cadre.
+    parallaxe_min: 0.25
+
+    # Les pièces arrivent l'une après l'autre. À vingt-cinq plans par minute,
+    # une cascade lente mangerait le plan entier : on cherche seulement que la
+    # planche ne tombe pas d'un bloc, ce qui se lirait comme une diapositive.
+    cascade_s: 0.05
+
+    lisere_px: 14
+    # Bande haute laissée libre pour l'accroche, en fraction de la hauteur.
+    # Le titre est composé par Remotion et non dans l'image : accents français
+    # fiables, typographie du template, et un titre qu'un surligneur peut
+    # balayer au moment où la voix le dit.
+    # Mesuré : l'accroche est composée à 104 px sur deux à trois lignes,
+    # règle comprise, soit un peu plus de 40 % de la hauteur. En dessous, le
+    # texte tombe sur la photo.
+    bande_titre: 0.46
+
+  # Motion graphics. Sur un sujet fait de dates, de chefs d'accusation et de
+  # peines, la moitié des plans n'a pas besoin de photographie — et une frise
+  # lisible vaut mieux qu'une image d'illustration.
+  motion:
+    fond: "#0d1014"
+    texte: "#f2f4f8"
+    accent: "#c9a227"
+    attenue: "#7c8698"
+    # Les panneaux qui représentent du papier — une une de journal, un
+    # document — le codaient en dur. Un template ne pouvait pas les
+    # repeindre, alors que c'est exactement ce qu'un template est censé
+    # faire. Les valeurs ci-dessous sont celles qui étaient dans le code ;
+    # chaque composant garde la sienne en repli, parce qu'un journal et un
+    # document n'ont pas le même blanc.
+    papier: "#e8e3d8"
+    encre: "#14161a"
+    famille: "'Inter', 'Helvetica Neue', Arial, sans-serif"
+    # Secondes pendant lesquelles chaque élément apparaît, en cascade.
+    cascade_s: 0.45
+
+    # La scène derrière un panneau. Un rectangle de couleur unie avec du
+    # texte dessus se lit comme une diapositive posée à côté du film ; la
+    # même chose sur l'image du plan voisin, floutée et désaturée jusqu'à
+    # n'être qu'une texture, redevient un plan.
+    #
+    # Le pipeline choisit l'image — celle du plan qui précède, à défaut
+    # celle du suivant — et le moteur ne fait que l'appliquer, comme pour
+    # tout le reste de la direction artistique.
+    scene:
+      # Mettre à 0 désactive la texture, et le panneau redevient uni.
+      opacite: 0.12
+      flou_px: 28
+      saturation: 0.35
+      echelle: 1.12
+      filet: false
+      grain: 0.03
+      vignette: 0.38
+
+  # Lit sonore de fond. Ni rythme ni mélodie : tout ce qui en a entre en
+  # concurrence avec la voix off, et le spectateur suit l'un ou l'autre,
+  # jamais les deux. On cherche l'inverse — quelque chose qu'on ne remarque
+  # qu'en l'enlevant.
+  #
+  # Synthétisé par `fresque.sons`, comme les transitions, et pour les mêmes
+  # raisons : aucune licence à suivre, aucun hôte qui disparaît, un fichier
+  # identique d'une machine à l'autre. C'est un bloc que chaque template
+  # redéfinit — c'est ce qui fait qu'un documentaire criminel et un
+  # documentaire historique ne sonnent pas pareil.
+  # Le carton de fin. Ce n'est pas de la finition : sur le premier film
+  # complet, 258 visuels sur 329 étaient sous une licence qui exige
+  # l'attribution, et aucun n'était crédité. Le tableau `credits` était
+  # construit depuis toujours, et aucun composant ne le lisait.
+  #
+  # Un carton ne peut pas porter deux cent cinquante noms lisibles. Il
+  # porte les licences, les fonds et autant d'auteurs qu'il en tient ; la
+  # liste entière va dans `07-out/credits.md`, pour la description de la
+  # vidéo. C'est ce que « attribution raisonnable au support » veut dire
+  # pour un film.
+  generique:
+    actif: true
+    # Fixe, pas défilant. Douze secondes laissent le temps de lire sans
+    # faire fuir : un défilement de trente secondes n'est regardé par
+    # personne et ne crédite donc pas mieux.
+    duree_s: 12
+    # Le budget se compte en signes, pas en noms : trois noms longs
+    # prennent plus de place que dix courts, et c'est la place qui manque.
+    # Il se répartit au prorata entre les licences, sinon la plus fournie
+    # mange le carton et les suivantes n'ont plus personne.
+    signes_max: 1200
+    titre: Sources et licences
+    mention: Liste complète des auteurs dans la description.
+
+  # Où tombent les coupes à l'intérieur d'un beat.
+  #
+  # Réparties au prorata des poids, elles tombent où le calcul les met —
+  # parfois au milieu d'un mot. C'est le défaut le plus reconnaissable
+  # d'un montage automatique : l'image change pendant que la bouche est
+  # encore sur une syllabe.
+  #
+  # On a la position de chaque mot depuis l'alignement. La coupe cherche
+  # donc, autour de son instant prévu, le silence le plus LARGE — pas le
+  # plus proche : un blanc de trois cents millisecondes est un meilleur
+  # point de coupe qu'un blanc de trente, même un peu plus loin.
+  coupes:
+    cale_sur_silence: true
+    # Au-delà, la coupe s'éloigne trop de la place que son poids lui
+    # donnait, et le rythme voulu par le plan visuel se déforme.
+    tolerance_s: 0.4
+    # Ce qu'on garde à chaque plan quoi qu'il arrive : une coupe calée ne
+    # doit pas avaler son voisin.
+    plancher_plan_s: 0.5
+
+  # La livraison. Un documentaire rendu à -24 LUFS sonne faible à côté de
+  # tout le reste sur la plateforme, et YouTube ne le remonte pas : il ne
+  # fait que baisser ce qui dépasse. La cible est donc celle de la
+  # plateforme, pas celle du moteur de rendu.
+  livraison:
+    lufs: -14          # cible YouTube, Spotify et la plupart des plateformes
+    crete_dbtp: -1     # marge pour les encodeurs, qui font remonter la crête
+    plage_lu: 11       # dynamique conservée, en unités de loudness
+
+  musique:
+    actif: true
+
+    # `synthese` — le lit calculé par `fresque.sons`, sans réseau ni licence.
+    # `fichier`  — un enregistrement réel, sourcé par `fresque musique`. Sa
+    #              licence est alors obligatoire, et elle voyage jusque dans
+    #              les crédits de la timeline.
+    source: synthese
+
+    # Niveau du lit SOUS la voix, en décibels et pondéré A — c'est-à-dire
+    # tel que l'oreille l'entend, pas tel qu'un spectre le montre. Le gain
+    # n'est donc pas réglé ici : le pipeline mesure les deux pistes et le
+    # résout. C'est la seule façon d'y arriver, parce qu'un même gain est
+    # inaudible sur un bourdon à 49 Hz et envahissant sur un lit à 300.
+    #
+    # Mesuré : -22 dB s'entend nettement sans jamais masquer une consonne.
+    # Vers -30 le lit disparaît sur un haut-parleur d'ordinateur, vers -16
+    # il commence à se disputer la narration.
+    niveau_relatif_db: -22
+
+    # Montée au début, descente à la fin, séparées : elles ne répondent pas
+    # à la même question. Une sortie sèche coupe le film net ; une entrée
+    # lente, elle, prive les premières secondes du lit — et ce sont
+    # justement celles où le spectateur décide de rester.
+    #
+    # Un démarrage à zéro ne claque pas : le premier échantillon de la
+    # boucle est à -0,056, soit environ -45 dBFS une fois le gain appliqué.
+    fondu_entree_s: 0.0
+    fondu_sortie_s: 3.0
+    # Longueur de la boucle. Elle est sans couture par construction, pas
+    # par fondu croisé : chaque partiel compte un nombre entier de cycles.
+    boucle_s: 40
+
+    # Do3. Deux réglages ont échoué avant celui-là, tous deux trop graves :
+    # 49 Hz puis 110 Hz. Mesuré à 110, il restait quinze pour cent de
+    # l'énergie sous 120 Hz, où aucun haut-parleur d'ordinateur ni de
+    # téléphone ne restitue quoi que ce soit — et le reste était trop bas
+    # pour compenser.
+    #
+    # À 131 Hz, avec les partiels qui montent à deux octaves et demie, la
+    # répartition mesurée devient : 3 % sous 120 Hz, 36 % entre 120 et 250,
+    # 39 % entre 250 et 900. Toujours rien dans la zone d'intelligibilité
+    # de la parole, mais restitué par n'importe quel haut-parleur.
+    tonique_hz: 131
+    # sobre · sombre · tendu · clair — voir `sons.MODES`.
+    mode: sobre
+
+  sous_titres:
+    actifs: true
+    mots_par_ligne: 7
+
+    # LA FAMILLE DE SOUS-TITRES
+    # =========================
+    # Liste close, connue du moteur de rendu. Un template en choisit une,
+    # un projet peut la changer, et l'interface la propose — mais personne
+    # n'en invente une : chaque nom correspond à une mise en page que
+    # `SousTitre.tsx` sait dessiner.
+    #
+    #   surligne  la phrase entière, et le mot dit change de couleur.
+    #             C'est ce qui est mesuré chez Frontier, et le défaut.
+    #   marqueur  le mot dit reçoit un bloc de couleur derrière lui.
+    #             Tient sur du papier clair, où une couleur de texte seule
+    #             se voit mal.
+    #   bloc      toute la phrase sur un bandeau plein. Le plus lisible sur
+    #             des archives très claires, le moins discret.
+    #   mot       un seul mot à l'écran, en grand. Format court.
+    #
+    # `actifs: false` les supprime tous.
+    style: surligne
+
+    # La casse et la place. Séparées de la famille : elles se combinent
+    # avec n'importe laquelle.
+    majuscules: false
+    position: bas          # bas | centre
+
+    # Les couleurs. Vides, elles suivent la palette du template — c'est ce
+    # qui fait qu'un template repeint ses sous-titres sans les régler.
+    couleur_texte: ""      # défaut : palette.sous_titre
+    couleur_mot: ""        # défaut : surlignage.couleur
+    couleur_fond: ""       # `bloc` et `marqueur` seulement
+
+    # Le mot prononcé change de couleur. Ce n'est pas un ornement : c'est ce
+    # qui fait qu'on lit la phrase entière tout en sachant où en est la voix.
+    # Mesuré chez Frontier (`docs/analyse-frontier.md`) — blanc #FAFAFA, mot
+    # courant #F5BC4D, et un fondu de deux à trois images d'un mot au suivant
+    # plutôt qu'une bascule sèche, qui clignoterait.
+    #
+    # Exige `alignment.json` en `source: forced` : sur des positions estimées
+    # par syllabes, le surlignage dérive de 305 ms en médiane.
+    surlignage:
+      actif: true
+      couleur: "#F5BC4D"
+      fondu_frames: 3
+      # Un mot reste surligné jusqu'à ce que le suivant commence, donc il n'y
+      # a jamais de trou. Ce plancher n'attrape que les mots avalés : l'aligneur
+      # en pose à une seule trame de 20 ms, et un surlignage de 20 ms ne se
+      # voit pas — il scintille.
+      duree_min_frames: 3
+
+    # Hauteur de la ligne de base, en % de la hauteur du cadre. 90,8 % est la
+    # mesure relevée ; plus bas, le texte touche le bord sur un téléviseur.
+    ligne_de_base_pct: 90.8
+    # Un dégradé sous le texte. Frontier n'en a aucun — l'image reste visible
+    # et seule une ombre portée douce tient la lisibilité. Un template qui
+    # travaille sur des archives très claires peut le rallumer.
+    voile: true

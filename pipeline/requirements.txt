@@ -1,0 +1,18 @@
+pyyaml>=6.0
+requests>=2.31
+kokoro-onnx>=0.4
+edge-tts>=7.0            # voix Microsoft Edge, gratuites et sans clé
+soundfile>=0.12
+numpy>=1.26
+pillow>=10               # `export`, `placeholders` et `fetch` l'importent
+
+# Optionnels — le pipeline tourne sans eux.
+#
+# google-auth : identification Google Cloud pour `provider: vertex`. Sans lui,
+# `gcloud auth print-access-token` fait le travail ; c'est seulement moins
+# propre, parce que c'est un sous-processus au lieu d'un renouvellement géré.
+#   pip install google-auth
+#
+# torch + torchaudio : alignement forcé mot-à-mot (`fresque aligner`). Sans
+# eux, les positions de mots restent estimées par syllabes.
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
